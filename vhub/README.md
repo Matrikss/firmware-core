@@ -54,7 +54,7 @@ All fields below are required. Use empty arrays where explicitly allowed.
 | `category` | String | Main grouping. |
 | `sub_category` | String | Grouping within the category. |
 | `applicability` | String array | Nonempty list of applicable variants declared by the product. |
-| `setup` | String array | Required equipment, access, test inputs, and device prerequisites; `[]` if none. Preparation actions belong in `steps`. |
+| `setup` | String array | Case-specific equipment, access, test inputs, and device prerequisites. One independently checkable prerequisite per entry; `[]` if none. Preparation actions belong in `steps`. |
 | `steps` | Object array | Nonempty, ordered list of actions and expected results. |
 | `cleanup` | String array | Restoration actions, including after an interrupted or failed run; `[]` if none. |
 | `references` | String array | Supporting document links; `[]` if none. Use repository-root-relative paths or full URLs. |
@@ -80,7 +80,7 @@ asking its author what counts as a pass.
 | Write Cases That | Avoid |
 | --- | --- |
 | Verify one coherent scenario with a clear outcome. | Combining unrelated checks because they share a menu or component. |
-| List resources and eligibility in `setup`. | Hiding preparation actions in setup or repeating them in both places. |
+| List each required resource or eligibility condition in its own `setup` entry. | Packing independent prerequisites into a sentence, hiding preparation actions in setup, or repeating them in both places. |
 | Put preparation, baseline capture, and test actions in execution order. | Assuming another case left the device in a particular state. |
 | Pair each action with its observable expectation. | Mixing instructions into expected results. |
 | Specify concrete inputs, bounded waits, and observable timing start points. | “Works correctly,” “wait a while,” or “retry until it passes.” |
@@ -91,10 +91,31 @@ asking its author what counts as a pass.
 
 ### Setup, Steps, and Cleanup
 
-`setup` answers “What must be available?” Examples include a partly charged
-device, a controllable network, a test account, or a client with a documented
+`setup` answers “What does this case specifically require?” Examples include a
+controllable network, a test account, or a client with a documented
 capability. Name the tool and link its instructions when a special operation is
 required, such as interrupting a transfer or decoding an export.
+
+Put each independently checkable prerequisite in its own array entry. Do not
+join separate conditions with semicolons or pack them into a paragraph. Keep
+qualifications with the resource they describe, such as “A computer with
+Bluetooth and Python 3.11 or newer.” Device eligibility, network access, and
+expendable data are separate prerequisites.
+
+Include only prerequisites the case needs. Do not repeat the product or variant
+already declared by the template and `applicability`, or general release
+preparation such as installing the release firmware and recording its version.
+Do not add “an initialized device” to every case. Include a starting state only
+when it affects this scenario's execution or result; steps that establish that
+state make a matching setup entry unnecessary. Use `setup: []` when no specific
+prerequisites are needed. Repeated entries must be justified by each case, not
+copied as a standard checklist.
+
+Make prerequisites verifiable: use a
+documented battery range or observable charge state when it matters, rather
+than “sufficient charge.” Do not invent a threshold for a case that does not
+need one. Connecting equipment, selecting a mode, creating an evidence
+directory, and replacing command placeholders belong in `steps`, not `setup`.
 
 `steps` answers “What do I do?” Powering off, disconnecting a cable, selecting a
 mode, recording a setting, and creating test data are actions. Write each action
@@ -139,6 +160,7 @@ fictional. Replace them with verified product details when authoring a case.
 
 This compact JSON example shows the complete case shape. It assumes a product
 with a documented indicator diagnostic; no firmware implementation is implied.
+It needs no special prerequisites, so `setup` is empty.
 
 ```json
 {
@@ -148,7 +170,7 @@ with a documented indicator diagnostic; no firmware implementation is implied.
   "category": "Diagnostics",
   "sub_category": "Indicators",
   "applicability": ["ExampleVariant"],
-  "setup": ["An initialized device with an unobstructed indicator."],
+  "setup": [],
   "steps": [
     {"action": "Open Diagnostics and select Green Indicator.", "expected_result": "The indicator turns green within two seconds of selection."},
     {"action": "Select Exit.", "expected_result": "The diagnostic closes and the previous indicator behavior returns."}
@@ -173,7 +195,7 @@ a separate scenario. Link the product's configuration and restart procedures in
   "sub_category": "Reporting",
   "applicability": ["ExampleVariant"],
   "setup": [
-    "An initialized test device and access to its documented configuration interface."
+    "Access to the device's documented configuration interface."
   ],
   "steps": [
     {
@@ -218,7 +240,7 @@ Link the client's operation guide and the product's error contract in
   "sub_category": "Reporting",
   "applicability": ["ExampleVariant"],
   "setup": [
-    "A dedicated initialized device and access to its configuration client."
+    "Access to the device's documented configuration client."
   ],
   "steps": [
     {
@@ -288,6 +310,11 @@ Check unique IDs, required fields and types defined in this guide, applicability
 against the product variants, nonempty actions and expectations, and reference
 targets. Check that baseline capture precedes mutation and that cleanup covers
 changes made by the procedure. Review the diff for lost or duplicated coverage.
+Read every setup entry as a checklist item: it must express one relevant,
+verifiable, case-specific prerequisite and contain no execution instructions.
+Remove product/applicability repetition and general release-preparation items.
+Check that the
+steps establish temporary state and do not repeat setup as preparation work.
 
 The author is responsible for delivering cases that QA can execute as written,
 with confirmed prerequisites, available tools, and clear pass conditions.
