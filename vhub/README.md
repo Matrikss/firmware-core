@@ -15,6 +15,13 @@ a tester can observe through hardware, user interfaces, serial logs, network
 interfaces, or server data. Automated host tests remain separate; a case may
 instruct QA to run a hardware integration script and collect its result.
 
+Before adding a manual case, inspect the relevant host tests. Keep codec,
+parser, numerical-boundary, and deterministic state-machine checks there when
+they already cover the behavior. A manual case should establish something
+additional, such as physical output, radio interoperability, real storage
+persistence, or recovery from an actual hardware fault. Decoding a response to
+observe that outcome does not require a separate manual encoding checklist.
+
 ```text
 vhub/
 ├── README.md
