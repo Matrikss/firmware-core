@@ -1,5 +1,9 @@
 # VHUB Verification Templates
 
+VHUB is a self-hosted workspace for manually validating AirGradient products.
+Import a released JSON procedure, start a validation, and record one status and
+result notes per applicable test case and variant.
+
 This directory contains product-specific manual release-verification templates
 consumed by VHUB. This guide defines the shared authoring format and writing
 rules for maintainers and agents across the firmware monorepo.
