@@ -276,7 +276,7 @@ public:
     uint8_t task_priority = 4;
 
     // Refresh limits
-    uint8_t max_partial_ops = 20;
+    uint8_t max_partial_ops = 100;
   };
 
   explicit DisplayService(const Config &config);
