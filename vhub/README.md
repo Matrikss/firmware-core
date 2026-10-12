@@ -268,10 +268,10 @@ client procedure and diagnostic contract when adapting this example.
   "category": "Diagnostics",
   "sub_category": "Indicators",
   "applicability": ["ExampleVariant"],
-  "setup": ["A computer with Postman or an equivalent GUI API client on the test LAN.", "Access to the test router's connected-device list."],
+  "setup": ["A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN."],
   "steps": [
-    {"action": "Match the device's displayed network address to the router entry and record its IP. Record the indicator's current state.", "expected_result": "The intended device and its original indicator state are identified."},
-    {"action": "In the API client, send POST http://<device-ip>/diagnostics/indicator with Content-Type: application/json, no authentication, and body {\"color\":\"green\"}, replacing <device-ip> with the recorded IP. Watch the device for ten seconds from Send.", "expected_result": "The client reports acceptance, the physical LED turns green within two seconds, and its previous state returns within ten seconds.", "evidence": ["Record a video of the indicator sequence; save the response if the action fails."]}
+    {"action": "Read the mDNS hostname from About Device and record it as <device-hostname>. Record the indicator's current state.", "expected_result": "The intended device and its original indicator state are identified."},
+    {"action": "In the API client, send POST http://<device-hostname>/diagnostics/indicator with Content-Type: application/json, no authentication, and body {\"color\":\"green\"}, replacing <device-hostname> with the recorded mDNS hostname. Watch the device for ten seconds from Send.", "expected_result": "The client reports acceptance, the physical LED turns green within two seconds, and its previous state returns within ten seconds.", "evidence": ["Record a video of the indicator sequence; save the response if the action fails."]}
   ],
   "cleanup": ["If the diagnostic remains active, select Diagnostics > Exit on the device and confirm the recorded indicator state returns."],
   "references": []
