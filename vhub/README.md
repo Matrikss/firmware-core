@@ -45,12 +45,15 @@ vhub/
 Write procedures that QA can execute with device controls and documented GUI
 tools, without programming knowledge or a firmware development environment.
 This applies to setup, test steps, evidence collection, and cleanup.
+Name established QA tools; assume QA knows their standard workflows. Do not
+repeat basic tool setup instructions or add links to familiar tool guides. Keep
+case-specific actions, observations, and timing in the case.
 
 | Workflow | Procedure Requirements |
 | --- | --- |
 | Device controls and ordinary test equipment | Describe the physical actions and visible or audible results, including bounded waits. |
 | API requests through Postman or an equivalent GUI client | Supply the method, URL, authentication, headers, request body, and how to find device-specific values. Check the resulting device behavior. |
-| Firmware logs through a serial-terminal GUI | Supply connection settings, the event or value to observe, and the observation period. Request only relevant evidence. |
+| Firmware logs through the AirGradient logging tool | Specify the event or value to observe and the observation period. Request only relevant evidence. |
 | Cloud dashboard and browser setup | Identify the device, setting, or form and the outcome to observe on the device or dashboard. |
 | Bluetooth pairing and inspection through a GUI | Name the available tool and provide the supported actions and any prepared inputs needed. |
 
