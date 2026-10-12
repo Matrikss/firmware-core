@@ -9,7 +9,8 @@ Maintain the affected products' `vhub/*.vhub.json` templates with practical,
 reproducible manual cases. Use the shared
 [VHUB authoring guide](../../../vhub/README.md) as the source for format,
 writing rules, examples, revision handling, and validation. Read it before
-editing; keep those rules there rather than duplicating them in this skill.
+assessing coverage, including review-only tasks; keep those rules there rather
+than duplicating them in this skill.
 
 ## Understand the Change
 
@@ -31,9 +32,11 @@ bug into an expected result.
 
 ## Assess Coverage
 
-Read the target templates. Match the changed behavior to existing cases,
-including cross-category coverage. Decide whether to
-update an existing scenario, add a distinct scenario, or leave coverage unchanged.
+Read the target templates and inspect relevant host tests, device integration
+tests, and script assertions. Apply the guide's automation criteria to determine
+what still needs manual verification. Match that behavior to existing cases,
+including cross-category coverage. Decide whether to update an existing scenario,
+add a distinct scenario, remove redundant coverage, or leave coverage unchanged.
 Internal-only changes and behavior already adequately covered may require no edit.
 
 Keep overlapping changes from multiple commits or PRs together in the assessment.
@@ -54,9 +57,10 @@ client, test fixture, log string, or deadline to make a case appear executable.
 Resolve material gaps or report the affected procedure as not ready for execution.
 
 Keep IDs for continuing scenarios. For deliberate splits, merges, or removals,
-record how coverage moves between IDs. Update the template revision using the
-guide's convention only when template content changes. Preserve unrelated edits
-and avoid formatting churn.
+record replacement case IDs or automated tests and their required execution in
+the change summary. Update the template revision using the guide's convention
+only when template content changes. Preserve unrelated edits and avoid formatting
+churn.
 
 ## Validate
 

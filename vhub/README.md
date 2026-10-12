@@ -10,17 +10,26 @@ rules for maintainers and agents across the firmware monorepo.
 
 ## Scope
 
-Each shipping product owns a `*.vhub.json` template here. Cases describe behavior
-a tester can observe through hardware, user interfaces, serial logs, network
-interfaces, or server data. Automated host tests remain separate; a case may
-instruct QA to run a hardware integration script and collect its result.
-
-Before adding a manual case, inspect the relevant host tests. Keep codec,
-parser, numerical-boundary, and deterministic state-machine checks there when
-they already cover the behavior. A manual case should establish something
-additional, such as physical output, radio interoperability, real storage
-persistence, or recovery from an actual hardware fault. Decoding a response to
-observe that outcome does not require a separate manual encoding checklist.
+- Maintain one `*.vhub.json` per shipping product; exclude the reference product.
+- Include observable outcomes that still need human verification, such as
+  display quality, touch response, sound, or faults automation cannot reproduce.
+- Inspect host tests, device integration tests, and scripts before adding or
+  retaining cases. Do not repeat host-covered parsing, encoding, calculations,
+  or deterministic logic checks manually.
+- Omit duplicate device integration checks only when execution is required for
+  the release candidate and passing results cover the applicable hardware and
+  configuration. Optional runs and skipped checks do not replace manual coverage.
+- Verify actual assertions prove the outcome. A response-format check that
+  accepts failure does not prove successful operation.
+- When using a script in a manual case, specify the additional human observations.
+  Decoding output is an observation tool, not a separate manual test.
+- Share cases across interchangeable sensors; note sensor-specific differences
+  within the case. Require separate executions only for different expected
+  behavior or explicit release-plan requirements.
+- Keep product procedures in its cases or linked documentation. Assess every
+  affected product when shared components change.
+- When automation replaces a case, record the replacement coverage and required
+  execution in the change summary.
 
 ```text
 vhub/
@@ -28,18 +37,6 @@ vhub/
 ├── Go.vhub.json
 └── FutureProduct.vhub.json
 ```
-
-The reference product does not ship and therefore does not require a VHUB
-template.
-
-Product-specific menus, commands, hardware requirements, and procedures belong
-in that product's cases or linked documentation. A shared-component change can
-affect several products; assess each affected product's coverage.
-
-Define cases around capabilities and observable behavior. Interchangeable
-components with the same expected behavior can share a case. Require separate
-executions only when expected behavior differs or the release plan explicitly
-requires coverage of those hardware options.
 
 ## Template Structure
 
