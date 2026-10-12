@@ -57,6 +57,10 @@ case-specific actions, observations, and timing in the case.
 | Cloud dashboard and browser setup | Identify the device, setting, or form and the outcome to observe on the device or dashboard. |
 | Bluetooth pairing and inspection through a GUI | Name the available tool and provide the supported actions and any prepared inputs needed. |
 
+Use the product's mDNS hostname for routine local API requests. Use IP addresses
+only when the scenario specifically depends on them, such as provisioning or
+static-IP verification.
+
 Do not require QA to check out the repository, install programming dependencies,
 create virtual environments, write or run code or scripts, build firmware, or
 execute automated test suites. Describe API requests so they can be entered in

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "rev": "8c5ce0d",
+  "rev": "7b9933d",
   "product": {
     "slug": "airgradient-go",
     "name": "AirGradient Go",
@@ -1010,10 +1010,9 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
-        "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses."
+        "Working credentials for that LAN are saved on the Go."
       ],
       "steps": [
         {
@@ -1025,19 +1024,19 @@
           "expected_result": "Stationary is selected."
         },
         {
-          "action": "Match the About Device serial to the test router entry and record this unit’s IP as <device-ip>. Replace that placeholder in all request URLs with the actual IP. In the API client, set a five-second request timeout, send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
+          "action": "Read the full serial from About Device and replace <serial> in every request URL with that value. In the API client, set a five-second request timeout, send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
           "expected_result": "The intended unit is connected and its original settings are saved for cleanup."
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"measurementInterval\":17}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"measurementInterval\":17}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
@@ -1045,15 +1044,15 @@
           "expected_result": "Operations shows 17s; selected Custom (17s) precedes fixed 3s, 10s, 30s, 60s, 5m, 15m, 1h. Changing GPS preserves 17."
         },
         {
-          "action": "Disconnect USB, hold Power until Powered off is painted, release Power, wait 10 seconds, then press Power to start. Allow up to 90 seconds for saved Wi-Fi to reconnect. Refresh <device-ip> from the router and send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body. Reopen Settings > Operations > Measure Int.",
+          "action": "Disconnect USB, hold Power until Powered off is painted, release Power, wait 10 seconds, then press Power to start. Allow up to 90 seconds for saved Wi-Fi to reconnect. Send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body. Reopen Settings > Operations > Measure Int.",
           "expected_result": "measurementInterval remains 17 and the UI still selects Custom (17s)."
         }
       ],
       "cleanup": [
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
-        "With the saved original configuration available, return to Stationary and refresh <device-ip> from the router if necessary. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: measurementInterval, gpsMode. Send PUT http://<device-ip>/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
-        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
+        "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
+        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: measurementInterval, gpsMode. Send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
+        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored."
       ],
       "references": [
@@ -1071,10 +1070,9 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
-        "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses."
+        "Working credentials for that LAN are saved on the Go."
       ],
       "steps": [
         {
@@ -1086,31 +1084,31 @@
           "expected_result": "Stationary is selected."
         },
         {
-          "action": "Match the About Device serial to the test router entry and record this unit’s IP as <device-ip>. Replace that placeholder in all request URLs with the actual IP. In the API client, set a five-second request timeout, send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
+          "action": "Read the full serial from About Device and replace <serial> in every request URL with that value. In the API client, set a five-second request timeout, send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
           "expected_result": "The intended unit is connected and its original settings are saved for cleanup."
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"measurementInterval\":17}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"measurementInterval\":17}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "Open Settings > Operations > Measure Int. Select fixed 3s and send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body.",
+          "action": "Open Settings > Operations > Measure Int. Select fixed 3s and send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body.",
           "expected_result": "The Custom row disappears, the choice selects 3s, and measurementInterval is 3."
         }
       ],
       "cleanup": [
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
-        "With the saved original configuration available, return to Stationary and refresh <device-ip> from the router if necessary. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: measurementInterval. Send PUT http://<device-ip>/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
-        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
+        "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
+        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: measurementInterval. Send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
+        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored."
       ],
       "references": [
@@ -1272,10 +1270,9 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool."
       ],
@@ -1293,19 +1290,19 @@
           "expected_result": "Stationary is selected."
         },
         {
-          "action": "Match the About Device serial to the test router entry and record this unit’s IP as <device-ip>. Replace that placeholder in all request URLs with the actual IP. In the API client, set a five-second request timeout, send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
+          "action": "Read the full serial from About Device and replace <serial> in every request URL with that value. In the API client, set a five-second request timeout, send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
           "expected_result": "The intended unit is connected and its original settings are saved for cleanup."
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"measurementInterval\":10,\"temperatureUnit\":\"c\",\"pmStandard\":\"ugm3\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"measurementInterval\":10,\"temperatureUnit\":\"c\",\"pmStandard\":\"ugm3\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
@@ -1313,7 +1310,7 @@
           "expected_result": "All three source fields and their current Home presentation are valid, providing the recovery baseline."
         },
         {
-          "action": "Apply the prepared display inputs. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"corrections\":{\"temperature\":{\"correctionAlgorithm\":\"custom\",\"slr\":{\"scalingFactor\":0,\"intercept\":126}},\"humidity\":{\"correctionAlgorithm\":\"custom\",\"slr\":{\"scalingFactor\":0,\"intercept\":101}},\"pm25\":{\"correctionAlgorithm\":\"custom_via_pm25_raw\",\"slr\":{\"scalingFactor\":0,\"intercept\":-1}}}}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Apply the prepared display inputs. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"corrections\":{\"temperature\":{\"correctionAlgorithm\":\"custom\",\"slr\":{\"scalingFactor\":0,\"intercept\":126}},\"humidity\":{\"correctionAlgorithm\":\"custom\",\"slr\":{\"scalingFactor\":0,\"intercept\":101}},\"pm25\":{\"correctionAlgorithm\":\"custom_via_pm25_raw\",\"slr\":{\"scalingFactor\":0,\"intercept\":-1}}}}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
@@ -1330,9 +1327,9 @@
       ],
       "cleanup": [
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
-        "With the saved original configuration available, return to Stationary and refresh <device-ip> from the router if necessary. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: corrections, measurementInterval, temperatureUnit, pmStandard. Copy the complete corrections object. Send PUT http://<device-ip>/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
-        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
+        "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
+        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: corrections, measurementInterval, temperatureUnit, pmStandard. Copy the complete corrections object. Send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
+        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -1351,10 +1348,9 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
         "Ambient conditions that produce a valid raw PM2.5 reading greater than zero."
@@ -1373,19 +1369,19 @@
           "expected_result": "Stationary is selected."
         },
         {
-          "action": "Match the About Device serial to the test router entry and record this unit’s IP as <device-ip>. Replace that placeholder in all request URLs with the actual IP. In the API client, set a five-second request timeout, send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
+          "action": "Read the full serial from About Device and replace <serial> in every request URL with that value. In the API client, set a five-second request timeout, send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
           "expected_result": "The intended unit is connected and its original settings are saved for cleanup."
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and raw JSON body {\"measurementInterval\":10}. Send GET at the same URL every five seconds for up to 20 seconds.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and raw JSON body {\"measurementInterval\":10}. Send GET at the same URL every five seconds for up to 20 seconds.",
           "expected_result": "The GET response confirms measurementInterval=10 before sampling the raw PM baseline."
         },
         {
@@ -1393,7 +1389,7 @@
           "expected_result": "A positive raw PM2.5 reading establishes that this correction can affect the physical LED; missing or zero readings leave this run blocked."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"measurementInterval\":10,\"pmStandard\":\"us-aqi\",\"backLedBrightness\":2,\"corrections\":{\"pm25\":{\"correctionAlgorithm\":\"custom_via_pm25_raw\",\"slr\":{\"scalingFactor\":0,\"intercept\":35.4}}}}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"measurementInterval\":10,\"pmStandard\":\"us-aqi\",\"backLedBrightness\":2,\"corrections\":{\"pm25\":{\"correctionAlgorithm\":\"custom_via_pm25_raw\",\"slr\":{\"scalingFactor\":0,\"intercept\":35.4}}}}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
@@ -1406,9 +1402,9 @@
       ],
       "cleanup": [
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
-        "With the saved original configuration available, return to Stationary and refresh <device-ip> from the router if necessary. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: pmStandard, backLedBrightness, corrections, measurementInterval. Copy the complete corrections object. Send PUT http://<device-ip>/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
-        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
+        "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
+        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: pmStandard, backLedBrightness, corrections, measurementInterval. Copy the complete corrections object. Send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
+        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -1703,10 +1699,9 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
-        "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses."
+        "Working credentials for that LAN are saved on the Go."
       ],
       "steps": [
         {
@@ -1718,7 +1713,7 @@
           "expected_result": "Stationary is selected."
         },
         {
-          "action": "Match the About Device serial to the test router entry and record this unit’s IP as <device-ip>. Replace that placeholder in all request URLs with the actual IP. In the API client, set a five-second request timeout, send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
+          "action": "Read the full serial from About Device and replace <serial> in every request URL with that value. In the API client, set a five-second request timeout, send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
           "expected_result": "The intended unit is connected and its original settings are saved for cleanup."
         },
         {
@@ -1726,15 +1721,15 @@
           "expected_result": "The chart remains available while requests are sent from the computer."
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"measurementInterval\":10,\"temperatureUnit\":\"c\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"measurementInterval\":10,\"temperatureUnit\":\"c\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
@@ -1742,7 +1737,7 @@
           "expected_result": "The cached chart has valid values."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"corrections\":{\"temperature\":{\"correctionAlgorithm\":\"custom\",\"slr\":{\"scalingFactor\":0,\"intercept\":20}}}}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"corrections\":{\"temperature\":{\"correctionAlgorithm\":\"custom\",\"slr\":{\"scalingFactor\":0,\"intercept\":20}}}}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
@@ -1752,9 +1747,9 @@
       ],
       "cleanup": [
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
-        "With the saved original configuration available, return to Stationary and refresh <device-ip> from the router if necessary. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: corrections, measurementInterval, temperatureUnit. Copy the complete corrections object. Send PUT http://<device-ip>/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
-        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
+        "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
+        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: corrections, measurementInterval, temperatureUnit. Copy the complete corrections object. Send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
+        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored.",
         "Restore the recorded Auto Lock setting through Settings > Display & Touch after finishing the display observations."
       ],
@@ -2241,10 +2236,9 @@
       ],
       "setup": [
         "An outdoor calibration location away from people, vehicles and combustion.",
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
         "Test Wi-Fi coverage at the outdoor calibration location.",
@@ -2268,15 +2262,15 @@
           "expected_result": "Stationary is selected."
         },
         {
-          "action": "Match the About Device serial to the test router entry and record this unit’s IP as <device-ip>. Replace that placeholder in all request URLs with the actual IP. In the API client, set a five-second request timeout, send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
+          "action": "Read the full serial from About Device and replace <serial> in every request URL with that value. In the API client, set a five-second request timeout, send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
           "expected_result": "The intended unit is connected and its original settings are saved for cleanup."
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
@@ -2284,7 +2278,7 @@
           "expected_result": "The warmed unit is stationary in the calibration environment."
         },
         {
-          "action": "In the API client, send POST http://<device-ip>/api/v1/actions/calibrate-co2 with No Auth and no body.",
+          "action": "In the API client, send POST http://airgradient_<serial>.local/api/v1/actions/calibrate-co2 with No Auth and no body.",
           "expected_result": "The HTTP response is empty 200; this establishes request admission only."
         },
         {
@@ -2298,8 +2292,8 @@
       "cleanup": [
         "Allow any in-flight calibration to finish before moving the unit. A successful calibration changes the sensor baseline and cannot be undone by restoring settings.",
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
-        "With the saved original configuration available, return to Stationary and refresh <device-ip> from the router if necessary. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
+        "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
+        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -3506,10 +3500,9 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
-        "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses."
+        "Working credentials for that LAN are saved on the Go."
       ],
       "steps": [
         {
@@ -3521,15 +3514,15 @@
           "expected_result": "Stationary is selected."
         },
         {
-          "action": "Match the About Device serial to the test router entry and record this unit’s IP as <device-ip>. Replace that placeholder in all request URLs with the actual IP. In the API client, set a five-second request timeout, send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
+          "action": "Read the full serial from About Device and replace <serial> in every request URL with that value. In the API client, set a five-second request timeout, send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
           "expected_result": "The intended unit is connected and its original settings are saved for cleanup."
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
@@ -3537,7 +3530,7 @@
           "expected_result": "The visible outputs and GPS policy are recorded for comparison after the diagnostic."
         },
         {
-          "action": "Return to Home and close any interactive Hardware Test screen. In the API client, send POST http://<device-ip>/api/v1/actions/test-leds with No Auth and no body. Observe the device as soon as Send is pressed.",
+          "action": "Return to Home and close any interactive Hardware Test screen. In the API client, send POST http://airgradient_<serial>.local/api/v1/actions/test-leds with No Auth and no body. Observe the device as soon as Send is pressed.",
           "expected_result": "The request is accepted; the following physical observation determines the result."
         },
         {
@@ -3547,8 +3540,8 @@
       ],
       "cleanup": [
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
-        "With the saved original configuration available, return to Stationary and refresh <device-ip> from the router if necessary. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
+        "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
+        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored."
       ],
       "references": [
@@ -3566,10 +3559,9 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
-        "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses."
+        "Working credentials for that LAN are saved on the Go."
       ],
       "steps": [
         {
@@ -3581,15 +3573,15 @@
           "expected_result": "Stationary is selected."
         },
         {
-          "action": "Match the About Device serial to the test router entry and record this unit’s IP as <device-ip>. Replace that placeholder in all request URLs with the actual IP. In the API client, set a five-second request timeout, send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
+          "action": "Read the full serial from About Device and replace <serial> in every request URL with that value. In the API client, set a five-second request timeout, send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
           "expected_result": "The intended unit is connected and its original settings are saved for cleanup."
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
@@ -3597,7 +3589,7 @@
           "expected_result": "The visible outputs and GPS policy are recorded for comparison after the diagnostic."
         },
         {
-          "action": "Return to Home and close any interactive Hardware Test screen. In the API client, send POST http://<device-ip>/api/v1/actions/test-gps with No Auth and no body. Observe the device as soon as Send is pressed.",
+          "action": "Return to Home and close any interactive Hardware Test screen. In the API client, send POST http://airgradient_<serial>.local/api/v1/actions/test-gps with No Auth and no body. Observe the device as soon as Send is pressed.",
           "expected_result": "The request is accepted; the following physical observation determines the result."
         },
         {
@@ -3611,8 +3603,8 @@
       ],
       "cleanup": [
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
-        "With the saved original configuration available, return to Stationary and refresh <device-ip> from the router if necessary. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
+        "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
+        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored."
       ],
       "references": [
@@ -3630,10 +3622,9 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
         "The test unit is registered to a dashboard that normally displays its measurements.",
         "Access to that unit in AirGradient Dashboard.",
         "Internet connectivity for the Go and dashboard client."
@@ -3648,15 +3639,15 @@
           "expected_result": "Stationary is selected."
         },
         {
-          "action": "Match the About Device serial to the test router entry and record this unit’s IP as <device-ip>. Replace that placeholder in all request URLs with the actual IP. In the API client, set a five-second request timeout, send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
+          "action": "Read the full serial from About Device and replace <serial> in every request URL with that value. In the API client, set a five-second request timeout, send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
           "expected_result": "The intended unit is connected and its original settings are saved for cleanup."
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\",\"cloudConnection\":true,\"measurementInterval\":10}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\",\"cloudConnection\":true,\"measurementInterval\":10}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
@@ -3669,9 +3660,9 @@
       ],
       "cleanup": [
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
-        "With the saved original configuration available, return to Stationary and refresh <device-ip> from the router if necessary. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: measurementInterval. Send PUT http://<device-ip>/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
-        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
+        "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
+        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: measurementInterval. Send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
+        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored."
       ],
       "references": [
@@ -3691,9 +3682,8 @@
         "The test unit is registered to AirGradient Dashboard.",
         "Access to change this unit’s device temperature-unit setting in the cloud dashboard.",
         "Internet connectivity for the Go and dashboard client.",
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
-        "Working credentials for the test LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses."
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
+        "Working credentials for the test LAN are saved on the Go."
       ],
       "steps": [
         {
@@ -3705,11 +3695,11 @@
           "expected_result": "Stationary is selected."
         },
         {
-          "action": "Match the About Device serial to the test router entry and record this unit’s IP as <device-ip>. Replace that placeholder in all request URLs with the actual IP. In the API client, set a five-second request timeout, send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
+          "action": "Read the full serial from About Device and replace <serial> in every request URL with that value. In the API client, set a five-second request timeout, send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
           "expected_result": "The intended unit is connected and its original settings are saved for cleanup."
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "GET Config reports configurationControl=local; cloud settings cannot replace the preparation values."
         },
         {
@@ -3721,7 +3711,7 @@
           "expected_result": "The dashboard retains the selected device setting; Home still displays the preparation unit before cloud configuration is enabled."
         },
         {
-          "action": "Enable cloud configuration delivery. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":true,\"configurationControl\":\"both\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable cloud configuration delivery. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":true,\"configurationControl\":\"both\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "Cloud configuration delivery is enabled for this unit."
         },
         {
@@ -3732,11 +3722,11 @@
           ]
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "GET Config reports configurationControl=local and the cloud-selected temperature unit remains visible."
         },
         {
-          "action": "Disable cloud delivery before checking persistence. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Disable cloud delivery before checking persistence. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "Cloud delivery is disabled and the selected temperature unit remains visible."
         },
         {
@@ -3750,9 +3740,9 @@
       "cleanup": [
         "If the dashboard setting was changed, restore its recorded original value in the dashboard, including after interruption.",
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
-        "With the saved original configuration available, return to Stationary and refresh <device-ip> from the router if necessary. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: temperatureUnit. Send PUT http://<device-ip>/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
-        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
+        "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
+        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: temperatureUnit. Send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
+        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored."
       ],
       "references": [
@@ -3975,10 +3965,10 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
+        "Access to the router association list.",
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool."
       ],
@@ -4000,31 +3990,31 @@
           "expected_result": "Stationary is selected."
         },
         {
-          "action": "Match the About Device serial to the test router entry and record this unit’s IP as <device-ip>. Replace that placeholder in all request URLs with the actual IP. In the API client, set a five-second request timeout, send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
+          "action": "Read the full serial from About Device and replace <serial> in every request URL with that value. In the API client, set a five-second request timeout, send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
           "expected_result": "The intended unit is connected and its original settings are saved for cleanup."
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":false}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "Record the router association and IP. Turn the associated test access point off without deleting credentials. Observe Home and the AirGradient logging tool for up to 90 seconds.",
+          "action": "Match the recorded serial to this unit’s router association. Turn the associated test access point off without deleting credentials. Observe Home and the AirGradient logging tool for up to 90 seconds.",
           "expected_result": "The Wi-Fi icon disconnects and serial shows a runtime reconnect attempt; no provisioning page or reboot appears."
         },
         {
-          "action": "Restore the access point. Check the router association for up to 90 seconds and update <device-ip> if it changed. In the API client, send GET http://<device-ip>/api/v1/measures with No Auth and no body.",
+          "action": "Restore the access point. Check the router association for up to 90 seconds. In the API client, send GET http://airgradient_<serial>.local/api/v1/measures with No Auth and no body.",
           "expected_result": "The saved network reconnects, the Wi-Fi icon returns and measurements are available again without entering credentials."
         }
       ],
       "cleanup": [
         "Restore the test access point to its recorded power state and configuration, including after interruption.",
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
-        "With the saved original configuration available, return to Stationary and refresh <device-ip> from the router if necessary. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
+        "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
+        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -4166,10 +4156,10 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
+        "Access to the router association list.",
         "A Linux computer with Bluetooth enabled and a Bluetooth settings GUI."
       ],
       "steps": [
@@ -4178,8 +4168,8 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Record this unit’s IP from the router as <device-ip> and <former-device-ip>. Record its About Device serial and use the last four characters to identify AirGradient Go <last4> during Bluetooth scans.",
-          "expected_result": "The router shows the intended Go connected and its current IP is recorded."
+          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Read the full serial from About Device and replace <serial> in every request URL with that value. Use its last four characters to identify AirGradient Go <last4> during Bluetooth scans. Confirm this unit’s router association and send GET http://airgradient_<serial>.local/api/v1/measures in the API client with No Auth, no body and a five-second timeout.",
+          "expected_result": "The intended Go is connected, its local API responds with measurements, and its serial is recorded for the following checks."
         },
         {
           "action": "Select Main Menu > Operating Mode > Portable.",
@@ -4190,7 +4180,7 @@
           "expected_result": "The selected mode reaches Home. A transition into Stationary may first show its connection page."
         },
         {
-          "action": "Within 30 seconds, confirm this unit’s current IP in the router association list. On the test LAN, send GET http://<device-ip>/api/v1/measures in the API client with No Auth, no body and a five-second timeout. Scan Bluetooth with clients disconnected.",
+          "action": "Within 30 seconds, confirm this unit’s connection in the router association list. On the test LAN, send GET http://airgradient_<serial>.local/api/v1/measures in the API client with No Auth, no body and a five-second timeout. Scan Bluetooth with clients disconnected.",
           "expected_result": "Saved Wi-Fi is connected and HTTP returns 200; the Portable Go data service no longer advertises."
         }
       ],
@@ -4315,10 +4305,10 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
+        "Access to the router association list.",
         "A Linux computer with Bluetooth enabled and a Bluetooth settings GUI."
       ],
       "steps": [
@@ -4327,8 +4317,8 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Record this unit’s IP from the router as <device-ip> and <former-device-ip>. Record its About Device serial and use the last four characters to identify AirGradient Go <last4> during Bluetooth scans.",
-          "expected_result": "The router shows the intended Go connected and its current IP is recorded."
+          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Read the full serial from About Device and replace <serial> in every request URL with that value. Use its last four characters to identify AirGradient Go <last4> during Bluetooth scans. Confirm this unit’s router association and send GET http://airgradient_<serial>.local/api/v1/measures in the API client with No Auth, no body and a five-second timeout.",
+          "expected_result": "The intended Go is connected, its local API responds with measurements, and its serial is recorded for the following checks."
         },
         {
           "action": "Select Main Menu > Operating Mode > Stationary.",
@@ -4339,8 +4329,8 @@
           "expected_result": "The selected mode reaches Home. A transition into Stationary may first show its connection page."
         },
         {
-          "action": "Close BLE clients. Scan Bluetooth for 30 seconds and inspect the test router association list. Try a GET request to http://<former-device-ip>/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout at this unit’s last router-assigned IP.",
-          "expected_result": "AirGradient Go <last4> advertises; this device has no Wi-Fi association. The former local IP no longer serves its API."
+          "action": "Close BLE clients. Scan Bluetooth for 30 seconds and inspect the test router association list. Try a GET request to http://airgradient_<serial>.local/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout.",
+          "expected_result": "AirGradient Go <last4> advertises; this device has no Wi-Fi association. This device’s local API is unavailable."
         }
       ],
       "cleanup": [
@@ -4464,10 +4454,10 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
+        "Access to the router association list.",
         "A Linux computer with Bluetooth enabled and a Bluetooth settings GUI."
       ],
       "steps": [
@@ -4476,8 +4466,8 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Record this unit’s IP from the router as <device-ip> and <former-device-ip>. Record its About Device serial and use the last four characters to identify AirGradient Go <last4> during Bluetooth scans.",
-          "expected_result": "The router shows the intended Go connected and its current IP is recorded."
+          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Read the full serial from About Device and replace <serial> in every request URL with that value. Use its last four characters to identify AirGradient Go <last4> during Bluetooth scans. Confirm this unit’s router association and send GET http://airgradient_<serial>.local/api/v1/measures in the API client with No Auth, no body and a five-second timeout.",
+          "expected_result": "The intended Go is connected, its local API responds with measurements, and its serial is recorded for the following checks."
         },
         {
           "action": "Select Main Menu > Operating Mode > Portable.",
@@ -4488,7 +4478,7 @@
           "expected_result": "The selected mode reaches Home. A transition into Stationary may first show its connection page."
         },
         {
-          "action": "Scan Bluetooth and Wi-Fi for 30 seconds; inspect router associations and try a GET request to http://<former-device-ip>/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout.",
+          "action": "Scan Bluetooth and Wi-Fi for 30 seconds; inspect router associations and try a GET request to http://airgradient_<serial>.local/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout.",
           "expected_result": "No Go BLE advertisement, Go setup AP, current association or local API response is available. These checks establish service visibility, not absence of every RF packet."
         }
       ],
@@ -4613,10 +4603,10 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
+        "Access to the router association list.",
         "A Linux computer with Bluetooth enabled and a Bluetooth settings GUI."
       ],
       "steps": [
@@ -4625,8 +4615,8 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Record this unit’s IP from the router as <device-ip> and <former-device-ip>. Record its About Device serial and use the last four characters to identify AirGradient Go <last4> during Bluetooth scans.",
-          "expected_result": "The router shows the intended Go connected and its current IP is recorded."
+          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Read the full serial from About Device and replace <serial> in every request URL with that value. Use its last four characters to identify AirGradient Go <last4> during Bluetooth scans. Confirm this unit’s router association and send GET http://airgradient_<serial>.local/api/v1/measures in the API client with No Auth, no body and a five-second timeout.",
+          "expected_result": "The intended Go is connected, its local API responds with measurements, and its serial is recorded for the following checks."
         },
         {
           "action": "Select Main Menu > Operating Mode > Offline.",
@@ -4637,8 +4627,8 @@
           "expected_result": "The selected mode reaches Home. A transition into Stationary may first show its connection page."
         },
         {
-          "action": "Close BLE clients. Scan Bluetooth for 30 seconds and inspect the test router association list. Try a GET request to http://<former-device-ip>/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout at this unit’s last router-assigned IP.",
-          "expected_result": "AirGradient Go <last4> advertises; this device has no Wi-Fi association. The former local IP no longer serves its API."
+          "action": "Close BLE clients. Scan Bluetooth for 30 seconds and inspect the test router association list. Try a GET request to http://airgradient_<serial>.local/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout.",
+          "expected_result": "AirGradient Go <last4> advertises; this device has no Wi-Fi association. This device’s local API is unavailable."
         }
       ],
       "cleanup": [
@@ -4762,10 +4752,10 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
+        "Access to the router association list.",
         "A Linux computer with Bluetooth enabled and a Bluetooth settings GUI."
       ],
       "steps": [
@@ -4774,8 +4764,8 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Record this unit’s IP from the router as <device-ip> and <former-device-ip>. Record its About Device serial and use the last four characters to identify AirGradient Go <last4> during Bluetooth scans.",
-          "expected_result": "The router shows the intended Go connected and its current IP is recorded."
+          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Read the full serial from About Device and replace <serial> in every request URL with that value. Use its last four characters to identify AirGradient Go <last4> during Bluetooth scans. Confirm this unit’s router association and send GET http://airgradient_<serial>.local/api/v1/measures in the API client with No Auth, no body and a five-second timeout.",
+          "expected_result": "The intended Go is connected, its local API responds with measurements, and its serial is recorded for the following checks."
         },
         {
           "action": "Select Main Menu > Operating Mode > Stationary.",
@@ -4786,7 +4776,7 @@
           "expected_result": "The selected mode reaches Home. A transition into Stationary may first show its connection page."
         },
         {
-          "action": "Scan Bluetooth and Wi-Fi for 30 seconds; inspect router associations and try a GET request to http://<former-device-ip>/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout.",
+          "action": "Scan Bluetooth and Wi-Fi for 30 seconds; inspect router associations and try a GET request to http://airgradient_<serial>.local/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout.",
           "expected_result": "No Go BLE advertisement, Go setup AP, current association or local API response is available. These checks establish service visibility, not absence of every RF packet."
         }
       ],
@@ -4911,10 +4901,10 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
+        "Access to the router association list.",
         "A Linux computer with Bluetooth enabled and a Bluetooth settings GUI."
       ],
       "steps": [
@@ -4923,8 +4913,8 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Record this unit’s IP from the router as <device-ip> and <former-device-ip>. Record its About Device serial and use the last four characters to identify AirGradient Go <last4> during Bluetooth scans.",
-          "expected_result": "The router shows the intended Go connected and its current IP is recorded."
+          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Read the full serial from About Device and replace <serial> in every request URL with that value. Use its last four characters to identify AirGradient Go <last4> during Bluetooth scans. Confirm this unit’s router association and send GET http://airgradient_<serial>.local/api/v1/measures in the API client with No Auth, no body and a five-second timeout.",
+          "expected_result": "The intended Go is connected, its local API responds with measurements, and its serial is recorded for the following checks."
         },
         {
           "action": "Select Main Menu > Operating Mode > Offline.",
@@ -4935,7 +4925,7 @@
           "expected_result": "The selected mode reaches Home. A transition into Stationary may first show its connection page."
         },
         {
-          "action": "Within 30 seconds, confirm this unit’s current IP in the router association list. On the test LAN, send GET http://<device-ip>/api/v1/measures in the API client with No Auth, no body and a five-second timeout. Scan Bluetooth with clients disconnected.",
+          "action": "Within 30 seconds, confirm this unit’s connection in the router association list. On the test LAN, send GET http://airgradient_<serial>.local/api/v1/measures in the API client with No Auth, no body and a five-second timeout. Scan Bluetooth with clients disconnected.",
           "expected_result": "Saved Wi-Fi is connected and HTTP returns 200; the Portable Go data service no longer advertises."
         }
       ],
@@ -5060,10 +5050,10 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
+        "Access to the router association list.",
         "A Linux computer with Bluetooth enabled and a Bluetooth settings GUI."
       ],
       "steps": [
@@ -5072,8 +5062,8 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Record this unit’s IP from the router as <device-ip> and <former-device-ip>. Record its About Device serial and use the last four characters to identify AirGradient Go <last4> during Bluetooth scans.",
-          "expected_result": "The router shows the intended Go connected and its current IP is recorded."
+          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Read the full serial from About Device and replace <serial> in every request URL with that value. Use its last four characters to identify AirGradient Go <last4> during Bluetooth scans. Confirm this unit’s router association and send GET http://airgradient_<serial>.local/api/v1/measures in the API client with No Auth, no body and a five-second timeout.",
+          "expected_result": "The intended Go is connected, its local API responds with measurements, and its serial is recorded for the following checks."
         },
         {
           "action": "Select Main Menu > Operating Mode > Portable.",
@@ -5084,8 +5074,8 @@
           "expected_result": "The saved selection is Portable."
         },
         {
-          "action": "Close BLE clients. Scan Bluetooth for 30 seconds and inspect the test router association list. Try a GET request to http://<former-device-ip>/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout at this unit’s last router-assigned IP.",
-          "expected_result": "AirGradient Go <last4> advertises; this device has no Wi-Fi association. The former local IP no longer serves its API."
+          "action": "Close BLE clients. Scan Bluetooth for 30 seconds and inspect the test router association list. Try a GET request to http://airgradient_<serial>.local/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout.",
+          "expected_result": "AirGradient Go <last4> advertises; this device has no Wi-Fi association. This device’s local API is unavailable."
         }
       ],
       "cleanup": [
@@ -5108,10 +5098,10 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
+        "Access to the router association list.",
         "A Linux computer with Bluetooth enabled and a Bluetooth settings GUI."
       ],
       "steps": [
@@ -5120,8 +5110,8 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Record this unit’s IP from the router as <device-ip> and <former-device-ip>. Record its About Device serial and use the last four characters to identify AirGradient Go <last4> during Bluetooth scans.",
-          "expected_result": "The router shows the intended Go connected and its current IP is recorded."
+          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Read the full serial from About Device and replace <serial> in every request URL with that value. Use its last four characters to identify AirGradient Go <last4> during Bluetooth scans. Confirm this unit’s router association and send GET http://airgradient_<serial>.local/api/v1/measures in the API client with No Auth, no body and a five-second timeout.",
+          "expected_result": "The intended Go is connected, its local API responds with measurements, and its serial is recorded for the following checks."
         },
         {
           "action": "Select Main Menu > Operating Mode > Stationary.",
@@ -5132,7 +5122,7 @@
           "expected_result": "The saved selection is Stationary."
         },
         {
-          "action": "Within 30 seconds, confirm this unit’s current IP in the router association list. On the test LAN, send GET http://<device-ip>/api/v1/measures in the API client with No Auth, no body and a five-second timeout. Scan Bluetooth with clients disconnected.",
+          "action": "Within 30 seconds, confirm this unit’s connection in the router association list. On the test LAN, send GET http://airgradient_<serial>.local/api/v1/measures in the API client with No Auth, no body and a five-second timeout. Scan Bluetooth with clients disconnected.",
           "expected_result": "Saved Wi-Fi is connected and HTTP returns 200; the Portable Go data service no longer advertises."
         }
       ],
@@ -5156,10 +5146,10 @@
         "V1"
       ],
       "setup": [
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "Access to the router association list and assigned device IP addresses.",
+        "Access to the router association list.",
         "A Linux computer with Bluetooth enabled and a Bluetooth settings GUI."
       ],
       "steps": [
@@ -5168,8 +5158,8 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Record this unit’s IP from the router as <device-ip> and <former-device-ip>. Record its About Device serial and use the last four characters to identify AirGradient Go <last4> during Bluetooth scans.",
-          "expected_result": "The router shows the intended Go connected and its current IP is recorded."
+          "action": "Select Main Menu > Operating Mode > Stationary. Allow the saved Wi-Fi connection up to 30 seconds. Read the full serial from About Device and replace <serial> in every request URL with that value. Use its last four characters to identify AirGradient Go <last4> during Bluetooth scans. Confirm this unit’s router association and send GET http://airgradient_<serial>.local/api/v1/measures in the API client with No Auth, no body and a five-second timeout.",
+          "expected_result": "The intended Go is connected, its local API responds with measurements, and its serial is recorded for the following checks."
         },
         {
           "action": "Select Main Menu > Operating Mode > Offline.",
@@ -5180,7 +5170,7 @@
           "expected_result": "The saved selection is Offline."
         },
         {
-          "action": "Scan Bluetooth and Wi-Fi for 30 seconds; inspect router associations and try a GET request to http://<former-device-ip>/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout.",
+          "action": "Scan Bluetooth and Wi-Fi for 30 seconds; inspect router associations and try a GET request to http://airgradient_<serial>.local/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout.",
           "expected_result": "No Go BLE advertisement, Go setup AP, current association or local API response is available. These checks establish service visibility, not absence of every RF packet."
         }
       ],
@@ -6178,8 +6168,7 @@
         "An approved, compatible Go firmware version newer than the installed source version, available through AirGradient Dashboard.",
         "Internet access on the test Wi-Fi network.",
         "Working credentials for the test Wi-Fi network are saved on Go.",
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
-        "Access to the router association list and assigned device IP addresses.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A USB power source.",
         "A compatible USB cable."
       ],
@@ -6200,15 +6189,15 @@
           "expected_result": "Home shows external power or charging and the router lists this unit on its saved network."
         },
         {
-          "action": "Match the About Device serial to the test router entry and record this unit’s IP as <device-ip>. Replace that placeholder in all request URLs with the actual IP. In the API client, set a five-second request timeout, send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
+          "action": "Read the full serial from About Device and replace <serial> in every request URL with that value. In the API client, set a five-second request timeout, send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
           "expected_result": "The intended unit is connected and its original settings are saved for cleanup."
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "GET Config reports configurationControl=local; cloud settings cannot replace the preparation values."
         },
         {
-          "action": "Enable the normal OTA service while keeping cloud configuration changes disabled. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":true,\"measurementInterval\":10}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable the normal OTA service while keeping cloud configuration changes disabled. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":true,\"measurementInterval\":10}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response confirms cloudConnection=true, configurationControl=local and measurementInterval=10. The recorded temperature unit remains unchanged."
         },
         {
@@ -6229,9 +6218,9 @@
       "cleanup": [
         "When the unit responds after the transfer, record its installed version and keep that version assigned in AirGradient Dashboard during configuration restoration.",
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
-        "With the saved original configuration available, return to Stationary and refresh <device-ip> from the router if necessary. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: measurementInterval. Send PUT http://<device-ip>/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
-        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
+        "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
+        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: measurementInterval. Send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
+        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored.",
         "Restore the recorded original firmware deployment assignment after device settings are restored. Record the installed version separately; changing the assignment alone does not restore the source image. Coordinate any subsequent firmware change with the next release case."
       ],
@@ -6257,8 +6246,7 @@
         "An approved, compatible Go firmware version older than the installed source version, available through AirGradient Dashboard.",
         "Internet access on the test Wi-Fi network.",
         "Working credentials for the test Wi-Fi network are saved on Go.",
-        "A computer with Postman or an equivalent GUI API client on the test LAN.",
-        "Access to the router association list and assigned device IP addresses.",
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "A USB power source.",
         "A compatible USB cable."
       ],
@@ -6279,15 +6267,15 @@
           "expected_result": "Home shows external power or charging and the router lists this unit on its saved network."
         },
         {
-          "action": "Match the About Device serial to the test router entry and record this unit’s IP as <device-ip>. Replace that placeholder in all request URLs with the actual IP. In the API client, set a five-second request timeout, send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
+          "action": "Read the full serial from About Device and replace <serial> in every request URL with that value. In the API client, set a five-second request timeout, send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body, and save the response as the original configuration before changing anything.",
           "expected_result": "The intended unit is connected and its original settings are saved for cleanup."
         },
         {
-          "action": "Enable local authority. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable local authority. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "GET Config reports configurationControl=local; cloud settings cannot replace the preparation values."
         },
         {
-          "action": "Enable the normal OTA service while keeping cloud configuration changes disabled. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":true,\"measurementInterval\":10}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "Enable the normal OTA service while keeping cloud configuration changes disabled. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"cloudConnection\":true,\"measurementInterval\":10}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response confirms cloudConnection=true, configurationControl=local and measurementInterval=10. The recorded temperature unit remains unchanged."
         },
         {
@@ -6308,9 +6296,9 @@
       "cleanup": [
         "When the unit responds after the transfer, record its installed version and keep that version assigned in AirGradient Dashboard during configuration restoration.",
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
-        "With the saved original configuration available, return to Stationary and refresh <device-ip> from the router if necessary. In the API client, send PUT http://<device-ip>/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://<device-ip>/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: measurementInterval. Send PUT http://<device-ip>/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
-        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://<device-ip>/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
+        "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
+        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: measurementInterval. Send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
+        "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored.",
         "Restore the recorded original firmware deployment assignment after device settings are restored. Record the installed version separately; changing the assignment alone does not restore the source image. Coordinate any subsequent firmware change with the next release case."
       ],
