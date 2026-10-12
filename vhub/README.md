@@ -1,6 +1,6 @@
 # VHUB Verification Templates
 
-VHUB is a self-hosted workspace for manually validating AirGradient products.
+VHUB is a self-hosted workspace for QA to manually validate AirGradient products.
 Import a released JSON procedure, start a validation, and record one status and
 result notes per applicable test case and variant.
 
@@ -16,20 +16,22 @@ rules for maintainers and agents across the firmware monorepo.
 - Inspect host tests, device integration tests, and scripts before adding or
   retaining cases. Do not repeat host-covered parsing, encoding, calculations,
   or deterministic logic checks manually.
-- Omit duplicate device integration checks only when execution is required for
-  the release candidate and passing results cover the applicable hardware and
-  configuration. Optional runs and skipped checks do not replace manual coverage.
+- Keep checks assigned to developer-owned host tests, device integration tests,
+  or scripts out of manual procedures. Distinguish existing replacement coverage
+  from planned or deferred coverage; removing a case does not establish a pass.
 - Verify actual assertions prove the outcome. A response-format check that
   accepts failure does not prove successful operation.
-- When using a script in a manual case, specify the additional human observations.
-  Decoding output is an observation tool, not a separate manual test.
+- Retain a case for its distinct human verification value. Adding a display or
+  restart observation does not justify repeating a developer-owned workflow or
+  an outcome already checked by another manual case.
 - Share cases across interchangeable sensors; note sensor-specific differences
   within the case. Require separate executions only for different expected
   behavior or explicit release-plan requirements.
 - Keep product procedures in its cases or linked documentation. Assess every
   affected product when shared components change.
-- When automation replaces a case, record the replacement coverage and required
-  execution in the change summary.
+- When automation replaces a case, record the replacement coverage or planned
+  follow-up in the change summary. Follow the agreed release execution rules;
+  those rules need not be changed in the template's branch.
 
 ```text
 vhub/
@@ -37,6 +39,38 @@ vhub/
 ├── Go.vhub.json
 └── FutureProduct.vhub.json
 ```
+
+## QA Audience and Tools
+
+Write procedures that QA can execute with device controls and documented GUI
+tools, without programming knowledge or a firmware development environment.
+This applies to setup, test steps, evidence collection, and cleanup.
+
+| Workflow | Procedure Requirements |
+| --- | --- |
+| Device controls and ordinary test equipment | Describe the physical actions and visible or audible results, including bounded waits. |
+| API requests through Postman or an equivalent GUI client | Supply the method, URL, authentication, headers, request body, and how to find device-specific values. Check the resulting device behavior. |
+| Firmware logs through a serial-terminal GUI | Supply connection settings, the event or value to observe, and the observation period. Request only relevant evidence. |
+| Cloud dashboard and browser setup | Identify the device, setting, or form and the outcome to observe on the device or dashboard. |
+| Bluetooth pairing and inspection through a GUI | Name the available tool and provide the supported actions and any prepared inputs needed. |
+
+Do not require QA to check out the repository, install programming dependencies,
+create virtual environments, write or run code or scripts, build firmware, or
+execute automated test suites. Describe API requests so they can be entered in
+a GUI without shell commands. Supplied JSON request bodies are test inputs;
+generating or decoding payloads with code is developer work.
+
+Tool choice alone does not make a check suitable for VHUB. API response-code
+matrices, protocol schemas, encoding, and deterministic calculations belong in
+developer tests even when a GUI can exercise them. API requests and logs are
+valid ways to trigger or observe a manual behavior check; a response or log
+alone must not stand in for a physical outcome the case claims to verify.
+
+For a case that mixes QA observations and developer work, preserve the useful
+manual scenario and assign the scripted portion to developer coverage. If a
+required operation has no documented QA tool or reproducible procedure, report
+the gap and defer that scenario. Do not invent a GUI workflow, hide code behind
+a prerequisite, or label a deferred check as covered.
 
 ## Template Structure
 
@@ -107,7 +141,7 @@ required, such as interrupting a transfer or decoding an export.
 Put each independently checkable prerequisite in its own array entry. Do not
 join separate conditions with semicolons or pack them into a paragraph. Keep
 qualifications with the resource they describe, such as “A computer with
-Bluetooth and Python 3.11 or newer.” Device eligibility, network access, and
+Bluetooth and the documented pairing GUI.” Device eligibility, network access, and
 expendable data are separate prerequisites.
 
 Include only prerequisites the case needs. Do not repeat the product or variant
@@ -122,8 +156,8 @@ copied as a standard checklist.
 Make prerequisites verifiable: use a
 documented battery range or observable charge state when it matters, rather
 than “sufficient charge.” Do not invent a threshold for a case that does not
-need one. Connecting equipment, selecting a mode, creating an evidence
-directory, and replacing command placeholders belong in `steps`, not `setup`.
+need one. Connecting equipment, selecting a mode, saving evidence, and filling
+in device-specific request values belong in `steps`, not `setup`.
 
 `steps` answers “What do I do?” Powering off, disconnecting a cable, selecting a
 mode, recording a setting, and creating test data are actions. Write each action
@@ -161,7 +195,7 @@ run. Record failures before retries, and retain the original result.
 ## Generic Examples
 
 These examples illustrate writing patterns, not requirements for any shipping
-product. `ExampleVariant`, command names, values, and time limits below are
+product. `ExampleVariant`, menu names, endpoints, values, and time limits below are
 fictional. Replace them with verified product details when authoring a case.
 
 ### Visible Output
@@ -190,93 +224,49 @@ It needs no special prerequisites, so `setup` is empty.
 
 ### Setting Persistence
 
-Checking interval persistence does not also prove measurement cadence; that is
-a separate scenario. Link the product's configuration and restart procedures in
-`references` when adapting this example.
+Keep the menu interaction, physical display, and restart in one scenario. A
+configuration write/read round trip alone belongs in developer tests. Link the
+product's menu and restart procedures when adapting this example.
 
 ```json
 {
-  "id": "settings.reporting.interval-persistence",
-  "title": "The reporting interval survives restart",
-  "objective": "Verify that a saved reporting preference remains effective after restart.",
+  "id": "settings.display.unit-persistence",
+  "title": "The displayed temperature unit survives restart",
+  "objective": "Verify menu selection, visible units, and persistence on the device.",
   "category": "Settings",
-  "sub_category": "Reporting",
+  "sub_category": "Display",
   "applicability": ["ExampleVariant"],
-  "setup": [
-    "Access to the device's documented configuration interface."
-  ],
+  "setup": [],
   "steps": [
-    {
-      "action": "Read and record the reporting interval.",
-      "expected_result": "The configuration interface returns the current value."
-    },
-    {
-      "action": "Set 30 seconds, or 60 seconds if the original value is already 30. Read the setting back for up to five seconds after the accepted write.",
-      "expected_result": "The interface returns the chosen value within that five-second window."
-    },
-    {
-      "action": "Select Restart and wait up to 30 seconds for the configuration interface to become available.",
-      "expected_result": "The device restarts and the interface responds within 30 seconds of selecting Restart."
-    },
-    {
-      "action": "Read the reporting interval again.",
-      "expected_result": "It equals the value selected before restart.",
-      "evidence": [
-        "Record the original, selected, and post-restart interval values."
-      ]
-    }
+    {"action": "Open Settings > Temperature Unit and record the selected unit.", "expected_result": "The current choice is visible and recorded."},
+    {"action": "Select the opposite unit and return Home. Observe for five seconds.", "expected_result": "Home uses the selected unit with readable labels and no overlapping text."},
+    {"action": "Select Settings > Restart. After Home returns, inspect its unit and reopen Temperature Unit, allowing 30 seconds from restart selection.", "expected_result": "Home and the menu retain the selected unit.", "evidence": ["Save a post-restart Home photo."]}
   ],
-  "cleanup": [
-    "Restore the original reporting interval and confirm it with a read."
-  ],
+  "cleanup": ["Restore the recorded unit through Settings > Temperature Unit and confirm it on Home, including after interruption."],
   "references": []
 }
 ```
 
-### Rejected Input and Recovery
+### API-Triggered Physical Output
 
-This fictional product accepts integer intervals from 1 through 60 seconds.
-Link the client's operation guide and the product's error contract in
-`references` when adapting this example.
+This fictional diagnostic is invoked through a GUI API client. Acceptance of
+the request does not prove that the physical indicator works. Link the actual
+client procedure and diagnostic contract when adapting this example.
 
 ```json
 {
-  "id": "settings.reporting.invalid-interval-recovery",
-  "title": "An unsupported interval is rejected without changing settings",
-  "objective": "Verify that rejecting an invalid input preserves configuration and leaves the interface usable.",
-  "category": "Settings",
-  "sub_category": "Reporting",
+  "id": "diagnostics.indicator.remote",
+  "title": "The remote indicator action lights the physical LED",
+  "objective": "Verify the physical indicator responds to the remote diagnostic and returns to its previous state.",
+  "category": "Diagnostics",
+  "sub_category": "Indicators",
   "applicability": ["ExampleVariant"],
-  "setup": [
-    "Access to the device's documented configuration client."
-  ],
+  "setup": ["A computer with Postman or an equivalent GUI API client on the test LAN.", "Access to the test router's connected-device list."],
   "steps": [
-    {
-      "action": "Read and save the current configuration, including the reporting interval.",
-      "expected_result": "The client receives a complete configuration snapshot."
-    },
-    {
-      "action": "Submit reporting interval 0 through the configuration client.",
-      "expected_result": "Within five seconds of submission, the client reports the documented invalid-value error.",
-      "evidence": [
-        "Save the rejected request and its response."
-      ]
-    },
-    {
-      "action": "Read the configuration and compare it with the saved snapshot.",
-      "expected_result": "The interface responds and all configuration values are unchanged.",
-      "evidence": [
-        "Save both configuration snapshots and record any differences."
-      ]
-    },
-    {
-      "action": "Submit reporting interval 30, or 60 if the original interval is already 30, and read it back for up to five seconds after submission.",
-      "expected_result": "The request succeeds and the selected value is returned within that five-second window."
-    }
+    {"action": "Match the device's displayed network address to the router entry and record its IP. Record the indicator's current state.", "expected_result": "The intended device and its original indicator state are identified."},
+    {"action": "In the API client, send POST http://<device-ip>/diagnostics/indicator with Content-Type: application/json, no authentication, and body {\"color\":\"green\"}, replacing <device-ip> with the recorded IP. Watch the device for ten seconds from Send.", "expected_result": "The client reports acceptance, the physical LED turns green within two seconds, and its previous state returns within ten seconds.", "evidence": ["Record a video of the indicator sequence; save the response if the action fails."]}
   ],
-  "cleanup": [
-    "Restore the original reporting interval, including if the invalid write unexpectedly changed it, and confirm the restored value with a read."
-  ],
+  "cleanup": ["If the diagnostic remains active, select Diagnostics > Exit on the device and confirm the recorded indicator state returns."],
   "references": []
 }
 ```
@@ -291,6 +281,8 @@ Inspect existing coverage before adding cases. Update a case when its scenario
 is unchanged; add a case for a distinct scenario. Preserve unrelated checks and
 case IDs. When a split, merge, or removal is necessary, explain the old-to-new
 coverage mapping in the change summary so reviewers can detect lost coverage.
+Identify developer checks that already exist separately from planned or deferred
+work; do not claim automation results merely because coverage was assigned to it.
 
 Set `rev` to the current seven-character Git HEAD when template content changes:
 
@@ -323,6 +315,13 @@ verifiable, case-specific prerequisite and contain no execution instructions.
 Remove product/applicability repetition and general release-preparation items.
 Check that the
 steps establish temporary state and do not repeat setup as preparation work.
+
+Review the complete procedure against [QA Audience and Tools](#qa-audience-and-tools),
+including cleanup and evidence collection. Confirm API requests are usable in a
+GUI, log observations are concrete, and no step requires a development environment
+or code execution. Check that a physical pass condition is supported by a human
+observation and that the case adds value beyond existing manual and developer
+coverage.
 
 The author is responsible for delivering cases that QA can execute as written,
 with confirmed prerequisites, available tools, and clear pass conditions.
