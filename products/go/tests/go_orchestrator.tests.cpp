@@ -6023,7 +6023,7 @@ TEST_CASE("on_input: CalibrateCo2 UI action triggers co2 calibration request",
   CHECK(f.ui_manager.current_screen() == Screen::Home);
 }
 
-TEST_CASE("on_input: Hardware Test Battery Calibration arm writes factory state",
+TEST_CASE("on_input: Hardware Test FG Learning arm writes factory state",
           "[Orchestrator][hwtest][fg]") {
   TestFixture f;
   auto orch = f.make_orchestrator();
@@ -6038,7 +6038,7 @@ TEST_CASE("on_input: Hardware Test Battery Calibration arm writes factory state"
   enter_hardware_test(f, orch);
   REQUIRE(f.ui_manager.current_screen() == Screen::HardwareTest);
 
-  open_ui_row(f, orch, "Battery Calibration");
+  open_ui_row(f, orch, "Fuel Gauge Learning");
   REQUIRE(f.ui_manager.current_screen() == Screen::Confirm);
 
   // Navigate to Yes (index 4): 3 downs from Back (1).
