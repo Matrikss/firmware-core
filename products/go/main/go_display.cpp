@@ -2,7 +2,6 @@
 
 #ifndef TEST_HOST
 
-#include <algorithm>
 #include <cinttypes>
 #include <cmath>
 #include <cstdio>
@@ -1152,24 +1151,6 @@ void draw_provisioning_action_row(u8g2_t *u, const char *text, int y, bool selec
   }
 }
 
-constexpr int CONFIRM_LINE_STEP = 12;
-constexpr int CONFIRM_TEXT_X = 10;
-
-int draw_confirm_text(u8g2_t *u, const char *text, int baseline_y) {
-  constexpr size_t MAX_LINES = 8;
-  WrapLine lines[MAX_LINES];
-  const size_t count = compute_wrapped_lines(text, SCREEN_W - 2 * CONFIRM_TEXT_X,
-                                             &u8g2_str_width_fn, u, lines, MAX_LINES);
-  for (size_t i = 0; i < count; ++i) {
-    char scratch[64];
-    const size_t length = std::min(lines[i].length, sizeof(scratch) - 1);
-    memcpy(scratch, lines[i].begin, length);
-    scratch[length] = '\0';
-    draw_text(u, CONFIRM_TEXT_X, baseline_y + static_cast<int>(i) * CONFIRM_LINE_STEP, scratch);
-  }
-  return static_cast<int>(count);
-}
-
 // Draw list/menu rows with selection highlight.
 void draw_list_rows(u8g2_t *u, const DisplayValues &v, bool full_screen) {
   const int row_base_y = full_screen ? 20 : 166;
@@ -1178,10 +1159,9 @@ void draw_list_rows(u8g2_t *u, const DisplayValues &v, bool full_screen) {
   const int text_baseline = full_screen ? 33 : 179;
   // Extra offset for content rows (index >= 2) to clear the separator line.
   const int content_pad = (full_screen && v.show_separator_after_back) ? 2 : 0;
-  int wrapped_question_pad = 0;
 
   for (uint8_t i = 0; i < v.row_count && i < MAX_LIST_ROWS; ++i) {
-    const int pad = ((i >= 2) ? content_pad : 0) + wrapped_question_pad;
+    const int pad = (i >= 2) ? content_pad : 0;
     const int row_y = row_base_y + ROW_STEP * static_cast<int>(i) + pad;
     const bool selected = (i == v.selected_row) && !v.rows[i].disabled;
     if (selected) {
@@ -1189,13 +1169,7 @@ void draw_list_rows(u8g2_t *u, const DisplayValues &v, bool full_screen) {
       u8g2_SetDrawColor(u, 1);
     }
     u8g2_SetFont(u, u8g2_font_6x10_tr);
-    const int baseline_y = text_baseline + ROW_STEP * static_cast<int>(i) + pad;
-    if (v.screen == Screen::Confirm && v.rows[i].disabled) {
-      const int lines = draw_confirm_text(u, v.rows[i].text, baseline_y);
-      wrapped_question_pad += std::max(0, lines - 1) * CONFIRM_LINE_STEP;
-    } else {
-      draw_text(u, 10, baseline_y, v.rows[i].text);
-    }
+    draw_text(u, 10, text_baseline + ROW_STEP * static_cast<int>(i) + pad, v.rows[i].text);
     if (selected) {
       u8g2_SetDrawColor(u, 0);
     }
@@ -1203,12 +1177,6 @@ void draw_list_rows(u8g2_t *u, const DisplayValues &v, bool full_screen) {
 
   if (v.show_separator_after_back) {
     u8g2_DrawHLine(u, 0, 63, SCREEN_W);
-  }
-  if (v.screen == Screen::Confirm && v.confirm_detail != nullptr) {
-    u8g2_SetFont(u, u8g2_font_6x10_tr);
-    const int detail_y =
-        text_baseline + ROW_STEP * v.row_count + content_pad + wrapped_question_pad;
-    draw_confirm_text(u, v.confirm_detail, detail_y);
   }
 }
 

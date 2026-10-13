@@ -1971,9 +1971,7 @@ void UIManager::populate_confirm_rows(DisplayValues &v) const {
   } else if (_confirm_source_setting == SettingId::Co2Calibration) {
     question = "Calibrate CO2?";
   } else if (_confirm_source_setting == SettingId::FgLearning) {
-    question = "Start battery calibration?";
-    v.confirm_detail = "For factory use. Calibrates battery readings using full charge and "
-                       "discharge cycles. The device will restart.";
+    question = "Start FG Learning?";
   }
   copy_row(v, 2, question, true); // non-selectable
 
@@ -2045,7 +2043,7 @@ void UIManager::populate_hardware_test_rows(DisplayValues &v) const {
   copy_row(v, HW_TEST_PERIPHERAL, "Peripheral Test", false);
   copy_row(v, HW_TEST_GPS, "GPS Test", false);
   copy_row(v, HW_TEST_ACCEL, "Accelerometer Test", false);
-  copy_row(v, HW_TEST_FG_LEARNING, "Battery Calibration", false);
+  copy_row(v, HW_TEST_FG_LEARNING, "Fuel Gauge Learning", false);
   copy_row(v, HW_TEST_PLAY_MELODY, "Play Melody", false);
   v.row_count = HW_TEST_TOTAL;
   v.selected_row = _hardware_test_index;

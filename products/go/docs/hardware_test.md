@@ -4,11 +4,11 @@ On-device diagnostics surface for AirGradient Go, reachable from
 **Settings → Hardware Test**. It groups four operator-run flows behind one
 submenu: a guided **Peripheral Test** (actuators then air-quality sensors), a
 live **GPS Test**, a live **Accelerometer Test**, and an in-menu arm for the
-existing **Battery Calibration** factory routine. `UIManager` stays hardware-free — it
+existing **FG Learning** factory routine. `UIManager` stays hardware-free — it
 renders the submenu and per-flow views from a pushed snapshot — while the
 orchestrator owns every hardware side effect, the flow state machines, and the
 buzzer / LED cues. All flows run in-app on already-initialised services; only
-Battery Calibration leaves the app (writes factory state and reboots). The submenu also
+FG Learning leaves the app (writes factory state and reboots). The submenu also
 contains Play Melody, which previews Chime or Tetris using the existing
 synchronized buzzer/LED playback.
 
@@ -35,7 +35,7 @@ synchronized buzzer/LED playback.
 | `GpsService` | `gps/gps_service.h` | Ungates the receiver + fast posting for the live GPS screen |
 | `AccelService` | `accel/accel_service.h` | Worker-owned configuration and live X/Y/Z + WHO_AM_I reads |
 | `accel_sanity.h` | `accel/accel_sanity.h` | Pure identity + rest-magnitude classification |
-| `ConfigStore` | `airgradient-config` | Battery Calibration writes `FactorySettings` before reboot |
+| `ConfigStore` | `airgradient-config` | FG Learning writes `FactorySettings` before reboot |
 
 ## Public API
 
@@ -50,7 +50,7 @@ orchestrator consumes. Opening the submenu is internal navigation
 | `PeripheralTestExit` | Summary tap | `finish_peripheral_test()` — restore hardware |
 | `OpenGpsTest` | GPS Test row | `start_gps_test()` — ungate receiver, fast posting, TTFF timer |
 | `OpenAccelTest` | Accel Test row | `start_accel_test()` — request test mode, sample, classify, cue |
-| `ArmFgLearning` | Battery Calibration confirm → Yes | Write `FactorySettings` + reboot into `FgLearningRunner` |
+| `ArmFgLearning` | FG Learning confirm → Yes | Write `FactorySettings` + reboot into `FgLearningRunner` |
 
 Cross-service hooks used by the flows:
 
@@ -73,7 +73,7 @@ Settings. It opens `Screen::HardwareTest`. The submenu rows, in order:
 
 ```text
 Exit(0), Back(1), Peripheral Test(2), GPS Test(3), Accelerometer Test(4),
-Battery Calibration(5), Play Melody(6)
+Fuel Gauge Learning(5), Play Melody(6)
 ```
 
 Exit returns Home; Back returns to Settings on the Hardware Test row. Each live
@@ -177,13 +177,10 @@ back LED and buzzer are restored on exit.
 
 The screen shows `WHO_AM_I` (OK/BAD), X/Y/Z (mg), `|a|` (mg), and Result.
 
-### Battery Calibration Arm
+### FG Learning Arm
 
-The Battery Calibration row is a destructive action guarded by the shared `Confirm`
-screen ("Start battery calibration?"). The question wraps to fit the display.
-The explanation reads: "For factory use. Calibrates battery readings using full
-charge and discharge cycles. The device will restart." On **Yes** the
-orchestrator writes
+The FG Learning row is a destructive action guarded by the shared `Confirm`
+screen ("Start FG Learning?"). On **Yes** the orchestrator writes
 `FactorySettings{ fg_learning_stage = Charge, cycle = 1, itpor_losses = 0 }` and
 reboots; the next boot routes into the existing `FgLearningRunner` unchanged.
 This is the only entry point for a new learning run. BOOT short-presses only
@@ -219,5 +216,5 @@ See [`fg_learning.md`](fg_learning.md) for the runner.
 - **Auto-lock suppressed.** The inactivity auto-lock is disabled on every
   Hardware Test screen (submenu and live flows), so an idle operator is never
   locked and returned Home mid-test. Auto-lock resumes once the surface is
-  exited. The Play Melody choice screen and Battery Calibration confirmation retain
+  exited. The Play Melody choice screen and FG Learning confirmation retain
   ordinary auto-lock behavior.

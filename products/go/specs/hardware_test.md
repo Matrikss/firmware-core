@@ -88,7 +88,7 @@ enters a live test screen or fires an action.
 | Peripheral Test | actuator + AQ sweep flow | guided then auto |
 | GPS Test | live GPS status screen | live view |
 | Accelerometer Test | live accelerometer readout | live view + auto pass/fail |
-| Battery Calibration | confirm → arm → reboot | destructive action |
+| FG Learning | confirm → arm → reboot | destructive action |
 | Back | parent (Settings) | navigation |
 
 The submenu follows the established `UIManager` menu pattern: a
@@ -97,7 +97,7 @@ The submenu follows the established `UIManager` menu pattern: a
 side effects.
 
 ```text
-Settings -> Hardware Test -> { Peripheral Test, GPS Test, Accel Test, Battery Calibration }
+Settings -> Hardware Test -> { Peripheral Test, GPS Test, Accel Test, FG Learning }
 ```
 
 ### Ownership Model
@@ -113,7 +113,7 @@ flowchart TD
     HT --> PT[Peripheral Test: in-app orchestrator flow]
     HT --> GT[GPS Test: in-app live screen]
     HT --> AT[Accel Test: in-app live screen]
-    HT --> FG[Battery Calibration: arm factory state + reboot]
+    HT --> FG[FG Learning: arm factory state + reboot]
     FG --> Runner[Existing FgLearningRunner boot path]
 ```
 
@@ -210,12 +210,10 @@ its address added to `board_config.h`. If the accelerometer is only populated on
 some board variants, the driver is variant-gated the same way the LED and buzzer
 services already are.
 
-### Battery Calibration Arm
+### FG Learning Arm
 
-The Battery Calibration row is a **destructive action** guarded by a strong confirmation
-dialog asking "Start battery calibration?" with this explanation: "For factory
-use. Calibrates battery readings using full charge and discharge cycles. The
-device will restart." Wrap the text to fit the display. On confirm, the
+The FG Learning row is a **destructive action** guarded by a strong confirmation
+dialog that warns it is a multi-hour, ship-mode routine. On confirm, the
 orchestrator writes `FactorySettings{ fg_learning_stage = Charge, cycle = 1,
 itpor_losses = 0 }` and reboots. On the next boot, `GoApp::run()` sees a non-Idle
 stage and routes into the **existing `FgLearningRunner` unchanged**. This reuses
@@ -290,7 +288,7 @@ Each step is small enough to land as a focused commit.
    attaching to the shared I2C bus (variant-gated if needed).
 7. **Accelerometer test.** Add the live X/Y/Z screen with identity + sanity
    pass/fail and buzzer cue.
-8. **FG learning arm.** Add the Battery Calibration row, a strong confirm dialog, and
+8. **FG learning arm.** Add the FG Learning row, a strong confirm dialog, and
    the orchestrator handler that writes factory state and reboots into the
    existing runner.
 9. **Docs.** Add a service doc under `products/go/docs/` describing the shipped

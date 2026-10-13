@@ -158,7 +158,7 @@ TEST_CASE("UIManager: agreed menu hierarchy", "[UIManager][nav][redesign]") {
   double_press(ui);
   open_row(ui, "Hardware Test");
   check_rows(ui, {"Exit", "Back", "Peripheral Test", "GPS Test", "Accelerometer Test",
-                  "Battery Calibration", "Play Melody"});
+                  "Fuel Gauge Learning", "Play Melody"});
 }
 
 TEST_CASE("UIManager: mode choices preserve identities across every transition",
@@ -1630,7 +1630,7 @@ TEST_CASE("UIManager: CO2 calibration confirm dialog", "[UIManager][confirm][co2
 }
 
 // ============================================================================
-// Hardware Test submenu (Settings → Hardware Test → Battery Calibration)
+// Hardware Test submenu (Settings → Hardware Test → FG Learning)
 // ============================================================================
 
 TEST_CASE("UIManager: Hardware Test submenu navigation", "[UIManager][hwtest]") {
@@ -1649,7 +1649,7 @@ TEST_CASE("UIManager: Hardware Test submenu navigation", "[UIManager][hwtest]") 
     CHECK(std::string(v.rows[2].text) == "Peripheral Test");
     CHECK(std::string(v.rows[3].text) == "GPS Test");
     CHECK(std::string(v.rows[4].text) == "Accelerometer Test");
-    CHECK(std::string(v.rows[5].text) == "Battery Calibration");
+    CHECK(std::string(v.rows[5].text) == "Fuel Gauge Learning");
     CHECK(std::string(v.rows[6].text) == "Play Melody");
     CHECK(v.row_count == 7);
   }
@@ -1671,21 +1671,21 @@ TEST_CASE("UIManager: Hardware Test submenu navigation", "[UIManager][hwtest]") 
   }
 }
 
-TEST_CASE("UIManager: Battery Calibration arm confirm dialog", "[UIManager][hwtest][fg]") {
+TEST_CASE("UIManager: FG Learning arm confirm dialog", "[UIManager][hwtest][fg]") {
   UIManager ui(DEFAULT_UI_CONFIG);
 
   auto navigate_to_fg_confirm = [&]() {
     go_to_group(ui, "Hardware Test");
-    open_row(ui, "Battery Calibration");
+    open_row(ui, "Fuel Gauge Learning");
   };
 
-  SECTION("Battery Calibration row opens the confirm dialog with a strong question") {
+  SECTION("FG Learning row opens the confirm dialog with a strong question") {
     navigate_to_fg_confirm();
     CHECK(ui.current_screen() == Screen::Confirm);
 
     auto ctx = make_default_ctx();
     DisplayValues v = ui.build_values(ctx);
-    CHECK(std::string(v.rows[2].text) == "Start battery calibration?");
+    CHECK(std::string(v.rows[2].text) == "Start FG Learning?");
     CHECK(v.rows[2].disabled == true);
   }
 
@@ -1699,7 +1699,7 @@ TEST_CASE("UIManager: Battery Calibration arm confirm dialog", "[UIManager][hwte
     CHECK(result.action == UIAction::ArmFgLearning);
   }
 
-  SECTION("No returns to the Hardware Test submenu on the Battery Calibration row") {
+  SECTION("No returns to the Hardware Test submenu on the FG Learning row") {
     navigate_to_fg_confirm();
     press(ui, InputSource::TouchDown); // 1→2
     press(ui, InputSource::TouchDown); // 2→3 (No)
@@ -1708,7 +1708,7 @@ TEST_CASE("UIManager: Battery Calibration arm confirm dialog", "[UIManager][hwte
     CHECK(ui.current_screen() == Screen::HardwareTest);
     auto ctx = make_default_ctx();
     DisplayValues v = ui.build_values(ctx);
-    CHECK(std::string(v.rows[v.selected_row].text) == "Battery Calibration");
+    CHECK(std::string(v.rows[v.selected_row].text) == "Fuel Gauge Learning");
   }
 
   SECTION("Back returns to the Hardware Test submenu") {
