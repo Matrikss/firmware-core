@@ -6038,7 +6038,7 @@ TEST_CASE("on_input: Hardware Test FG Learning arm writes factory state",
   enter_hardware_test(f, orch);
   REQUIRE(f.ui_manager.current_screen() == Screen::HardwareTest);
 
-  open_ui_row(f, orch, "Fuel Gauge Learning");
+  open_ui_row(f, orch, "Battery Calibration");
   REQUIRE(f.ui_manager.current_screen() == Screen::Confirm);
 
   // Navigate to Yes (index 4): 3 downs from Back (1).

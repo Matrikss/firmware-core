@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "rev": "7b9933d",
+  "rev": "baed767",
   "product": {
     "slug": "airgradient-go",
     "name": "AirGradient Go",
@@ -2055,7 +2055,7 @@
     },
     {
       "id": "go.diagnostics.learning-cancel",
-      "title": "Cancelling Fuel Gauge Learning leaves normal operation intact",
+      "title": "Cancelling Battery Calibration leaves normal operation intact",
       "objective": "Verify the destructive factory workflow requires confirmation.",
       "category": "Diagnostics",
       "sub_category": "Fuel Gauge",
@@ -2073,8 +2073,8 @@
           "expected_result": "Portable is selected."
         },
         {
-          "action": "Open Hardware Test > Fuel Gauge Learning, choose No, then reopen and select Back.",
-          "expected_result": "Both paths return to Hardware Test on Fuel Gauge Learning; no learning reboot starts."
+          "action": "Open Hardware Test > Battery Calibration, inspect the confirmation, choose No, then reopen and select Back.",
+          "expected_result": "The confirmation asks Start Battery Calibration? Both paths return to Hardware Test on Battery Calibration; no learning reboot starts."
         },
         {
           "action": "Disconnect USB, hold Power until Powered off is painted, release Power, wait 10 seconds, then press Power to start.",
@@ -2093,7 +2093,7 @@
     },
     {
       "id": "go.diagnostics.learning-abort",
-      "title": "An armed Fuel Gauge Learning run can be aborted",
+      "title": "An armed Battery Calibration run can be aborted",
       "objective": "Verify entry into the dedicated boot path and its operator exit.",
       "category": "Diagnostics",
       "sub_category": "Fuel Gauge",
@@ -2110,11 +2110,11 @@
           "expected_result": "The initial state is recorded and the controls are unlocked."
         },
         {
-          "action": "Connect USB power before entering Fuel Gauge Learning.",
+          "action": "Connect USB power before entering Battery Calibration.",
           "expected_result": "The device shows external power or charging."
         },
         {
-          "action": "Open Main Menu > Settings > Hardware Test > Fuel Gauge Learning and confirm Yes.",
+          "action": "Open Main Menu > Settings > Hardware Test > Battery Calibration and confirm Yes.",
           "expected_result": "The unit reboots into the Charge-stage learning dashboard rather than Home."
         },
         {
