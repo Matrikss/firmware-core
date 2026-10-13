@@ -148,7 +148,7 @@ flowchart TD
     HardwareTest -- Back --> Settings
     HardwareTest -- Play Melody --> Melody["SettingsChoice: Chime / Tetris"]
     Melody -- Play or Back --> HardwareTest
-    HardwareTest -- Fuel Gauge Learning --> Confirm
+    HardwareTest -- Battery Calibration --> Confirm
     Settings --> About["Existing About Device page"]
     About -- Back --> Settings
     Settings -- Setup Guide --> GettingStarted
@@ -180,7 +180,7 @@ rows follow this order:
 | Settings | Operations, Display & Touch, Hardware Test, Clear Data, Setup Guide, About Device |
 | Operations | Measurement Interval, CO2 Calibration, GPS Mode, Buzzer |
 | Display & Touch | Temperature Unit, Altitude Unit, PM Display, Auto Lock, AQI LED, Touch LED |
-| Hardware Test | Peripheral Test, GPS Test, Accelerometer Test, Fuel Gauge Learning, Play Melody |
+| Hardware Test | Peripheral Test, GPS Test, Accelerometer Test, Battery Calibration, Play Melody |
 
 Settings and its groups fit on one page. Opening Settings selects Operations;
 Operations selects Measurement Interval, Display & Touch selects Temperature
@@ -289,7 +289,7 @@ The Confirm screen is shared by CO2 Calibration, Clear Data, and Fuel Gauge
 Learning. `_confirm_source_setting` holds a typed action identity and
 `_confirm_parent` records the owning menu. Back and No restore that menu's
 cursor; Yes returns Home and emits the action for the orchestrator to execute.
-The initial selection remains Back. Fuel Gauge Learning follows its existing
+The initial selection remains Back. Battery Calibration follows its existing
 factory-state write and reboot path.
 
 ## Navigation Patterns

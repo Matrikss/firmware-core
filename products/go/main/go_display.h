@@ -147,6 +147,9 @@ struct DisplayValues {
   uint8_t selected_row = 0;
   bool show_separator_after_back = false;
 
+  // --- Confirmation explanation ---
+  const char *confirm_detail = nullptr;
+
   // --- About screen ---
   const char *about_title = nullptr;
   const char *about_firmware = nullptr;

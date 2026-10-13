@@ -88,6 +88,10 @@ for `FgLearningAction`, `VerifyInputs`, and the accessors (`stage`, `cycle`,
 
 ## Behavior
 
+Start the factory routine from Settings > Hardware Test > Battery Calibration.
+The confirmation asks "Start battery calibration?" and explains the full charge
+and discharge cycles, restart, and factory-use purpose.
+
 ### Stages
 
 The controller is driven, not autonomous. Each `tick()` derives the next stage
@@ -371,7 +375,7 @@ dashboard as `FAIL: <reason>` under the banner, and written to the journal
 
 ### Arming
 
-Start a run from **Settings → Hardware Test → Fuel Gauge Learning**, then choose
+Start a run from **Settings → Hardware Test → Battery Calibration**, then choose
 **Yes** on the confirmation screen. This is the only entry point for a new run;
 it is available after onboarding as well. Confirmation saves
 `FactorySettings{Charge, cycle 1, losses 0}` and reboots.
