@@ -158,7 +158,7 @@ TEST_CASE("UIManager: agreed menu hierarchy", "[UIManager][nav][redesign]") {
   double_press(ui);
   open_row(ui, "Hardware Test");
   check_rows(ui, {"Exit", "Back", "Peripheral Test", "GPS Test", "Accelerometer Test",
-                  "Fuel Gauge Learning", "Play Melody"});
+                  "Battery Calibration", "Play Melody"});
 }
 
 TEST_CASE("UIManager: mode choices preserve identities across every transition",
@@ -1649,7 +1649,7 @@ TEST_CASE("UIManager: Hardware Test submenu navigation", "[UIManager][hwtest]") 
     CHECK(std::string(v.rows[2].text) == "Peripheral Test");
     CHECK(std::string(v.rows[3].text) == "GPS Test");
     CHECK(std::string(v.rows[4].text) == "Accelerometer Test");
-    CHECK(std::string(v.rows[5].text) == "Fuel Gauge Learning");
+    CHECK(std::string(v.rows[5].text) == "Battery Calibration");
     CHECK(std::string(v.rows[6].text) == "Play Melody");
     CHECK(v.row_count == 7);
   }
@@ -1676,7 +1676,7 @@ TEST_CASE("UIManager: FG Learning arm confirm dialog", "[UIManager][hwtest][fg]"
 
   auto navigate_to_fg_confirm = [&]() {
     go_to_group(ui, "Hardware Test");
-    open_row(ui, "Fuel Gauge Learning");
+    open_row(ui, "Battery Calibration");
   };
 
   SECTION("FG Learning row opens the confirm dialog with a strong question") {
@@ -1685,7 +1685,7 @@ TEST_CASE("UIManager: FG Learning arm confirm dialog", "[UIManager][hwtest][fg]"
 
     auto ctx = make_default_ctx();
     DisplayValues v = ui.build_values(ctx);
-    CHECK(std::string(v.rows[2].text) == "Start FG Learning?");
+    CHECK(std::string(v.rows[2].text) == "Start Battery Calibration?");
     CHECK(v.rows[2].disabled == true);
   }
 
@@ -1708,7 +1708,7 @@ TEST_CASE("UIManager: FG Learning arm confirm dialog", "[UIManager][hwtest][fg]"
     CHECK(ui.current_screen() == Screen::HardwareTest);
     auto ctx = make_default_ctx();
     DisplayValues v = ui.build_values(ctx);
-    CHECK(std::string(v.rows[v.selected_row].text) == "Fuel Gauge Learning");
+    CHECK(std::string(v.rows[v.selected_row].text) == "Battery Calibration");
   }
 
   SECTION("Back returns to the Hardware Test submenu") {
