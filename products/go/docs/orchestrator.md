@@ -353,8 +353,8 @@ Events are dispatched by type:
     returned `UIActionResult` (start/stop tracking, change mode,
     provisioning confirm-switch / confirm-cancel, etc.)
 
-Fuel-gauge learning starts only through **Settings → Hardware Test → Fuel Gauge
-Learning → Yes**. The `ArmFgLearning` UI action saves factory state (`Charge`,
+Fuel-gauge learning starts only through **Settings → Hardware Test → Battery
+Calibration → Yes**. The `ArmFgLearning` UI action saves factory state (`Charge`,
 cycle 1) and reboots into the dedicated factory path. The orchestrator owns none
 of the learning run; see [`fg_learning.md`](fg_learning.md).
 
