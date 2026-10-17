@@ -51,3 +51,7 @@ CONFIG_SGP41_INDEX_SAMPLING_INTERVAL_10S=y
 # runs alongside the Portable BLE data service during attached provisioning.
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
 CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=10
+
+
+# Allows the BLE controller to turn off its PHY between radio events
+CONFIG_BT_LE_SLEEP_ENABLE=y
