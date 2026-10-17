@@ -2724,8 +2724,12 @@
           "expected_result": "The unit returns to Home after cold power."
         },
         {
-          "action": "Reconnect to the same Go in nRF Connect and use Read on the same Config characteristic. Allow 30 seconds from Connect.",
-          "expected_result": "The read succeeds without another passkey, and Home shows the connected BLE icon."
+          "action": "After Home returns, scan in nRF Connect for up to 30 seconds.",
+          "expected_result": "The same AirGradient Go <last4> appears."
+        },
+        {
+          "action": "Connect to the rediscovered Go and read the same Config characteristic within 30 seconds of Connect. Keep the connection open for another 30 seconds.",
+          "expected_result": "The read succeeds without another passkey. The connection stays open and Home shows the connected BLE icon."
         }
       ],
       "cleanup": [
