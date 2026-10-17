@@ -3,6 +3,10 @@
 # AirGradient device model.
 CONFIG_AG_DEVICE_MODEL_GO=y
 
+# Enable power management and dynamic frequency scaling at startup.
+CONFIG_PM_ENABLE=y
+CONFIG_PM_DFS_INIT_AUTO=y
+
 # PayloadCache: store MeasuresAGo (temp/hum, PM, CO2, TVOC/NOx, power) rather
 # than the full Measures struct. Go does not use the secondary sensor channels
 # (temp_hum_b, pm_b, electrode) in its chart cache.
