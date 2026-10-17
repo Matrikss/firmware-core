@@ -92,6 +92,11 @@ The new 19-character name fits comfortably in the 29-byte scan response budget.
 Advertising is single-connection: `on_connect()` calls `stop_advertising()`,
 `on_disconnect()` calls `start_advertising()`.
 
+Portable mode uses a fixed **1,022.5 ms** advertising interval, configured via
+`AgBleServer::set_advertising_interval()` and retained across reconnects.
+Attached provisioning shares this interval; Stationary standalone provisioning
+uses the stack defaults.
+
 ---
 
 ## Security
