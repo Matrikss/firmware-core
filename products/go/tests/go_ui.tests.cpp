@@ -142,8 +142,8 @@ TEST_CASE("UIManager: agreed menu hierarchy", "[UIManager][nav][redesign]") {
   double_press(ui);
   CHECK(ui.build_values(make_default_ctx()).selected_row == 2);
   open_row(ui, "Settings");
-  check_rows(ui, {"Exit", "Back", "Operations", "Display & Touch", "Hardware Test", "Clear Data",
-                  "Setup Guide", "About Device"});
+  check_rows(ui, {"Exit", "Back", "Operations", "Display & Touch", "Power Saving", "Hardware Test",
+                  "Clear Data", "Setup Guide", "About Device"});
   open_row(ui, "Operations");
   auto values = ui.build_values(make_default_ctx());
   REQUIRE(values.row_count == 6);
@@ -155,6 +155,9 @@ TEST_CASE("UIManager: agreed menu hierarchy", "[UIManager][nav][redesign]") {
   open_row(ui, "Display & Touch");
   check_rows(ui, {"Exit", "Back", "Temperature Unit: C", "Altitude Unit: m", "PM Display: ug/m3",
                   "Auto Lock: Off", "AQI LED: Off", "Touch LED: Off"});
+  double_press(ui);
+  open_row(ui, "Power Saving");
+  check_rows(ui, {"Exit", "Back", "Wi-Fi Power Saving"});
   double_press(ui);
   open_row(ui, "Hardware Test");
   check_rows(ui, {"Exit", "Back", "Peripheral Test", "GPS Test", "Accelerometer Test",
@@ -201,6 +204,7 @@ TEST_CASE("UIManager: group choice returns and exit gestures", "[UIManager][nav]
       {"Operations", "Buzzer:", "On", Screen::Operations},
       {"Display & Touch", "PM Display:", "USAQI", Screen::DisplayTouch},
       {"Display & Touch", "Auto Lock:", "60 Seconds", Screen::DisplayTouch},
+      {"Power Saving", "Wi-Fi Power Saving", "Enable", Screen::PowerSaving},
   };
   for (const auto &choice : choices) {
     DYNAMIC_SECTION(choice.setting) {
@@ -247,7 +251,7 @@ TEST_CASE("UIManager: group summaries fit the current list font",
           "[UIManager][settings][display]") {
   // 128 px canvas, 10 px text inset, and 6 px per character.
   static constexpr size_t MAX_VISIBLE_LABEL_CHARS = 19;
-  for (const char *group : {"Operations", "Display & Touch", "Hardware Test"}) {
+  for (const char *group : {"Operations", "Display & Touch", "Power Saving", "Hardware Test"}) {
     UIManager ui(DEFAULT_UI_CONFIG);
     GoSettings settings{};
     settings.measure_interval_seconds = 3599;
@@ -397,9 +401,10 @@ TEST_CASE("UIManager: grouped menus wrap and return to their parent",
     uint8_t count;
   };
   const MenuCase cases[] = {
-      {nullptr, Screen::Settings, "Operations", "About Device", 8},
+      {nullptr, Screen::Settings, "Operations", "About Device", 9},
       {"Operations", Screen::Operations, "Measure Int.", "Buzzer: Off", 6},
       {"Display & Touch", Screen::DisplayTouch, "Temperature Unit: C", "Touch LED: Off", 8},
+      {"Power Saving", Screen::PowerSaving, "Wi-Fi Power Saving", "Wi-Fi Power Saving", 3},
       {"Hardware Test", Screen::HardwareTest, "Peripheral Test", "Play Melody", 7},
   };
   for (const auto &item : cases) {
