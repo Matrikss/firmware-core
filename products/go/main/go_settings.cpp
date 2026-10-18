@@ -16,6 +16,7 @@ constexpr const char *KEY_USE_FEET = "auf";
 constexpr const char *KEY_PM_USE_USAQI = "pmu";
 constexpr const char *KEY_AUTO_LOCK_SECONDS = "als";
 constexpr const char *KEY_DISABLE_CLOUD = "dc";
+constexpr const char *KEY_WIFI_POWER_SAVE_ENABLED = "wps";
 constexpr const char *KEY_CONFIGURATION_CONTROL = "cc";
 constexpr const char *KEY_CO2_ABC_DAYS = "cad";
 constexpr const char *KEY_TVOC_LEARNING_OFFSET = "tlo";
@@ -261,6 +262,12 @@ GoSettings load_go_settings(ConfigStore &store) {
     settings.buzzer_enabled = buzzer_enabled;
   }
 
+  bool wifi_power_save_enabled = false;
+  if (store.get_bool(KEY_WIFI_POWER_SAVE_ENABLED, wifi_power_save_enabled) ==
+      ConfigStoreResult::OK) {
+    settings.wifi_power_save_enabled = wifi_power_save_enabled;
+  }
+
   // Static IP fields load together; ip == 0 retains the DHCP default.
   int sip = 0;
   if (store.get_int(KEY_STATIC_IP, sip) == ConfigStoreResult::OK && sip != 0) {
@@ -295,6 +302,7 @@ bool GoSettings::equals(const GoSettings &other) const {
          back_led_brightness == other.back_led_brightness &&
          touch_led_intensity == other.touch_led_intensity &&
          buzzer_enabled == other.buzzer_enabled && disable_cloud == other.disable_cloud &&
+         wifi_power_save_enabled == other.wifi_power_save_enabled &&
          configuration_control == other.configuration_control &&
          co2_abc_days == other.co2_abc_days && static_ip.ip == other.static_ip.ip &&
          tvoc_learning_offset == other.tvoc_learning_offset &&
@@ -418,6 +426,10 @@ bool save_go_settings(ConfigStore &store, const GoSettings &settings) {
   if (store.set_bool(KEY_BUZZER_ENABLED, settings.buzzer_enabled) != ConfigStoreResult::OK) {
     return false;
   }
+  if (store.set_bool(KEY_WIFI_POWER_SAVE_ENABLED, settings.wifi_power_save_enabled) !=
+      ConfigStoreResult::OK) {
+    return false;
+  }
 
   if (store.set_int(KEY_STATIC_IP, static_cast<int>(settings.static_ip.ip)) !=
       ConfigStoreResult::OK) {
@@ -536,7 +548,7 @@ void print_settings(const GoSettings &settings) {
           "** settings | meas_int=%d | gps_mode=%d "
           "op_mode=%d | auto_lock=%d | fahrenheit=%s feet=%s usaqi=%s | "
           "led: back=%d touch=%d | buzzer=%s | "
-          "disable_cloud=%s config_control=%d co2_abc_days=%d "
+          "wifi_power_save=%s disable_cloud=%s config_control=%d co2_abc_days=%d "
           "tvoc_learning_offset=%d nox_learning_offset=%d static_ip=%s "
           "onboarding_done=%s **",
           settings.measure_interval_seconds, settings.gps_mode, settings.operating_mode,
@@ -544,6 +556,7 @@ void print_settings(const GoSettings &settings) {
           settings.use_feet ? "true" : "false", settings.pm_use_usaqi ? "true" : "false",
           static_cast<int>(settings.back_led_brightness),
           static_cast<int>(settings.touch_led_intensity), settings.buzzer_enabled ? "on" : "off",
+          settings.wifi_power_save_enabled ? "on" : "off",
           settings.disable_cloud ? "true" : "false",
           static_cast<int>(settings.configuration_control), settings.co2_abc_days,
           settings.tvoc_learning_offset, settings.nox_learning_offset,
