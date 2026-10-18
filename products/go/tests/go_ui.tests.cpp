@@ -356,7 +356,8 @@ TEST_CASE("UIManager: Getting Started via Settings -> Setup Guide", "[UIManager]
     CHECK(result.action == UIAction::None);
     CHECK(ui.current_screen() == Screen::Settings);
     v = ui.build_values(ctx);
-    CHECK(v.selected_row == 6); // Setup Guide row
+    REQUIRE(v.selected_row < v.row_count);
+    CHECK(std::string(v.rows[v.selected_row].text) == "Setup Guide");
   }
 }
 
