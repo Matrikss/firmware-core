@@ -28,11 +28,14 @@ static constexpr const char *TAG = "WifiService";
 // transient missed sweep at bring-up.
 static constexpr uint8_t STATIONARY_MAX_RETRY_COUNT = 3;
 
-static void disable_stationary_power_save(WifiManager &wifi) {
-  const WifiStatus status = wifi.set_power_save(WifiPowerSave::None);
+static void apply_stationary_power_save(WifiManager &wifi, bool enabled) {
+  const WifiPowerSave mode = enabled ? WifiPowerSave::MaxModem : WifiPowerSave::None;
+  const WifiStatus status = wifi.set_power_save(mode);
   if (status != WifiStatus::Ok) {
-    AG_LOGW(TAG, "failed to disable Stationary Wi-Fi power save: %u",
-            static_cast<unsigned>(status));
+    AG_LOGW(TAG, "failed to set Stationary Wi-Fi power save %s: %u",
+            enabled ? "enabled" : "disabled", static_cast<unsigned>(status));
+  } else {
+    AG_LOGI(TAG, "Stationary Wi-Fi power save: %s", enabled ? "MAX_MODEM" : "NONE");
   }
 }
 
@@ -67,11 +70,19 @@ WifiService::~WifiService() {
 
 bool WifiService::has_saved_networks() const { return _wifi.has_saved_networks(); }
 
+void WifiService::set_power_save_enabled(bool enabled) {
+  _power_save_enabled = enabled;
+  if (!_provisioning_active && _wifi.get_mode() == WifiMode::Sta) {
+    apply_stationary_power_save(_wifi, _power_save_enabled);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Connection attempts
 // ---------------------------------------------------------------------------
 
 void WifiService::connect_with_saved_credentials(const WifiStaticIpConfig *static_ip) {
+  _use_default_credentials = false;
   _connect_saved_internal(static_ip, /*reset_online_latches=*/true, /*arm_window=*/true);
 }
 
@@ -90,7 +101,7 @@ void WifiService::_connect_saved_internal(const WifiStaticIpConfig *static_ip,
   }
 
   _wifi.set_mode(WifiMode::Sta);
-  disable_stationary_power_save(_wifi);
+  apply_stationary_power_save(_wifi, _power_save_enabled);
 
   WifiStaConfig sta{}; // empty ssid = auto-connect from saved networks
   sta.max_retry_count = STATIONARY_MAX_RETRY_COUNT;
@@ -125,6 +136,7 @@ void WifiService::schedule_reconnect(const WifiStaticIpConfig *static_ip) {
 }
 
 void WifiService::try_default_fallback_credentials() {
+  _use_default_credentials = true;
   _connect_fallback_internal(/*reset_online_latches=*/true, /*arm_window=*/true);
 }
 
@@ -136,7 +148,7 @@ void WifiService::_connect_fallback_internal(bool reset_online_latches, bool arm
   }
   _wifi.clear_static_ip();
   _wifi.set_mode(WifiMode::Sta);
-  disable_stationary_power_save(_wifi);
+  apply_stationary_power_save(_wifi, _power_save_enabled);
 
   WifiStaConfig sta{};
   std::strncpy(sta.ssid, _cfg.fallback_ssid, sizeof(sta.ssid) - 1);
@@ -144,15 +156,16 @@ void WifiService::_connect_fallback_internal(bool reset_online_latches, bool arm
   // Explicit SSID = transient connect (never saved); single-shot, no retry.
   sta.max_retry_count = 0;
 
+  // Manufacturing must still time out if the driver rejects the attempt.
+  if (arm_window) {
+    _arm_deadline(_cfg.fallback_connect_window_ms);
+  }
+
   const WifiStatus status = _wifi.connect(sta);
   if (status != WifiStatus::Ok) {
     AG_LOGE(TAG, "fallback connect failed: %d", static_cast<int>(status));
     _post_wifi_disconnected(WifiDisconnectReason::unknown);
     return;
-  }
-
-  if (arm_window) {
-    _arm_deadline(_cfg.fallback_connect_window_ms);
   }
 }
 
@@ -161,6 +174,7 @@ void WifiService::_connect_fallback_internal(bool reset_online_latches, bool arm
 // ---------------------------------------------------------------------------
 
 void WifiService::start_provisioning(ProvisioningTransport transport) {
+  _use_default_credentials = false;
   AG_LOGI(TAG, "start_provisioning(%u)", static_cast<unsigned>(transport));
   log_heap(TAG, "wifi.start_provisioning:enter");
   _provisioning_connected_event_pending.store(false);
@@ -238,6 +252,9 @@ void WifiService::stop_provisioning(bool stop_http_server) {
   // ProvisioningManager::stop() cleared the WifiManager callback slots;
   // restore ours so post-online disconnects and shutdown work.
   _install_wifi_callbacks();
+  if (_online.load()) {
+    apply_stationary_power_save(_wifi, _power_save_enabled);
+  }
   log_heap(TAG, "wifi.stop_provisioning:exit");
 }
 
@@ -305,6 +322,8 @@ void WifiService::stop_local_endpoint() {
 }
 
 bool WifiService::_start_provisioning_internal(ProvisioningTransport transport) {
+  // Keep onboarding responsive without changing the saved preference.
+  apply_stationary_power_save(_wifi, false);
   ProvisioningConfig config{};
   if (_cfg.ap_ssid != nullptr) {
     std::strncpy(config.ap.ssid, _cfg.ap_ssid, sizeof(config.ap.ssid) - 1);
@@ -344,6 +363,7 @@ void WifiService::_ensure_provisioning_manager() {
 // ---------------------------------------------------------------------------
 
 void WifiService::shutdown() {
+  _use_default_credentials = false;
   _provisioning_connected_event_pending.store(false);
   _reset_deadline();
   _reconnect_at_ms = 0;
@@ -359,6 +379,7 @@ void WifiService::shutdown() {
 }
 
 void WifiService::clear_credentials() {
+  _use_default_credentials = false;
   _wifi.clear_networks();
   _reset_online_latches();
 }
@@ -417,16 +438,18 @@ void WifiService::tick(uint32_t now_ms) {
   }
 
   if (_initial_connect_deadline_ms != 0 && now_ms >= _initial_connect_deadline_ms) {
-    _initial_connect_deadline_ms = 0;
-    AG_LOGW(TAG, "initial connect window expired");
-    _post_wifi_disconnected(WifiDisconnectReason::connection_lost);
+    // Keep the deadline due until admitted so queue pressure cannot strand setup.
+    if (_post_wifi_disconnected(WifiDisconnectReason::connection_lost)) {
+      _initial_connect_deadline_ms = 0;
+      AG_LOGW(TAG, "initial connect window expired");
+    }
   }
 
   if (_reconnect_at_ms != 0 && now_ms >= _reconnect_at_ms) {
     _reconnect_at_ms = 0;
     // Keep has_been_online() latched (stay "runtime") and skip the connect
     // window; the WifiManager terminal disconnect drives the next cycle.
-    if (_wifi.has_saved_networks()) {
+    if (!_use_default_credentials) {
       AG_LOGI(TAG, "runtime reconnect: attempting saved networks");
       const WifiStaticIpConfig *ip = _reconnect_has_static_ip ? &_reconnect_static_ip : nullptr;
       _connect_saved_internal(ip, /*reset_online_latches=*/false, /*arm_window=*/false);
@@ -492,11 +515,11 @@ void WifiService::_reset_online_latches() {
   _rssi.store(WIFI_RSSI_INVALID);
 }
 
-void WifiService::_post_wifi_disconnected(WifiDisconnectReason reason) {
+bool WifiService::_post_wifi_disconnected(WifiDisconnectReason reason) {
   Event evt{};
   evt.type = EventType::WifiDisconnected;
   evt.wifi_disconnect_reason = static_cast<uint8_t>(reason);
-  RTOS::queue_send(_event_queue, &evt);
+  return RTOS::queue_send(_event_queue, &evt);
 }
 
 void WifiService::_on_provisioning_event(const ProvisioningEventInfo &info) {
