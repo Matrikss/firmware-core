@@ -52,8 +52,8 @@ static constexpr const char *HISTORY_CHAR_UUID = "d1c0c0a4-6b48-4b2a-9b1d-59f9f2
 // Constants
 // ---------------------------------------------------------------------------
 
-// Apple's recommended slow advertising interval; exact in BLE's 625 us units.
-static constexpr float ADVERTISING_INTERVAL_MS = 1022.5f;
+// Shorter advertising interval to address Android app connection failures.
+static constexpr float ADVERTISING_INTERVAL_MS = 500.0f;
 
 // Advertised name ("AirGradient Go <last4hex>") is computed by the shared
 // compute_ble_adv_name() helper (go_ble.h) into BleService::_adv_name.
