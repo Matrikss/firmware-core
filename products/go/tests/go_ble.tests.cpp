@@ -2367,6 +2367,7 @@ TEST_CASE("BLE: notify_command_result is no-op when not connected") {
 // ---------------------------------------------------------------------------
 
 TEST_CASE("BLE: advertising uses the Go interval before first start and after reconnect") {
+  constexpr uint32_t expected_interval_us = 500000;
   StorageService storage(*null_cache_ptr, *null_nand_ptr);
   MockBleServer server;
   BleService svc(nullptr, storage, server);
@@ -2374,7 +2375,7 @@ TEST_CASE("BLE: advertising uses the Go interval before first start and after re
   REQUIRE(svc.start_advertising());
   CHECK(svc.is_initialized());
   REQUIRE(server.started_intervals_us.size() == 1);
-  CHECK(server.started_intervals_us[0] == 1022500);
+  CHECK(server.started_intervals_us[0] == expected_interval_us);
 
   // Repeated setup must not configure an interval while advertising is active.
   REQUIRE(svc.start_advertising());
@@ -2384,7 +2385,7 @@ TEST_CASE("BLE: advertising uses the Go interval before first start and after re
   BleServiceTestAccess::on_connect(svc, 1);
   BleServiceTestAccess::on_disconnect(svc, 1, 0);
   REQUIRE(server.started_intervals_us.size() == 2);
-  CHECK(server.started_intervals_us[1] == 1022500);
+  CHECK(server.started_intervals_us[1] == expected_interval_us);
   CHECK(server.set_advertising_interval_count == 1);
 
   svc.deinit();
@@ -2392,7 +2393,7 @@ TEST_CASE("BLE: advertising uses the Go interval before first start and after re
   CHECK(server.advertising_interval_us == 0);
   REQUIRE(svc.start_advertising());
   CHECK(server.set_advertising_interval_count == 2);
-  CHECK(server.started_intervals_us.back() == 1022500);
+  CHECK(server.started_intervals_us.back() == expected_interval_us);
 }
 
 TEST_CASE("BLE: interval configuration failure tears down without starting advertising") {
