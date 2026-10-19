@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "rev": "baed767",
+  "rev": "c30bfb9",
   "product": {
     "slug": "airgradient-go",
     "name": "AirGradient Go",
@@ -2724,8 +2724,12 @@
           "expected_result": "The unit returns to Home after cold power."
         },
         {
-          "action": "Reconnect to the same Go in nRF Connect and use Read on the same Config characteristic. Allow 30 seconds from Connect.",
-          "expected_result": "The read succeeds without another passkey, and Home shows the connected BLE icon."
+          "action": "After Home returns, scan in nRF Connect for up to 30 seconds.",
+          "expected_result": "The same AirGradient Go <last4> appears."
+        },
+        {
+          "action": "Connect to the rediscovered Go and read the same Config characteristic within 30 seconds of Connect. Keep the connection open for another 30 seconds.",
+          "expected_result": "The read succeeds without another passkey. The connection stays open and Home shows the connected BLE icon."
         }
       ],
       "cleanup": [
@@ -3953,6 +3957,43 @@
       ],
       "references": [
         "products/go/docs/ui_manager.md"
+      ]
+    },
+    {
+      "id": "go.wifi.power-saving-disabled-access",
+      "title": "mDNS remains stable with Wi-Fi power saving disabled",
+      "objective": "Verify the Go remains reachable by its .local hostname after idle with Wi-Fi Power Saving disabled.",
+      "category": "Stationary Network",
+      "sub_category": "mDNS",
+      "applicability": [
+        "V1"
+      ],
+      "setup": [
+        "Saved Go credentials for a test Wi-Fi network that allows multicast between clients.",
+        "Postman or an equivalent GUI API client on the same network with .local name resolution."
+      ],
+      "steps": [
+        {
+          "action": "Record the operating mode, lock state and Wi-Fi Power Saving selection. Read the serial from Main Menu > Settings > About Device for <serial> below. Unlock if needed.",
+          "expected_result": "Original settings and device serial are recorded."
+        },
+        {
+          "action": "Select Main Menu > Operating Mode > Stationary and Settings > Power Saving > Wi-Fi Power Saving > Disable. Return Home and allow up to 30 seconds for connection.",
+          "expected_result": "Home shows the connected Wi-Fi icon."
+        },
+        {
+          "action": "Send GET http://airgradient_<serial>.local/api/v1/measures using No Auth, no body and a five-second timeout. Repeat after five and ten minutes, leaving Go idle and sending no other local requests between checks.",
+          "expected_result": "All three requests resolve the hostname and return HTTP 200 without touching, reconnecting or restarting Go.",
+          "evidence": [
+            "Record any timeout or resolution failure before retrying."
+          ]
+        }
+      ],
+      "cleanup": [
+        "Restore the recorded Wi-Fi Power Saving selection, operating mode and lock state, including after interruption. Record any restoration failure."
+      ],
+      "references": [
+        "products/go/docs/wifi_service.md"
       ]
     },
     {

@@ -608,6 +608,9 @@ Called when the UI signals a setting was changed. Calls
 propagates runtime changes (GPS posting interval, GPS enabled flag, sensor
 timer rescheduling).
 
+Wi-Fi power saving is applied when changed in Stationary and on Stationary
+entry; see [Wi-Fi Service](wifi_service.md).
+
 ### clear_data()
 
 Stops tracking if active, clears the temporary RTC-backed chart cache,
