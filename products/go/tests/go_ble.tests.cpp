@@ -949,6 +949,49 @@ TEST_CASE("BLE: encode_config clears the retired PM25 EPA flag") {
   CHECK(pm25_correction_flags(buf, len) == 0);
 }
 
+TEST_CASE("BLE: factory PM calibration is reported as custom in config and notifications") {
+  StorageService storage(*null_cache_ptr, *null_nand_ptr);
+  BleService svc(nullptr, storage, default_ble_server);
+  GoSettings settings{};
+  settings.corrections.pm25 = {Pm25CorrectionAlgorithm::FactoryCalibration, 1.25f, -0.5f, false};
+
+  uint8_t buf[512];
+  size_t len = 0;
+  SECTION("full config") {
+    len = BleServiceTestAccess::encode_config(svc, buf, sizeof(buf), settings);
+  }
+  SECTION("config notification") {
+    const GoSettings previous{};
+    len = BleServiceTestAccess::encode_config_delta(svc, buf, sizeof(buf), previous, settings);
+  }
+  REQUIRE(len > 0);
+
+  CborParser parser;
+  CborValue root;
+  REQUIRE(cbor_parser_init(buf, len, 0, &parser, &root) == CborNoError);
+  CborValue correction;
+  REQUIRE(cbor_value_map_find_value(&root, "pm25_corr", &correction) == CborNoError);
+  REQUIRE(cbor_value_is_map(&correction));
+  CborValue array;
+  REQUIRE(cbor_value_map_find_value(&correction, "v", &array) == CborNoError);
+  REQUIRE(cbor_value_is_array(&array));
+  CborValue values;
+  REQUIRE(cbor_value_enter_container(&array, &values) == CborNoError);
+  uint64_t algorithm = 0;
+  REQUIRE(cbor_value_get_uint64(&values, &algorithm) == CborNoError);
+  CHECK(algorithm == 2);
+  REQUIRE(cbor_value_advance(&values) == CborNoError);
+  float scale = 0.0f;
+  REQUIRE(cbor_value_get_float(&values, &scale) == CborNoError);
+  CHECK(scale == 1.25f);
+  REQUIRE(cbor_value_advance(&values) == CborNoError);
+  float intercept = 0.0f;
+  REQUIRE(cbor_value_get_float(&values, &intercept) == CborNoError);
+  CHECK(intercept == -0.5f);
+  CHECK(pm25_correction_flags(buf, len) == 0);
+  CHECK(settings.corrections.pm25.algorithm == Pm25CorrectionAlgorithm::FactoryCalibration);
+}
+
 // ---------------------------------------------------------------------------
 // encode_config_delta (NOTIFY form: "type":"config" + changed fields only)
 // ---------------------------------------------------------------------------
