@@ -41,7 +41,7 @@ TEST_CASE("invalid raw target fields become their invalid sentinels", "[correcti
   MeasuresAGo raw = valid_measures();
   raw.temp_hum_a.temperature = std::numeric_limits<float>::quiet_NaN();
   raw.temp_hum_a.humidity = std::numeric_limits<float>::infinity();
-  raw.pm_a.pm_25 = std::numeric_limits<float>::infinity();
+  raw.pm_a.pm_25 = std::numeric_limits<float>::quiet_NaN();
 
   const MeasuresAGo corrected = apply_measurement_corrections(raw, MeasurementCorrections{});
 
@@ -153,31 +153,38 @@ TEST_CASE("factory PM calibration applies linear correction with field validatio
     CHECK(apply_measurement_corrections(raw, corrections).pm_a.pm_25 == raw.pm_a.pm_25);
   }
   SECTION("invalid raw values remain invalid") {
-    for (float pm25 : {MeasuresInvalid::PM, std::numeric_limits<float>::quiet_NaN(),
-                       std::numeric_limits<float>::infinity()}) {
+    for (float pm25 : {MeasuresInvalid::PM, std::numeric_limits<float>::quiet_NaN()}) {
       raw.pm_a.pm_25 = pm25;
       CHECK(apply_measurement_corrections(raw, corrections).pm_a.pm_25 == MeasuresInvalid::PM);
     }
   }
-  SECTION("overflow produces an invalid result") {
-    corrections.pm25.scaling_factor = std::numeric_limits<float>::max();
-    CHECK(apply_measurement_corrections(raw, corrections).pm_a.pm_25 == MeasuresInvalid::PM);
+  SECTION("positive infinity passes the PM field validator") {
+    raw.pm_a.pm_25 = std::numeric_limits<float>::infinity();
+    CHECK(apply_measurement_corrections(raw, corrections).pm_a.pm_25 ==
+          std::numeric_limits<float>::infinity());
   }
-  SECTION("non-finite coefficients are rejected") {
+  SECTION("overflow is not replaced with an invalid sentinel") {
+    corrections.pm25.scaling_factor = std::numeric_limits<float>::max();
+    CHECK(apply_measurement_corrections(raw, corrections).pm_a.pm_25 ==
+          std::numeric_limits<float>::infinity());
+  }
+  SECTION("coefficient finiteness is not validated") {
     corrections.pm25.scaling_factor = std::numeric_limits<float>::infinity();
-    CHECK_FALSE(are_measurement_corrections_valid(corrections));
+    CHECK(are_measurement_corrections_valid(corrections));
     corrections.pm25.scaling_factor = 1.0f;
     corrections.pm25.intercept = std::numeric_limits<float>::quiet_NaN();
-    CHECK_FALSE(are_measurement_corrections_valid(corrections));
+    CHECK(are_measurement_corrections_valid(corrections));
+    corrections.temperature.scaling_factor = std::numeric_limits<float>::infinity();
+    corrections.humidity.intercept = std::numeric_limits<float>::quiet_NaN();
+    CHECK(are_measurement_corrections_valid(corrections));
   }
 }
 
-TEST_CASE("correction configuration validation rejects invalid enums and coefficients",
-          "[correction][validation]") {
+TEST_CASE("correction configuration validation rejects invalid enums", "[correction][validation]") {
   MeasurementCorrections corrections{};
   REQUIRE(are_measurement_corrections_valid(corrections));
 
-  corrections.pm25.scaling_factor = std::numeric_limits<float>::infinity();
+  corrections.pm25.algorithm = static_cast<Pm25CorrectionAlgorithm>(99);
   REQUIRE_FALSE(are_measurement_corrections_valid(corrections));
 
   corrections = MeasurementCorrections{};
