@@ -70,7 +70,7 @@ bool is_auto_lock_valid(int value) {
 
 bool is_pm25_algorithm_valid(int value) {
   return value >= static_cast<int>(Pm25CorrectionAlgorithm::None) &&
-         value <= static_cast<int>(Pm25CorrectionAlgorithm::CustomViaPm25Raw);
+         value <= static_cast<int>(Pm25CorrectionAlgorithm::FactoryCalibration);
 }
 
 bool is_linear_algorithm_valid(int value) {
@@ -91,7 +91,8 @@ MeasurementCorrections load_measurement_corrections(ConfigStore &store) {
     const auto pm_algorithm = static_cast<Pm25CorrectionAlgorithm>(algorithm);
     if (pm_algorithm == Pm25CorrectionAlgorithm::Epa2021) {
       corrections.pm25.algorithm = pm_algorithm;
-    } else if (pm_algorithm == Pm25CorrectionAlgorithm::CustomViaPm25Raw) {
+    } else if (pm_algorithm == Pm25CorrectionAlgorithm::CustomViaPm25Raw ||
+               pm_algorithm == Pm25CorrectionAlgorithm::FactoryCalibration) {
       float scaling_factor = 0.0f;
       float intercept = 0.0f;
       if (load_finite_float(store, KEY_PM25_CORRECTION_SCALING_FACTOR, scaling_factor) &&

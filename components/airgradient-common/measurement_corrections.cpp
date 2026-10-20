@@ -32,6 +32,7 @@ bool is_pm25_algorithm_valid(Pm25CorrectionAlgorithm algorithm) {
   case Pm25CorrectionAlgorithm::None:
   case Pm25CorrectionAlgorithm::Epa2021:
   case Pm25CorrectionAlgorithm::CustomViaPm25Raw:
+  case Pm25CorrectionAlgorithm::FactoryCalibration:
     return true;
   }
   return false;
@@ -176,7 +177,8 @@ MeasuresAGo apply_measurement_corrections(const MeasuresAGo &raw,
     if (is_raw_humidity_valid(raw.temp_hum_a)) {
       corrected_pm25 = epa_2021_pm25(raw.pm_a.pm_25, raw.temp_hum_a.humidity);
     }
-  } else if (pm25.algorithm == Pm25CorrectionAlgorithm::CustomViaPm25Raw) {
+  } else if (pm25.algorithm == Pm25CorrectionAlgorithm::CustomViaPm25Raw ||
+             pm25.algorithm == Pm25CorrectionAlgorithm::FactoryCalibration) {
     float linear_pm25 = 0.0f;
     if (raw.pm_a.pm_25 != 0.0f) {
       linear_pm25 = pm25.scaling_factor * raw.pm_a.pm_25 + pm25.intercept;

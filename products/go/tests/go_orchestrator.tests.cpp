@@ -5253,6 +5253,9 @@ TEST_CASE("dispatch: routes SensorDataReady to on_sensor_data", "[Orchestrator][
 
 TEST_CASE("dispatch: cloud applies shared config fields and ignores policy fields",
           "[Orchestrator][dispatch][config][correction]") {
+  auto pm_algorithm = Pm25CorrectionAlgorithm::CustomViaPm25Raw;
+  SECTION("custom PM") {}
+  SECTION("factory PM") { pm_algorithm = Pm25CorrectionAlgorithm::FactoryCalibration; }
   TestFixture f;
   auto orch = f.make_orchestrator();
 
@@ -5296,7 +5299,7 @@ TEST_CASE("dispatch: cloud applies shared config fields and ignores policy field
   evt.fetch_config.update.back_led_brightness = LedBrightness::Mid;
   evt.fetch_config.update.touch_led_intensity = TouchLedIntensity::Bright;
   evt.fetch_config.update.buzzer_enabled = true;
-  evt.fetch_config.update.corrections.pm25.algorithm = Pm25CorrectionAlgorithm::CustomViaPm25Raw;
+  evt.fetch_config.update.corrections.pm25.algorithm = pm_algorithm;
   evt.fetch_config.update.corrections.pm25.scaling_factor = 2.0f;
   evt.fetch_config.update.corrections.pm25.intercept = 1.0f;
   evt.fetch_config.update.corrections.temperature.algorithm = LinearCorrectionAlgorithm::Custom;
@@ -5308,8 +5311,7 @@ TEST_CASE("dispatch: cloud applies shared config fields and ignores policy field
 
   A::dispatch(orch, evt);
 
-  REQUIRE(A::settings(orch).corrections.pm25.algorithm ==
-          Pm25CorrectionAlgorithm::CustomViaPm25Raw);
+  REQUIRE(A::settings(orch).corrections.pm25.algorithm == pm_algorithm);
   CHECK(A::settings(orch).pm_use_usaqi);
   CHECK(A::settings(orch).use_fahrenheit);
   CHECK_FALSE(A::settings(orch).disable_cloud);
@@ -5558,6 +5560,9 @@ TEST_CASE("dispatch: an in-flight cloud result is rejected after control becomes
 
 TEST_CASE("dispatch: cloud commit failure retains settings corrected view and runtime gates",
           "[Orchestrator][dispatch][cloud][failure]") {
+  auto pm_algorithm = Pm25CorrectionAlgorithm::CustomViaPm25Raw;
+  SECTION("custom PM") {}
+  SECTION("factory PM") { pm_algorithm = Pm25CorrectionAlgorithm::FactoryCalibration; }
   TestFixture f;
   auto orch = f.make_orchestrator();
 
@@ -5576,7 +5581,7 @@ TEST_CASE("dispatch: cloud commit failure retains settings corrected view and ru
   evt.type = EventType::FetchConfigResult;
   evt.fetch_config.result = static_cast<CloudResultByte>(AgClientResult::Ok);
   evt.fetch_config.update.update_mask = static_cast<uint32_t>(GoConfigField::Pm25Correction);
-  evt.fetch_config.update.corrections.pm25.algorithm = Pm25CorrectionAlgorithm::CustomViaPm25Raw;
+  evt.fetch_config.update.corrections.pm25.algorithm = pm_algorithm;
   evt.fetch_config.update.corrections.pm25.scaling_factor = 2.0f;
   evt.fetch_config.update.corrections.pm25.intercept = 1.0f;
 
