@@ -930,10 +930,6 @@ void Orchestrator::handle_serial_command(const SerialCommandRequest &request) {
   case SerialCommandKind::SetPmSlr: {
     GoSettings candidate = _settings;
     candidate.corrections.pm25 = request.pm25_correction;
-    candidate.corrections.pm25.use_epa2021 =
-        _settings.corrections.pm25.algorithm == Pm25CorrectionAlgorithm::CustomViaPm25Raw
-            ? _settings.corrections.pm25.use_epa2021
-            : false;
     if (!is_go_settings_valid(candidate)) {
       result.kind = SerialCommandResultKind::InvalidArgument;
     } else if (activate_settings_candidate(candidate)) {
@@ -968,7 +964,8 @@ void Orchestrator::handle_serial_command(const SerialCommandRequest &request) {
   }
 
   case SerialCommandKind::GetPmSlr:
-    if (_settings.corrections.pm25.algorithm == Pm25CorrectionAlgorithm::CustomViaPm25Raw) {
+    if (_settings.corrections.pm25.algorithm == Pm25CorrectionAlgorithm::CustomViaPm25Raw ||
+        _settings.corrections.pm25.algorithm == Pm25CorrectionAlgorithm::FactoryCalibration) {
       result.kind = SerialCommandResultKind::SlrPm;
       result.pm25_correction = _settings.corrections.pm25;
     } else {

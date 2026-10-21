@@ -118,6 +118,7 @@ uint64_t pm25_correction_algorithm_to_wire(Pm25CorrectionAlgorithm algorithm) {
   case Pm25CorrectionAlgorithm::Epa2021:
     return 1;
   case Pm25CorrectionAlgorithm::CustomViaPm25Raw:
+  case Pm25CorrectionAlgorithm::FactoryCalibration:
     return 2;
   }
   return 0;

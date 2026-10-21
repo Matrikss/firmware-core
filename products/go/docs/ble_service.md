@@ -432,6 +432,10 @@ requires finite coefficients but does not enforce identity values for `none`;
 nonidentity values are ignored by correction math, remain visible until
 persisted settings are reloaded, and are canonicalized on reload.
 
+Factory PM calibration is exposed as `custom_via_pm25_raw` (ID `2`) in reads
+and notifications, with unchanged coefficients and clear flags. Schema version
+1 has no writable factory algorithm; writing that PM group back selects custom.
+
 | Algorithm | PM2.5 | Temperature / Humidity |
 |---|---|---|
 | `none` | Yes | Yes |
