@@ -162,6 +162,19 @@ The single `measure_interval_seconds` (always ≥ 1) determines the sleep
 duration directly. `awake_ms` is subtracted so the total cycle (awake +
 sleep) matches the configured interval.
 
+## GPS Sleep and System Reset
+
+GPS sleep is independent of ESP sleep. The app sends `CFG-SLEEP` only when GPS
+is inactive; active GPS remains running during Offline deep sleep. Intervals,
+UART behavior, and the wait/reset decision are documented in
+[GPS Service](gps_service.md#sleep-policy).
+
+`PowerService::request_system_power_reset()` forwards to the optional BMS
+operation. On Go, BQ reset cycles the system, including GPS, on battery power.
+The tracking-start path rechecks BMS status and avoids this reset with external
+input or unknown status. OTG is battery output, not USB input. A successful
+request means the command was accepted, not that a reset occurred.
+
 ## Sleep Entry
 
 `enter_sleep(sleep_duration_ms)` — only called when `decide_sleep()` returns `Deep`:
@@ -438,6 +451,10 @@ wake and selects `ChargingOnly` even if the input cannot be confirmed. Otherwise
 a true detection result selects `ChargingOnly` before the other boot rules;
 see [Hardware Init](hardware_init.md#boot-path-selection) for retry behavior.
 
+A pending Offline tracking start can override a non-charging-only `PowerOn`
+selection after its new session is created. See
+[tracking recovery](hardware_init.md#boot-path-selection).
+
 ### Fast-path (timer wake, locked)
 
 `is_fast_path_wake(cause, state)` returns `true` when:
@@ -519,8 +536,11 @@ Their defaults are Portable, Idle, Locked, Idle, and zero respectively.
 `tracking_timing` adds four `uint32_t` second-based fields for the original
 session start, accumulated recording duration, current recording-segment start,
 and last accepted-record time. All default to `TRACKING_TIME_INVALID_S`; zero is
-a valid clock value. The timing block occupies 16 bytes, making the complete
-structure 28 bytes, enforced by a size assertion in host and firmware builds.
+a valid clock value. `gps_wake_deadline_ms` is a `uint64_t` absolute deadline on
+the retained monotonic clock; zero means no sleep is scheduled. It survives ESP
+deep sleep, while baud is inferred from app state and checked on connection.
+The complete structure occupies 40 bytes, including alignment, enforced by a
+size assertion in host and firmware builds.
 
 The saved `tracking_state` enum and `tracking_session_id` preserve Recording or
 Paused across deep sleep. A Recording wake reopens the route for append; a
@@ -572,7 +592,7 @@ sensors.
 
 | Region | Size | Location |
 |---|---|---|
-| `RtcAppState` + valid flag | 28 B + 1 B, excluding linker alignment | `go_power.cpp` |
+| `RtcAppState` + valid flag | 40 B + 1 B, excluding linker alignment | `go_power.cpp` |
 | `PayloadCacheStorageData` | ~1.5 KB | `rtc_payload_cache_storage.cpp` |
 | `RtcDisplaySnapshot` + valid flag | ~45 B | `go_display.cpp` |
 | **Total** | **~1.6 KB** | ESP32-C5: 8 KB available |

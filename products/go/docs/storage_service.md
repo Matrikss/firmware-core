@@ -267,7 +267,7 @@ it retries up to `SESSION_ID_MAX_RETRIES` (5) times before giving up.
 At ~1000 stored sessions across the 90,000-slot space the
 all-five-collide probability is on the order of `(1000/90000)^5 ≈ 1.7×10⁻¹⁰`,
 so retry exhaustion is effectively never observed. When it does happen,
-`generate_session_id()` returns 0 and `start_tracking()` treats that as a
+`generate_tracking_session_id()` returns 0 and `start_tracking()` treats that as a
 storage error — the user sees the standard `"Storage error — can't track"`
 snackbar.
 

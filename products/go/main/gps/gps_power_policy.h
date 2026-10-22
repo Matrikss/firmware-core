@@ -7,7 +7,7 @@ inline constexpr uint32_t GPS_IDLE_SLEEP_MS = 30000;
 // Longest U4 duration, not an undocumented infinite-sleep sentinel.
 inline constexpr uint32_t GPS_ALWAYS_OFF_SLEEP_MS = UINT32_MAX;
 // Provisional until reset-to-GPS-ready time is measured on the bench.
-inline constexpr uint32_t GPS_RESET_THRESHOLD_MS = 5000;
+inline constexpr uint32_t GPS_RESET_THRESHOLD_MS = 30000;
 inline constexpr uint32_t GPS_RESET_CONFIRM_MS = 1000;
 
 inline uint32_t gps_inactive_sleep_ms(GpsMode gps_mode, OperatingMode mode, uint32_t next_wake_ms) {
