@@ -12,6 +12,8 @@
 
 #include "go_app.h"
 
+#include <cstdio>
+
 #include "ag_log.h"
 #include "common.h"
 #include "led/go_led_types.h"
@@ -207,14 +209,18 @@ void GoApp::run() {
           state.has_flag(RtcAppFlag::SensorsWarm));
 
   BootPath path = select_boot_path(cause, state, charging_only_eligible);
+  const char *boot_message = nullptr;
 
   // Check if its system reset from pending tracking flow
   if (path != BootPath::ChargingOnly && cause == WakeCause::PowerOn &&
       pending_tracking_start(_board.config_store())) {
     const GoSettings settings = _board.load_settings();
-    if (settings.operating_mode == OperatingMode::Offline &&
-        recover_offline_tracking_start(settings, state)) {
-      path = BootPath::FastPath;
+    if (settings.operating_mode == OperatingMode::Offline) {
+      if (recover_offline_tracking_start(settings, state)) {
+        path = BootPath::FastPath;
+      } else {
+        boot_message = "Tracking not\nstarted";
+      }
     }
   }
 
@@ -230,7 +236,7 @@ void GoApp::run() {
     break; // never reached
   case BootPath::Interactive:
     AG_LOGI(TAG, "Serial number: %s", _board.serial_number().c_str());
-    run_interactive(cause, state, {});
+    run_interactive(cause, state, {}, boot_message);
     break; // never reached
   }
 }
@@ -268,6 +274,18 @@ bool GoApp::recover_offline_tracking_start(const GoSettings &settings, RtcAppSta
     state.tracking_timing = {};
   }
   AG_LOGI(TAG, "Tracking recovery: starting Offline fast path");
+
+  char message[48];
+  (void)snprintf(message, sizeof(message), "Started\n%05lu",
+                 static_cast<unsigned long>(session_id));
+  DisplayValues values = build_boot_splash_values();
+  values.info_text = message;
+  values.tracking_state = TrackingState::Recording;
+  DisplayService &display = _board.display();
+  display.init(values);
+  // Leave the confirmation visible during warmup. The fast path initializes
+  // its own display worker when the first measurement is ready.
+  display.stop();
   return true;
 }
 
@@ -912,7 +930,9 @@ void GoApp::run_button_wake_path(const RtcAppState &state) {
 // run_interactive — unified interactive entry
 // ===========================================================================
 
-void GoApp::run_interactive(WakeCause cause, RtcAppState boot_state, BootHandoff handoff) {
+void GoApp::run_interactive(WakeCause cause, RtcAppState boot_state, BootHandoff handoff,
+                            const char *boot_message) {
+  const char *splash_text = boot_message != nullptr ? boot_message : BOOT_SPLASH_TEXT;
   // --- Early display paint ---
   // Start the e-paper refresh before the slower I2C, BMS, sensor, and NAND
   // initialization. The display worker owns SPI while it refreshes; NAND
@@ -927,6 +947,7 @@ void GoApp::run_interactive(WakeCause cause, RtcAppState boot_state, BootHandoff
       initial_values = build_wake_values(*handoff.display_snapshot, true);
     } else {
       initial_values = build_boot_splash_values();
+      initial_values.info_text = splash_text;
       boot_splash_requested = true;
     }
 
@@ -1052,7 +1073,7 @@ void GoApp::run_interactive(WakeCause cause, RtcAppState boot_state, BootHandoff
   // Seed UI state after the early splash paint. Orchestrator opens the guide
   // during init for fresh devices; onboarded devices wait for a measurement.
   if (boot_splash_requested) {
-    ui_manager->show_info(BOOT_SPLASH_TEXT);
+    ui_manager->show_info(splash_text);
   }
 
   // --- OtaService (borrows the shared server + PowerService; owns the writer) ---

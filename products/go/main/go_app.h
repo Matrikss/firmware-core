@@ -21,7 +21,8 @@ private:
   void run_charging_only(const BmsStatus &initial_status);
   void run_fast_path(const RtcAppState &state);
   void run_button_wake_path(const RtcAppState &state);
-  void run_interactive(WakeCause cause, RtcAppState boot_state, BootHandoff handoff);
+  void run_interactive(WakeCause cause, RtcAppState boot_state, BootHandoff handoff,
+                       const char *boot_message = nullptr);
 
   /// Dedicated factory fuel-gauge learning path. Entered from run() before
   /// select_boot_path() when a learning run is armed/resumed. Brings up the

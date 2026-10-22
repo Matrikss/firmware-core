@@ -1616,6 +1616,9 @@ bool Orchestrator::start_tracking() {
         (status.power_source == BmsPowerSource::None ||
          status.power_source == BmsPowerSource::OtgMode)) {
       if (save_pending_tracking_start(_config_store, true)) {
+        _svc.ui_manager.show_snackbar("Starting tracking...");
+        update_display(/*wait=*/true);
+        _svc.display_service.flush();
         AG_LOGI(TAG, "GPS wake in %lu ms: requesting battery-powered tracking restart",
                 static_cast<unsigned long>(gps_wait_ms));
         if (_svc.power_service.request_system_power_reset()) {

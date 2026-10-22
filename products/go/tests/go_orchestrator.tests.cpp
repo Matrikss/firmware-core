@@ -10836,6 +10836,11 @@ TEST_CASE("GPS sleep: battery reset persists only intent before creating a route
   f.stub_bms.on_reset = [&] {
     CHECK(pending);
     CHECK(committed);
+    const auto values = f.ui_manager.build_values(A::build_context(orch));
+    REQUIRE(values.snackbar_text != nullptr);
+    CHECK(std::string(values.snackbar_text) == "Starting tracking...");
+    CHECK(DisplayService::spy_last_update_wait);
+    CHECK(DisplayService::spy_flush_count == 1);
     CHECK_FALSE(test_spy::route_started);
     CHECK_FALSE(test_spy::cache_backed_up);
     CHECK_FALSE(A::tracking_active(orch));
