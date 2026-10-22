@@ -55,6 +55,10 @@ bool is_go_settings_valid(const GoSettings &settings);
 bool save_go_settings(ConfigStore &store, const GoSettings &settings);
 void print_settings(const GoSettings &settings);
 
+// One-shot intent only: no session or point exists before the BQ reset.
+bool pending_tracking_start(ConfigStore &store);
+bool save_pending_tracking_start(ConfigStore &store, bool pending);
+
 // ---------------------------------------------------------------------------
 // Factory fuel-gauge learning state (production-level, separate from user
 // GoSettings). Stored under distinct keys in the existing "go" namespace and

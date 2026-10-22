@@ -125,6 +125,7 @@ private:
   uint32_t _last_bms_status_poll_ms = 0;
   uint32_t _last_ext_wdt_ms = 0;
   uint32_t _last_input_ms = 0;                ///< Inactivity baseline: input or explicit UI exit
+  bool _shutting_down = false;
   uint32_t _snackbar_refresh_deadline_ms = 0; ///< 0 = inactive; non-zero = absolute deadline
   bool _first_measurement_done = false;
   bool _tracking_status_was_visible = false; ///< Detect Status exit once; not RTC-persisted
@@ -293,7 +294,7 @@ private:
   void unlock();
   /// Begin a new tracking session. Returns false on session-id exhaustion
   /// or storage-open failure; the snackbar + BLE notify fire inline first.
-  bool start_tracking();
+  bool start_tracking(bool from_boot = false);
   bool pause_tracking();
   bool resume_tracking();
   void stop_tracking();

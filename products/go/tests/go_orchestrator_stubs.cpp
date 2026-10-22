@@ -61,9 +61,16 @@ int last_nox_learning_offset = 0;
 
 // --- GpsService ---
 bool gps_started = false;
+uint32_t gps_start_count = 0;
+uint32_t gps_sleeping_start_count = 0;
 bool gps_stopped = false;
-bool gps_stop_and_idle_called = false;
-bool gps_idle_called = false;
+bool gps_sleep_requested = false;
+bool gps_sleeping_started = false;
+uint32_t gps_sleep_interval_ms = 0;
+uint32_t gps_sleep_request_count = 0;
+uint32_t gps_remaining_ms = 0;
+uint32_t gps_sleep_duration_ms = 0;
+bool gps_sleep_ok = true;
 int gps_posting_interval_ms = 0;
 bool gps_aiding_set = false;
 GpsAidingData gps_aiding_data{};
@@ -284,9 +291,16 @@ void reset() {
   self_test_requested = false;
 
   gps_started = false;
+  gps_start_count = 0;
+  gps_sleeping_start_count = 0;
   gps_stopped = false;
-  gps_stop_and_idle_called = false;
-  gps_idle_called = false;
+  gps_sleep_requested = false;
+  gps_sleeping_started = false;
+  gps_sleep_interval_ms = 0;
+  gps_sleep_request_count = 0;
+  gps_remaining_ms = 0;
+  gps_sleep_duration_ms = 0;
+  gps_sleep_ok = true;
   gps_posting_interval_ms = 0;
   gps_aiding_set = false;
   gps_aiding_data = GpsAidingData{};
@@ -525,13 +539,22 @@ void SensorProducer::request_tvoc_nox_learning_offsets(int tvoc_learning_offset,
 // ============================================================================
 
 GpsService::GpsService(GpsDriver &driver, RtosQueueHandle event_queue, const Config &config)
-    : _driver(driver), _event_queue(event_queue), _config(config) {}
+    : _driver(driver), _event_queue(event_queue), _config(config), _baud_rate(config.expected_baud),
+      _wake_deadline_ms(config.wake_deadline_ms) {}
 
 GpsService::~GpsService() = default;
 
 bool GpsService::start() {
   test_spy::gps_started = true;
+  ++test_spy::gps_start_count;
   return true;
+}
+
+bool GpsService::start_sleeping(uint32_t interval_ms) {
+  test_spy::gps_sleeping_started = true;
+  ++test_spy::gps_sleeping_start_count;
+  test_spy::gps_sleep_interval_ms = interval_ms;
+  return interval_ms != 0;
 }
 
 void GpsService::stop() {
@@ -539,9 +562,19 @@ void GpsService::stop() {
   _driver.end();
 }
 
-void GpsService::stop_and_idle_gnss() { test_spy::gps_stop_and_idle_called = true; }
-
-void GpsService::idle_gnss() { test_spy::gps_idle_called = true; }
+bool GpsService::request_sleep(uint32_t duration_ms) {
+  test_spy::gps_sleep_requested = true;
+  ++test_spy::gps_sleep_request_count;
+  test_spy::gps_sleep_duration_ms = duration_ms;
+  if (duration_ms == 0 || test_spy::gps_remaining_ms != 0 || !test_spy::gps_sleep_ok) {
+    return false;
+  }
+  test_spy::gps_remaining_ms = duration_ms;
+  _wake_deadline_ms = RTOS::get_retained_time_ms() + duration_ms;
+  return true;
+}
+uint32_t GpsService::sleep_remaining_ms() const { return test_spy::gps_remaining_ms; }
+uint64_t GpsService::sleep_deadline_ms() const { return _wake_deadline_ms; }
 
 GpsData GpsService::get_latest_fix() const { return GpsData{}; }
 
@@ -555,7 +588,7 @@ void GpsService::set_aiding_data(const GpsAidingData &data) {
 }
 
 GpsData gps_read_once(GpsDriver & /*driver*/, int /*baud_rate*/, uint32_t /*timeout_ms*/,
-                      const volatile bool & /*abort*/) {
+                      const volatile bool & /*abort*/, uint64_t /*wake_deadline_ms*/) {
   return GpsData{};
 }
 
@@ -714,11 +747,12 @@ bool PowerService::poll_charging_status(BmsChargingState &state) {
 }
 
 bool PowerService::poll_status(BmsStatus &status) {
-  status = test_spy::snapshot_to_return.charger_status;
-  if (status.charging_state == BmsChargingState::Unknown) {
-    status.charging_state = test_spy::snapshot_to_return.charging_status;
-  }
-  return true;
+  status = BmsStatus{};
+  return _bms != nullptr && _bms->read_status(status);
+}
+
+bool PowerService::request_system_power_reset() {
+  return _bms != nullptr && _bms->request_system_power_reset();
 }
 
 bool PowerService::rekick_pmid_if_collapsed(const BmsTelemetry & /*t*/, BmsPowerSource /*src*/) {

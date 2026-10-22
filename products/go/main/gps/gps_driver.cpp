@@ -341,6 +341,22 @@ bool GpsDriver::open_uart(int baud_rate) {
 
 bool GpsDriver::begin_hot_resume(int baud_rate) { return open_uart(baud_rate); }
 
+int GpsDriver::connect(int expected_baud) {
+  if (expected_baud != MODULE_DEFAULT_BAUD && expected_baud != MODULE_ACTIVE_BAUD) {
+    return 0;
+  }
+  const int alternate =
+      expected_baud == MODULE_DEFAULT_BAUD ? MODULE_ACTIVE_BAUD : MODULE_DEFAULT_BAUD;
+  const int bauds[] = {expected_baud, alternate};
+  for (const int baud : bauds) {
+    if (open_uart(baud) && _poll_mon_ver()) {
+      return baud;
+    }
+    end();
+  }
+  return 0;
+}
+
 void GpsDriver::end() { _serial.end(); }
 
 bool GpsDriver::read() {
@@ -640,17 +656,18 @@ void GpsDriver::_send_aid_time(int64_t epoch_s, uint32_t time_acc_ms) {
   send_casic_packet(_serial, 0x0B, 0x11, payload, sizeof(payload));
 }
 
-void GpsDriver::_poll_mon_ver() {
+bool GpsDriver::_poll_mon_ver() {
   // Poll MON-VER and log the module's software/hardware version strings.
-  // Purely diagnostic — a timeout does not affect normal operation.
   drain_serial_rx(_serial);
   uint8_t unused = 0;
-  send_casic_packet(_serial, CASIC_GROUP_MON, CASIC_SUB_VER, &unused, 0);
+  if (!send_casic_packet(_serial, CASIC_GROUP_MON, CASIC_SUB_VER, &unused, 0)) {
+    return false;
+  }
 
   uint8_t payload[MON_VER_PAYLOAD_LEN];
   if (!wait_for_casic_poll_response(_serial, CASIC_GROUP_MON, CASIC_SUB_VER, MON_VER_PAYLOAD_LEN,
                                     payload, "mon_ver")) {
-    return;
+    return false;
   }
 
   // Extract version strings — null-terminate in case the module pads
@@ -662,6 +679,7 @@ void GpsDriver::_poll_mon_ver() {
   sw_ver[MON_VER_STRING_LEN] = '\0';
   hw_ver[MON_VER_STRING_LEN] = '\0';
   AG_LOGI(TAG, "module: sw=%s hw=%s", sw_ver, hw_ver);
+  return true;
 }
 
 void GpsDriver::_send_cfg_ephsave() {

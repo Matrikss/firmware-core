@@ -21,7 +21,7 @@ private:
   void run_charging_only(const BmsStatus &initial_status);
   void run_fast_path(const RtcAppState &state);
   void run_button_wake_path(const RtcAppState &state);
-  void run_interactive(WakeCause cause, BootHandoff handoff);
+  void run_interactive(WakeCause cause, RtcAppState boot_state, BootHandoff handoff);
 
   /// Dedicated factory fuel-gauge learning path. Entered from run() before
   /// select_boot_path() when a learning run is armed/resumed. Brings up the
@@ -30,6 +30,7 @@ private:
 
   /// Try BMS initialization twice to recover transient communication failures.
   bool init_bms_with_retry();
+  void prepare_gps_for_sleep(uint32_t duration_ms, RtcAppState &state);
 
   // --- Testable fast-path core ---
 

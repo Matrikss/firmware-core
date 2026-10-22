@@ -57,6 +57,11 @@ public:
   /// Call end() before changing baud. Use MODULE_DEFAULT_BAUD after timed wake.
   [[nodiscard]] bool open_uart(int baud_rate);
 
+  /// Poll at the expected baud, then try the other supported baud if silent.
+  /// Returns the responding baud, or zero if neither responds. Leaves UART open
+  /// on success. Does not change receiver configuration or baud.
+  int connect(int expected_baud);
+
   /// Send the 115200 command over the currently open UART, drain TX, allow
   /// processing, then reopen the host UART at MODULE_ACTIVE_BAUD. Requires an
   /// awake receiver. No configuration polls or GNSS start command are sent.
@@ -144,7 +149,7 @@ private:
   void _send_aid_time(int64_t epoch_s, uint32_t time_acc_ms);
 
   /// Poll MON-VER (0x0A 0x04) and log the module software/hardware version.
-  void _poll_mon_ver();
+  bool _poll_mon_ver();
 
   /// Send CFG-EPHSAVE (0x06 0x10) to enable ephemeris persistence.
   void _send_cfg_ephsave();
