@@ -292,10 +292,13 @@ esp_err_t BQ25629::init(const BQ25629_Config &config) {
     }
   }
 
-  // Ensure BATFET_DLY = 0 (25 ms fast disconnect) for deterministic ship-mode timing.
-  ret = modify_register(BQ25629_REG::CHARGER_CONTROL_2, BIT_MASK::BATFET_DLY, 0);
+  // Keep the 25 ms BATFET delay and restore the normal adapter-present policy.
+  // A system power reset explicitly enables BATFET control with VBUS present;
+  // do not leave that override armed for later ship-mode or QON operations.
+  ret = modify_register(BQ25629_REG::CHARGER_CONTROL_2,
+                        BIT_MASK::BATFET_DLY | BIT_MASK::BATFET_CTRL_WVBUS, 0);
   if (ret != ESP_OK) {
-    ESP_LOGE(TAG, "Failed to clear BATFET_DLY");
+    ESP_LOGE(TAG, "Failed to restore BATFET control policy");
     return ret;
   }
 
@@ -978,15 +981,21 @@ esp_err_t BQ25629::enter_shutdown_mode() {
 }
 
 esp_err_t BQ25629::system_power_reset() {
+  if (!initialized_) {
+    return ESP_ERR_INVALID_STATE;
+  }
   ESP_LOGI(TAG, "Initiating system power reset");
 
-  // Set BATFET_CTRL = 11 (system reset) in REG0x18
-  // System reset: BATFET cycles off then on, restarting the system
-  esp_err_t ret = modify_register(BQ25629_REG::CHARGER_CONTROL_2, BIT_MASK::BATFET_CTRL_MASK,
-                                  BIT_MASK::BATFET_CTRL_RESET);
+  // Set the VBUS override, clear the long delay, and trigger reset in one
+  // read-modify-write. Preserve unrelated bits, including the PMID controls.
+  // The chip exits OTG automatically as part of system reset.
+  constexpr uint8_t reset_mask =
+      BIT_MASK::BATFET_CTRL_WVBUS | BIT_MASK::BATFET_DLY | BIT_MASK::BATFET_CTRL_MASK;
+  constexpr uint8_t reset_value = BIT_MASK::BATFET_CTRL_WVBUS | BIT_MASK::BATFET_CTRL_RESET;
+  const esp_err_t ret = modify_register(BQ25629_REG::CHARGER_CONTROL_2, reset_mask, reset_value);
 
   if (ret == ESP_OK) {
-    ESP_LOGI(TAG, "System reset command sent. System will restart after ~10ms");
+    ESP_LOGI(TAG, "System reset requested: 25 ms delay, then BATFET reset interval");
   } else {
     ESP_LOGE(TAG, "Failed to initiate system reset: %s", esp_err_to_name(ret));
   }
