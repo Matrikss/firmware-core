@@ -80,7 +80,7 @@ discovered from product directories containing a `CMakeLists.txt` file.
 | Unknown or unclassified files | All products | Run |
 
 [`firmware-build.yml`](.github/workflows/firmware-build.yml) builds the selected
-products with ESP-IDF v5.5.4. The workflow caches managed components using the
+products with ESP-IDF v5.5.6. The workflow caches managed components using the
 dependency lockfiles and manifests, but does not cache build directories or
 upload firmware binaries. [`host-tests.yml`](.github/workflows/host-tests.yml)
 uses the same ESP-IDF version and managed-component cache.
