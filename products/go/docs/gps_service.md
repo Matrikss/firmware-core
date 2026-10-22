@@ -117,7 +117,7 @@ path. USB serial connectivity alone does not mean external power is present.
 
 Before reset, the app commits only the `trk_start` intent flag and fully paints
 “Starting tracking...”. No route exists yet. After reboot, it clears the flag,
-creates the session, shows “Tracking started” with its ID, and enters the cold
+creates the session, shows “Started” with its ID, and enters the cold
 Offline fast path. Recovery failure enters interactive boot with “Tracking not
 started”. Confirmation means the session exists, not that GPS has a position.
 See [Tracking Lifecycle](orchestrator.md#tracking-lifecycle) and

@@ -71,8 +71,8 @@ polling loop.
 
 After selection, a non-charging-only `PowerOn` with pending `trk_start` and
 Offline settings attempts tracking recovery. GoApp clears the NVS flag, creates
-and closes a new route, initializes Recording state, then shows “Tracking
-started” with the session ID before entering the cold fast path. Failure falls
+and closes a new route, initializes Recording state, then shows “Started”
+with the session ID before entering the cold fast path. Failure falls
 back to interactive boot with “Tracking not started” as the splash. The fast
 path still permits button promotion; recovery does not rerun the reset decision.
 

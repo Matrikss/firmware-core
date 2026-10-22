@@ -89,10 +89,10 @@ struct RtcAppState {
   uint32_t flags = static_cast<uint32_t>(RtcAppFlag::GpsEnabled);
   TrackingTiming tracking_timing{};
   // 5-digit session ID; 0 = no active session
-  uint32_t tracking_session_id = 0; 
+  uint32_t tracking_session_id = 0;
 
   // Expected GPS wake on retained clock; zero if no sleep is scheduled.
-  uint64_t gps_wake_deadline_ms = 0; 
+  uint64_t gps_wake_deadline_ms = 0;
 
   constexpr bool has_flag(RtcAppFlag flag) const {
     return (flags & static_cast<uint32_t>(flag)) != 0;
