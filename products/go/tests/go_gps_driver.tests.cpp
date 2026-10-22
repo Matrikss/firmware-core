@@ -8,6 +8,7 @@
  */
 
 #include <catch2/catch_approx.hpp>
+#include <catch2/generators/catch_generators.hpp>
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstring>
@@ -1487,4 +1488,285 @@ TEST_CASE("StubSerial auto-poll builds valid CASIC checksum", "[gps][driver][pol
   }
   REQUIRE(response[10] == ck1);
   REQUIRE(response[11] == ck2);
+}
+
+// Exercise the transport lifecycle without making a sleep ACK assumption.
+class SleepSerial : public StubSerial {
+public:
+  std::vector<int> opened_bauds;
+  std::vector<std::string> operations;
+  bool open_result = true;
+  size_t fail_open_number = 0;
+  bool tx_done_result = true;
+  int write_limit = -1;
+  uint32_t tx_timeout_ms = 0;
+
+  bool begin(int baud) override {
+    opened_bauds.push_back(baud);
+    operations.push_back("open");
+    return open_result && opened_bauds.size() != fail_open_number;
+  }
+  void end() override { operations.push_back("close"); }
+  int write(const uint8_t *data, int len) override {
+    operations.push_back("write");
+    return StubSerial::write(data, write_limit < 0 ? len : write_limit);
+  }
+  bool wait_tx_done(uint32_t timeout_ms) override {
+    operations.push_back("drain");
+    tx_timeout_ms = timeout_ms;
+    return tx_done_result;
+  }
+};
+
+TEST_CASE("GPS sleep matches the published five-second CFG-SLEEP frame", "[gps][driver][sleep]") {
+  SleepSerial serial;
+  GpsDriver gps(serial);
+  REQUIRE(gps.open_uart(GpsDriver::MODULE_DEFAULT_BAUD));
+  REQUIRE(gps.request_sleep(5000));
+  gps.end();
+
+  const std::vector<uint8_t> expected = {
+      0xF1, 0xD9, 0x06, 0x41, 0x05, 0x00, 0x88, 0x13, 0x00, 0x00, 0x01, 0xE8, 0x56,
+  };
+  REQUIRE(serial.get_tx_bytes() == expected);
+  REQUIRE(serial.operations == std::vector<std::string>{"open", "write", "drain", "close"});
+  REQUIRE(serial.tx_timeout_ms == 100);
+}
+
+TEST_CASE("GPS sleep encodes all four duration bytes", "[gps][driver][sleep]") {
+  const uint32_t duration_ms = GENERATE(1u, 60000u, 300000u, 0x01020304u, UINT32_MAX);
+  SleepSerial serial;
+  GpsDriver gps(serial);
+  REQUIRE(gps.open_uart(GpsDriver::MODULE_DEFAULT_BAUD));
+  REQUIRE(gps.request_sleep(duration_ms));
+
+  const auto &tx = serial.get_tx_bytes();
+  REQUIRE(tx.size() == 13);
+  const uint32_t encoded = static_cast<uint32_t>(tx[6]) | (static_cast<uint32_t>(tx[7]) << 8) |
+                           (static_cast<uint32_t>(tx[8]) << 16) |
+                           (static_cast<uint32_t>(tx[9]) << 24);
+  REQUIRE(encoded == duration_ms);
+  uint8_t ck1 = 0;
+  uint8_t ck2 = 0;
+  for (size_t i = 2; i < tx.size() - 2; ++i) {
+    ck1 += tx[i];
+    ck2 += ck1;
+  }
+  REQUIRE(tx[11] == ck1);
+  REQUIRE(tx[12] == ck2);
+}
+
+TEST_CASE("GPS sleep rejects zero without touching transport or cached fix",
+          "[gps][driver][sleep]") {
+  SleepSerial serial;
+  GpsDriver gps(serial);
+  serial.queue_rx(GGA_VALID);
+  REQUIRE(gps.read());
+  REQUIRE(gps.has_valid_fix());
+  REQUIRE_FALSE(gps.request_sleep(0));
+  REQUIRE(serial.operations.empty());
+  REQUIRE(serial.get_tx_bytes().empty());
+  REQUIRE(gps.has_valid_fix());
+}
+
+TEST_CASE("GPS sleep reports incomplete writes without retrying", "[gps][driver][sleep]") {
+  SleepSerial serial;
+  GpsDriver gps(serial);
+  REQUIRE(gps.open_uart(GpsDriver::MODULE_DEFAULT_BAUD));
+  serial.write_limit = GENERATE(0, 6, 12);
+  REQUIRE_FALSE(gps.request_sleep(60000));
+  REQUIRE(serial.operations == std::vector<std::string>{"open", "write"});
+  REQUIRE(serial.get_tx_bytes().size() == static_cast<size_t>(serial.write_limit));
+}
+
+TEST_CASE("GPS sleep reports TX timeout without retrying or closing UART", "[gps][driver][sleep]") {
+  SleepSerial serial;
+  GpsDriver gps(serial);
+  REQUIRE(gps.open_uart(GpsDriver::MODULE_DEFAULT_BAUD));
+  serial.tx_done_result = false;
+  REQUIRE_FALSE(gps.request_sleep(60000));
+  REQUIRE(serial.get_tx_bytes().size() == 13);
+  REQUIRE(serial.operations == std::vector<std::string>{"open", "write", "drain"});
+}
+
+TEST_CASE("Serial transports must explicitly support TX completion", "[gps][driver][sleep]") {
+  StubSerial serial;
+  GpsDriver gps(serial);
+  REQUIRE(gps.open_uart(GpsDriver::MODULE_DEFAULT_BAUD));
+  REQUIRE_FALSE(gps.request_sleep(60000));
+  REQUIRE(serial.get_tx_bytes().size() == 13);
+}
+
+TEST_CASE("GPS sleep invalidates cached fix and incomplete sentence even on TX failure",
+          "[gps][driver][sleep]") {
+  SleepSerial serial;
+  GpsDriver gps(serial);
+  REQUIRE(gps.open_uart(GpsDriver::MODULE_DEFAULT_BAUD));
+  serial.queue_rx(GGA_VALID);
+  serial.queue_rx(RMC_VALID);
+  REQUIRE(gps.read());
+  REQUIRE(gps.has_valid_fix());
+  const std::string sentence = GGA_VALID;
+  const size_t split = sentence.size() / 2;
+  serial.queue_rx(sentence.substr(0, split).c_str());
+  REQUIRE_FALSE(gps.read());
+
+  serial.tx_done_result = GENERATE(true, false);
+  REQUIRE(gps.request_sleep(60000) == serial.tx_done_result);
+  REQUIRE_FALSE(gps.has_valid_fix());
+  REQUIRE_FALSE(is_position_valid(gps.get_data().position));
+  REQUIRE(gps.get_data().altitude_m == GPS_ALTITUDE_INVALID);
+  REQUIRE_FALSE(gps.get_data().timestamp.valid);
+  serial.queue_rx(sentence.substr(split).c_str());
+  gps.read();
+  REQUIRE_FALSE(gps.has_valid_fix());
+}
+
+TEST_CASE("GPS re-sleeps at default baud after sleeping from tracking baud",
+          "[gps][driver][sleep]") {
+  SleepSerial serial;
+  GpsDriver gps(serial);
+  REQUIRE(gps.open_uart(115200));
+  REQUIRE(gps.request_sleep(60000));
+  gps.end();
+
+  // The caller waits for the receiver's timer before reopening.
+  serial.clear_tx();
+  REQUIRE(gps.open_uart(GpsDriver::MODULE_DEFAULT_BAUD));
+  REQUIRE(serial.get_tx_bytes().empty());
+  REQUIRE(gps.request_sleep(60000));
+  gps.end();
+  REQUIRE(serial.opened_bauds == std::vector<int>{115200, 9600});
+  REQUIRE(serial.get_tx_bytes().size() == 13); // Sleep only; no baud/config/start/stop command.
+}
+
+TEST_CASE("GPS UART-only open clears old data and reports transport failure",
+          "[gps][driver][sleep]") {
+  SleepSerial serial;
+  GpsDriver gps(serial);
+  serial.queue_rx(GGA_VALID);
+  REQUIRE(gps.read());
+  REQUIRE(gps.has_valid_fix());
+  const std::string sentence = GGA_VALID;
+  const size_t split = sentence.size() / 2;
+  serial.queue_rx(sentence.substr(0, split).c_str());
+  REQUIRE_FALSE(gps.read());
+
+  serial.open_result = GENERATE(true, false);
+  REQUIRE(gps.open_uart(GpsDriver::MODULE_DEFAULT_BAUD) == serial.open_result);
+  REQUIRE(serial.operations == std::vector<std::string>{"open"});
+  REQUIRE(serial.get_tx_bytes().empty());
+  REQUIRE_FALSE(gps.has_valid_fix());
+  serial.queue_rx(sentence.substr(split).c_str());
+  gps.read();
+  REQUIRE_FALSE(gps.has_valid_fix());
+}
+
+class GpsBaudFixture {
+public:
+  class TimingRTOS : public RTOS {
+  public:
+    uint32_t delayed_ms = 0;
+    void delay_ms_impl(uint32_t ms) override { delayed_ms += ms; }
+    uint64_t get_time_ms_impl() override { return delayed_ms; }
+  } rtos;
+  SleepSerial serial;
+  GpsDriver gps{serial};
+
+  GpsBaudFixture() { RTOS::set_instance(&rtos); }
+  ~GpsBaudFixture() { RTOS::set_instance(nullptr); }
+};
+
+TEST_CASE_METHOD(GpsBaudFixture,
+                 "GPS default initialization configures at 9600 without baud switch",
+                 "[gps][driver][baud]") {
+  serial.set_auto_ack(true);
+  REQUIRE(gps.begin());
+  REQUIRE(serial.opened_bauds == std::vector<int>{GpsDriver::MODULE_DEFAULT_BAUD});
+  REQUIRE(find_casic_packet(serial.get_tx_bytes(), 0x06, 0x00) == SIZE_MAX);
+  REQUIRE(find_casic_packet(serial.get_tx_bytes(), 0x06, 0x10) != SIZE_MAX);
+  REQUIRE(find_casic_packet(serial.get_tx_bytes(), 0x06, 0x0C) != SIZE_MAX);
+}
+
+TEST_CASE_METHOD(GpsBaudFixture, "GPS baud switch is explicit and completes TX before reopening",
+                 "[gps][driver][baud]") {
+  REQUIRE(gps.open_uart(GpsDriver::MODULE_DEFAULT_BAUD));
+  REQUIRE(serial.get_tx_bytes().empty());
+  serial.queue_rx(GGA_VALID);
+  REQUIRE(gps.read());
+  REQUIRE(gps.has_valid_fix());
+
+  REQUIRE(gps.switch_to_active_baud());
+  const std::vector<uint8_t> expected = {
+      0xF1, 0xD9, 0x06, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00,
+      0x00, 0x00, 0xC2, 0x01, 0x00, 0xD1, 0xE0, 0x0D, 0x0A,
+  };
+  REQUIRE(serial.get_tx_bytes() == expected);
+  REQUIRE(serial.operations == std::vector<std::string>{"open", "write", "drain", "close", "open"});
+  REQUIRE(serial.opened_bauds == std::vector<int>{9600, 115200});
+  REQUIRE(serial.tx_timeout_ms == 100);
+  REQUIRE(rtos.delayed_ms == 50);
+  REQUIRE_FALSE(gps.has_valid_fix());
+}
+
+TEST_CASE_METHOD(GpsBaudFixture, "GPS active initialization switches before receiver configuration",
+                 "[gps][driver][baud]") {
+  serial.set_auto_ack(true);
+  REQUIRE(gps.begin(GpsDriver::MODULE_ACTIVE_BAUD));
+  REQUIRE(serial.opened_bauds == std::vector<int>{9600, 115200});
+  const auto &tx = serial.get_tx_bytes();
+  REQUIRE(find_casic_packet(tx, 0x06, 0x00) == 0);
+  REQUIRE(find_casic_packet(tx, 0x0A, 0x04) == 18);
+}
+
+TEST_CASE_METHOD(GpsBaudFixture, "GPS receiver configuration does not open UART or switch baud",
+                 "[gps][driver][baud]") {
+  REQUIRE(gps.open_uart(GpsDriver::MODULE_DEFAULT_BAUD));
+  serial.set_auto_ack(true);
+  gps.configure_receiver();
+  REQUIRE(serial.opened_bauds == std::vector<int>{9600});
+  REQUIRE(find_casic_packet(serial.get_tx_bytes(), 0x06, 0x00) == SIZE_MAX);
+  REQUIRE(find_casic_packet(serial.get_tx_bytes(), 0x0A, 0x04) != SIZE_MAX);
+}
+
+TEST_CASE_METHOD(GpsBaudFixture, "GPS active initialization aborts on transport failure",
+                 "[gps][driver][baud]") {
+  SECTION("Default-baud UART cannot open") {
+    serial.fail_open_number = 1;
+    REQUIRE_FALSE(gps.begin(GpsDriver::MODULE_ACTIVE_BAUD));
+    REQUIRE(serial.get_tx_bytes().empty());
+    REQUIRE(serial.operations == std::vector<std::string>{"open"});
+  }
+  SECTION("Baud command write is incomplete") {
+    serial.write_limit = 5;
+    REQUIRE_FALSE(gps.begin(GpsDriver::MODULE_ACTIVE_BAUD));
+    REQUIRE(serial.operations == std::vector<std::string>{"open", "write", "close"});
+    REQUIRE(rtos.delayed_ms == 0);
+  }
+  SECTION("Baud command TX completion is unconfirmed") {
+    serial.tx_done_result = false;
+    REQUIRE_FALSE(gps.begin(GpsDriver::MODULE_ACTIVE_BAUD));
+    REQUIRE(serial.operations == std::vector<std::string>{"open", "write", "drain", "close"});
+    REQUIRE(rtos.delayed_ms == 0);
+  }
+  SECTION("Active-baud UART cannot reopen") {
+    serial.fail_open_number = 2;
+    REQUIRE_FALSE(gps.begin(GpsDriver::MODULE_ACTIVE_BAUD));
+    REQUIRE(serial.opened_bauds == std::vector<int>{9600, 115200});
+    REQUIRE(serial.get_tx_bytes().size() == 18);
+  }
+}
+
+TEST_CASE_METHOD(GpsBaudFixture, "GPS initialization rejects unsupported baud without commands",
+                 "[gps][driver][baud]") {
+  REQUIRE_FALSE(gps.begin(57600));
+  REQUIRE(serial.operations.empty());
+}
+
+TEST_CASE_METHOD(GpsBaudFixture, "GPS hot resume retains active baud without receiver commands",
+                 "[gps][driver][baud]") {
+  REQUIRE(gps.begin_hot_resume(GpsDriver::MODULE_ACTIVE_BAUD));
+  REQUIRE(serial.opened_bauds == std::vector<int>{115200});
+  REQUIRE(serial.get_tx_bytes().empty());
+  REQUIRE(rtos.delayed_ms == 0);
 }

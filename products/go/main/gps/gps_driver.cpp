@@ -22,6 +22,7 @@ static constexpr const char *TAG = "GpsDriver";
 // command takes ~19 ms to transmit at 9600 baud (18 * 10 bits / 9600);
 // 50 ms provides margin for TX drain and module processing.
 static constexpr uint32_t BAUD_SWITCH_DELAY_MS = 50;
+static constexpr uint32_t COMMAND_TX_TIMEOUT_MS = 100;
 
 // TAU1113 CASIC binary command: UART configure as 115200 bps.
 // Source: TAU1113 Datasheet v1.4, Table 26 (section 8.2).
@@ -42,6 +43,8 @@ static constexpr uint8_t CASIC_GROUP_CFG = 0x06;
 static constexpr uint8_t CASIC_SUB_NAVSAT = 0x0C;
 static constexpr uint8_t CASIC_SUB_EPHSAVE = 0x10;
 static constexpr uint8_t CASIC_SUB_GNSS_CONTROL = 0x40;
+static constexpr uint8_t CASIC_SUB_SLEEP = 0x41;
+static constexpr uint8_t SLEEP_ACTION_DEEP = 0x01;
 static constexpr uint8_t GNSS_CONTROL_STOP = 0x10;
 static constexpr uint8_t GNSS_CONTROL_START = 0x11;
 
@@ -116,7 +119,7 @@ static void casic_checksum(const uint8_t *data, size_t len, uint8_t &ck1, uint8_
 /// Build and send a CASIC binary packet.
 /// Stack buffer: 2 (header) + 2 (ID) + 2 (length) + payload + 2 (checksum)
 ///             = 28 bytes max.
-static void send_casic_packet(AirgradientSerial &serial, uint8_t group, uint8_t sub,
+static bool send_casic_packet(AirgradientSerial &serial, uint8_t group, uint8_t sub,
                               const uint8_t *payload, uint16_t payload_len) {
   uint8_t buf[2 + 2 + 2 + CASIC_MAX_PAYLOAD + 2];
   buf[0] = 0xF1;
@@ -132,7 +135,8 @@ static void send_casic_packet(AirgradientSerial &serial, uint8_t group, uint8_t 
   buf[6 + payload_len] = ck1;
   buf[7 + payload_len] = ck2;
 
-  serial.write(buf, 8 + payload_len);
+  const int packet_len = 8 + payload_len;
+  return serial.write(buf, packet_len) == packet_len;
 }
 
 /// Drain any stale bytes from the serial RX buffer.  Call before sending a
@@ -310,34 +314,32 @@ GpsDriver::GpsDriver(AirgradientSerial &serial) : _serial(serial), _buffer_pos(0
 GpsDriver::~GpsDriver() {}
 
 bool GpsDriver::begin(int baud_rate) {
-  _data = GpsData{};
-  if (baud_rate != MODULE_DEFAULT_BAUD) {
-    // The TAU1113 defaults to 9600 baud on power-on.  Open at the module's
-    // default rate, send the binary command to switch to 115200, then
-    // re-initialise the UART at the target rate.  If the module is already
-    // at 115200 (stayed powered during deep sleep) the 9600-baud bytes
-    // arrive as garbage and are silently ignored.
-    if (!_serial.begin(MODULE_DEFAULT_BAUD)) {
-      return false;
-    }
-    _send_baud_115200_command();
-    RTOS::delay_ms(BAUD_SWITCH_DELAY_MS);
-    _serial.end();
-  }
-  if (!_serial.begin(baud_rate)) {
+  if (baud_rate != MODULE_DEFAULT_BAUD && baud_rate != MODULE_ACTIVE_BAUD) {
     return false;
   }
-  _poll_mon_ver();
-  _send_cfg_ephsave();
-  _send_cfg_navsat();
+  if (!open_uart(MODULE_DEFAULT_BAUD)) {
+    return false;
+  }
+  if (baud_rate == MODULE_ACTIVE_BAUD && !switch_to_active_baud()) {
+    return false;
+  }
+  configure_receiver();
   return true;
 }
 
-bool GpsDriver::begin_hot_resume(int baud_rate) {
+void GpsDriver::configure_receiver() {
+  _poll_mon_ver();
+  _send_cfg_ephsave();
+  _send_cfg_navsat();
+}
+
+bool GpsDriver::open_uart(int baud_rate) {
   _data = GpsData{};
   _buffer_pos = 0;
   return _serial.begin(baud_rate);
 }
+
+bool GpsDriver::begin_hot_resume(int baud_rate) { return open_uart(baud_rate); }
 
 void GpsDriver::end() { _serial.end(); }
 
@@ -484,8 +486,19 @@ double GpsDriver::_to_decimal_degrees(const nmea_position &pos) {
   return dd;
 }
 
-void GpsDriver::_send_baud_115200_command() {
-  _serial.write(CMD_BAUD_115200, sizeof(CMD_BAUD_115200));
+bool GpsDriver::switch_to_active_baud() {
+  _data = GpsData{};
+  _buffer_pos = 0;
+  constexpr int command_size = sizeof(CMD_BAUD_115200);
+  if (_serial.write(CMD_BAUD_115200, command_size) != command_size ||
+      !_serial.wait_tx_done(COMMAND_TX_TIMEOUT_MS)) {
+    AG_LOGE(TAG, "baud switch: transmission failed; receiver baud unknown");
+    _serial.end();
+    return false;
+  }
+  RTOS::delay_ms(BAUD_SWITCH_DELAY_MS);
+  _serial.end();
+  return _serial.begin(MODULE_ACTIVE_BAUD);
 }
 
 bool GpsDriver::_is_accepted_sentence(const char *buf, size_t len) {
@@ -515,6 +528,34 @@ void GpsDriver::gnss_stop() {
                          "gnss_stop")) {
     AG_LOGW(TAG, "gnss_stop: module did not acknowledge after retry");
   }
+}
+
+bool GpsDriver::request_sleep(uint32_t duration_ms) {
+  if (duration_ms == 0) {
+    return false;
+  }
+
+  // CFG-SLEEP payload: U4 period (little-endian milliseconds), U1 action.
+  const uint8_t payload[] = {
+      static_cast<uint8_t>(duration_ms),
+      static_cast<uint8_t>(duration_ms >> 8),
+      static_cast<uint8_t>(duration_ms >> 16),
+      static_cast<uint8_t>(duration_ms >> 24),
+      SLEEP_ACTION_DEEP,
+  };
+  _data = GpsData{};
+  _buffer_pos = 0;
+  if (!send_casic_packet(_serial, CASIC_GROUP_CFG, CASIC_SUB_SLEEP, payload, sizeof(payload))) {
+    AG_LOGE(TAG, "CFG-SLEEP: incomplete write; receiver state unknown");
+    return false;
+  }
+  // Do not retry or wait for an ACK: the receiver may already be asleep.
+  // TX completion only guarantees the command left the host UART.
+  if (!_serial.wait_tx_done(COMMAND_TX_TIMEOUT_MS)) {
+    AG_LOGE(TAG, "CFG-SLEEP: TX completion unconfirmed; receiver state unknown");
+    return false;
+  }
+  return true;
 }
 
 // ---------------------------------------------------------------------------
