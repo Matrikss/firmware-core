@@ -187,6 +187,10 @@ bool GpsService::wait_for_wake() {
 }
 
 bool GpsService::activate_receiver() {
+  const uint32_t remaining_ms = sleep_remaining_ms();
+  if (remaining_ms != 0) {
+    AG_LOGI(TAG, "Waiting for GPS wake: %lu ms remaining", static_cast<unsigned long>(remaining_ms));
+  }
   if (!wait_for_wake()) {
     return false;
   }

@@ -10813,7 +10813,8 @@ TEST_CASE("GPS sleep: battery reset persists only intent before creating a route
   TestFixture f;
   auto orch = f.make_orchestrator();
   f.stub_bms.status_ok = true;
-  f.stub_bms.status.power_source = BmsPowerSource::None;
+  SECTION("No adapter") { f.stub_bms.status.power_source = BmsPowerSource::None; }
+  SECTION("OTG boost") { f.stub_bms.status.power_source = BmsPowerSource::OtgMode; }
   test_spy::gps_remaining_ms = GPS_RESET_THRESHOLD_MS + 1;
   bool pending = false;
   bool committed = false;

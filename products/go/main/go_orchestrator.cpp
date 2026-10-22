@@ -1627,7 +1627,8 @@ bool Orchestrator::start_tracking(bool from_boot) {
     BmsStatus status{};
     // Re-read immediately; a cached status can miss a newly attached USB cable.
     if (_svc.power_service.poll_status(status) && status.is_power_source_valid() &&
-        status.power_source == BmsPowerSource::None) {
+        (status.power_source == BmsPowerSource::None ||
+         status.power_source == BmsPowerSource::OtgMode)) {
       if (save_pending_tracking_start(_config_store, true)) {
         AG_LOGI(TAG, "GPS wake in %lu ms: requesting battery-powered tracking restart",
                 static_cast<unsigned long>(gps_wait_ms));
