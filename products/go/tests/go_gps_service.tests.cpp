@@ -16,7 +16,7 @@
 #include "gps/gps_service.h"
 
 // The host RTOS intentionally does not launch tasks. Exercise the worker's
-// acquisition/wait path synchronously, with cancellation at controlled delays.
+// acquisition/wait path synchronously, with cancellation at controlled waits.
 class GpsServiceTestAccess {
 public:
   static bool activate(GpsService &service) {
@@ -25,6 +25,10 @@ public:
   }
   static void cancel(GpsService &service) { service._running = false; }
   static bool running(const GpsService &service) { return service._running; }
+  static bool wait_for_wake(GpsService &service) {
+    service._running = true;
+    return service.wait_for_wake();
+  }
   static void run(GpsService &service) {
     service._running = true;
     service.run();
@@ -48,6 +52,18 @@ public:
   uint64_t retained_ms = 1000;
   uint64_t boot_ms = 0;
   std::function<void()> on_delay;
+  std::function<void()> on_wait;
+  std::vector<uint32_t> waits;
+
+  bool task_notify_wait_impl(uint32_t *, uint32_t timeout_ms) override {
+    waits.push_back(timeout_ms);
+    if (on_wait) {
+      on_wait();
+      return true;
+    }
+    delay_ms_impl(timeout_ms);
+    return false;
+  }
 
   void delay_ms_impl(uint32_t ms) override {
     retained_ms += ms;
@@ -219,6 +235,7 @@ TEST_CASE_METHOD(Fixture, "GPS service activation waits then switches to 115200"
   serial.opened_bauds.clear();
   serial.writes.clear();
   REQUIRE(GpsServiceTestAccess::activate(service));
+  CHECK(clock.waits == std::vector<uint32_t>{250});
   REQUIRE(serial.opened_bauds ==
           std::vector<int>{GpsDriver::MODULE_DEFAULT_BAUD, GpsDriver::MODULE_ACTIVE_BAUD});
   REQUIRE_FALSE(serial.writes.empty());
@@ -233,11 +250,12 @@ TEST_CASE_METHOD(Fixture, "GPS service activation wait can be cancelled without 
   REQUIRE(service.request_sleep(60000));
   serial.opened_bauds.clear();
   serial.writes.clear();
-  clock.on_delay = [&] { GpsServiceTestAccess::cancel(service); };
+  clock.on_wait = [&] { service.stop(); };
   CHECK_FALSE(GpsServiceTestAccess::activate(service));
+  CHECK(clock.waits == std::vector<uint32_t>{60000});
   CHECK(serial.opened_bauds.empty());
   CHECK(serial.writes.empty());
-  CHECK(service.sleep_remaining_ms() == 59900);
+  CHECK(service.sleep_remaining_ms() == 60000);
 }
 
 TEST_CASE_METHOD(Fixture, "GPS service failed sleep does not create a deadline", "[gps_service]") {
@@ -289,6 +307,37 @@ TEST_CASE_METHOD(Fixture, "GPS service handles maximum sleep without truncating 
   CHECK(service.sleep_remaining_ms() == UINT32_MAX);
   clock.retained_ms += 1;
   CHECK(service.sleep_remaining_ms() == UINT32_MAX - 1);
+}
+
+TEST_CASE_METHOD(Fixture, "GPS service maximum sleep uses notification waits of at most one hour",
+                 "[gps_service]") {
+  clock.retained_ms = uint64_t{UINT32_MAX} + 1234;
+  REQUIRE(service.request_sleep(UINT32_MAX));
+  const auto deadline = service.sleep_deadline_ms();
+  REQUIRE(GpsServiceTestAccess::wait_for_wake(service));
+  REQUIRE_FALSE(clock.waits.empty());
+  CHECK(clock.waits.front() == 3600000);
+  for (const auto wait_ms : clock.waits) {
+    CHECK(wait_ms <= 3600000);
+  }
+  CHECK(clock.retained_ms == deadline);
+}
+
+TEST_CASE_METHOD(Fixture, "GPS service short remaining sleep waits at least one tick",
+                 "[gps_service]") {
+  REQUIRE(service.request_sleep(1));
+  REQUIRE(GpsServiceTestAccess::wait_for_wake(service));
+  CHECK(clock.waits == std::vector<uint32_t>{10});
+  CHECK(service.sleep_remaining_ms() == 0);
+}
+
+TEST_CASE_METHOD(Fixture, "GPS service rechecks the deadline after an early notification",
+                 "[gps_service]") {
+  REQUIRE(service.request_sleep(60000));
+  clock.on_wait = [&] { clock.retained_ms += clock.waits.size() == 1 ? 1000 : clock.waits.back(); };
+  REQUIRE(GpsServiceTestAccess::wait_for_wake(service));
+  CHECK(clock.waits == std::vector<uint32_t>{60000, 59000});
+  CHECK(service.sleep_remaining_ms() == 0);
 }
 
 TEST_CASE_METHOD(Fixture, "GPS fast path leaves sleeping GPS untouched", "[gps_service]") {
@@ -347,6 +396,7 @@ TEST_CASE_METHOD(Fixture, "GPS service independently repeats sleep after each wa
     CHECK_FALSE(is_command(write, 0x40));
   }
   REQUIRE(sleeps.size() == 2);
+  CHECK(clock.waits == std::vector<uint32_t>{interval_ms});
   CHECK(sleeps[1].time_ms >= sleeps[0].time_ms + interval_ms);
   CHECK(service.sleep_remaining_ms() == interval_ms);
   CHECK_FALSE(serial.open);
@@ -358,12 +408,13 @@ TEST_CASE_METHOD(Fixture,
   REQUIRE(service.request_sleep(60000));
   serial.writes.clear();
   serial.opened_bauds.clear();
-  clock.on_delay = [&] { GpsServiceTestAccess::cancel(service); };
+  clock.on_wait = [&] { service.stop(); };
   GpsServiceTestAccess::run_sleeping(service, 120000);
+  CHECK(clock.waits == std::vector<uint32_t>{60000});
   CHECK(serial.writes.empty());
   CHECK(serial.opened_bauds.empty());
-  CHECK(service.sleep_remaining_ms() == 59900);
-  clock.on_delay = {};
+  CHECK(service.sleep_remaining_ms() == 60000);
+  clock.on_wait = {};
   REQUIRE(GpsServiceTestAccess::activate(service));
   CHECK(serial.receiver_baud == GpsDriver::MODULE_ACTIVE_BAUD);
   CHECK(service.sleep_deadline_ms() == 0);
@@ -394,6 +445,7 @@ TEST_CASE_METHOD(Fixture, "GPS service retries failed sleep without an orchestra
       sleeps.push_back(write);
   }
   REQUIRE(sleeps.size() == 2);
+  CHECK(clock.waits == std::vector<uint32_t>{1000});
   CHECK(sleeps[1].time_ms >= sleeps[0].time_ms + 1000);
   CHECK(service.sleep_remaining_ms() == 60000);
 }
@@ -414,4 +466,19 @@ TEST_CASE_METHOD(Fixture, "GPS one-shot sleep stops maintenance without scheduli
       ++sleeps;
   }
   CHECK(sleeps == 1);
+}
+
+TEST_CASE_METHOD(Fixture, "GPS service stop interrupts a failed-sleep retry", "[gps_service]") {
+  serial.tx_ok = false;
+  uint64_t stopped_at_ms = 0;
+  clock.on_wait = [&] {
+    stopped_at_ms = clock.retained_ms;
+    service.stop();
+  };
+  GpsServiceTestAccess::run_sleeping(service, 60000);
+  CHECK(clock.waits == std::vector<uint32_t>{1000});
+  CHECK(clock.retained_ms == stopped_at_ms);
+  CHECK(service.sleep_deadline_ms() == 0);
+  REQUIRE(serial.writes.size() == 2); // Response check and one failed sleep.
+  CHECK(is_command(serial.writes.back(), 0x41));
 }
