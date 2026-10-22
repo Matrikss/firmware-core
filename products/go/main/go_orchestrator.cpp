@@ -29,17 +29,14 @@
 #include "go_melody.h"
 #include "go_melody_sync.h"
 #include "go_power.h"
+#include "go_tracking_session.h"
 #include "go_type_helpers.hpp"
 #include "rtos.h"
 #include "services/ag_client.h"
 
 static constexpr const char *TAG = "Orchestrator";
 
-static constexpr uint8_t SESSION_ID_LENGTH = 5;
 static constexpr uint32_t MAX_SHAKE_EVENT_AGE_MS = 500;
-
-// 5 random draws against ~90k slots: collision probability is negligible.
-static constexpr int SESSION_ID_MAX_RETRIES = 5;
 
 // --- OTA poll cadences (unified _last_ota_check_ms baseline) ---
 // Stationary WiFi OTA availability-check cadence (1 h).
@@ -313,15 +310,6 @@ void Orchestrator::init(WakeCause cause, const BootHandoff &handoff) {
   publish_local_wifi_snapshot();
 
   init_ble_if_portable();
-  if (pending_tracking_start(_config_store)) {
-    // Consume before opening a route. Never re-enter the reset path on recovery.
-    if (save_pending_tracking_start(_config_store, false)) {
-      start_tracking(/*from_boot=*/true);
-    } else {
-      _svc.ui_manager.show_snackbar("Tracking start recovery failed");
-      update_display();
-    }
-  }
   if (is_gps_active()) {
     _svc.gps_service.start();
   } else {
@@ -1606,23 +1594,21 @@ void Orchestrator::unlock() {
   update_display();
 }
 
-bool Orchestrator::start_tracking(bool from_boot) {
+bool Orchestrator::start_tracking() {
   if (tracking_session_active(_tracking_state)) {
     return false; // caller treats as "already tracking"
   }
 
   AG_LOGI(TAG, "start_tracking");
 
-  // During boot, init() starts GPS after restoring the tracking state.
-  const bool starting_gps =
-      !from_boot && !is_gps_active() && _settings.gps_mode != GpsMode::AlwaysOff;
+  const bool starting_gps = !is_gps_active() && _settings.gps_mode != GpsMode::AlwaysOff;
   if (starting_gps) {
     // Finish any sleep command in flight before deciding whether to wait/reset.
     _svc.gps_service.stop();
   }
 
   const uint32_t gps_wait_ms = _svc.gps_service.sleep_remaining_ms();
-  if (!from_boot && _settings.gps_mode != GpsMode::AlwaysOff &&
+  if (_mode == OperatingMode::Offline && _settings.gps_mode != GpsMode::AlwaysOff &&
       gps_wait_ms > GPS_RESET_THRESHOLD_MS) {
     BmsStatus status{};
     // Re-read immediately; a cached status can miss a newly attached USB cable.
@@ -1649,7 +1635,7 @@ bool Orchestrator::start_tracking(bool from_boot) {
     }
   }
 
-  const uint32_t session_id = generate_session_id();
+  const uint32_t session_id = generate_tracking_session_id(_svc.storage_service);
   if (session_id == 0 || !_svc.storage_service.create_route(session_id)) {
     if (starting_gps) {
       deactivate_gps();
@@ -3568,21 +3554,6 @@ bool Orchestrator::is_gps_active() const {
 
 bool Orchestrator::is_recording() const {
   return _tracking_state == TrackingState::Recording && _svc.storage_service.is_route_active();
-}
-
-uint32_t Orchestrator::generate_session_id() {
-  // Probe each random draw against existing route files so a collision
-  // never surfaces as a user-visible storage error.
-  for (int i = 0; i < SESSION_ID_MAX_RETRIES; ++i) {
-    const uint32_t id = generate_random_number(SESSION_ID_LENGTH);
-    if (!_svc.storage_service.route_file_exists(id)) {
-      AG_LOGI(TAG, "generate_session_id: %" PRIu32 " (try %d)", id, i + 1);
-      return id;
-    }
-    AG_LOGW(TAG, "generate_session_id: collision on %" PRIu32 " (try %d)", id, i + 1);
-  }
-  AG_LOGE(TAG, "generate_session_id: exhausted %d retries", SESSION_ID_MAX_RETRIES);
-  return 0; // start_tracking treats 0 as a fatal generate failure
 }
 
 RtcAppState Orchestrator::snapshot_state() const {

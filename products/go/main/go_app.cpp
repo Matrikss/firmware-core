@@ -47,6 +47,7 @@ inline esp_reset_reason_t esp_reset_reason() { return ESP_RST_UNKNOWN; }
 #include "go_sensor_producer.h"
 #include "go_settings.h"
 #include "go_storage.h"
+#include "go_tracking_session.h"
 #include "go_type_helpers.hpp"
 #include "go_ui.h"
 #include "go_ulp.h"
@@ -206,6 +207,17 @@ void GoApp::run() {
           state.has_flag(RtcAppFlag::SensorsWarm));
 
   BootPath path = select_boot_path(cause, state, charging_only_eligible);
+
+  // Check if its system reset from pending tracking flow
+  if (path != BootPath::ChargingOnly && cause == WakeCause::PowerOn &&
+      pending_tracking_start(_board.config_store())) {
+    const GoSettings settings = _board.load_settings();
+    if (settings.operating_mode == OperatingMode::Offline &&
+        recover_offline_tracking_start(settings, state)) {
+      path = BootPath::FastPath;
+    }
+  }
+
   switch (path) {
   case BootPath::ChargingOnly:
     run_charging_only(charging_status);
@@ -221,6 +233,42 @@ void GoApp::run() {
     run_interactive(cause, state, {});
     break; // never reached
   }
+}
+
+// ===========================================================================
+// Recover the session before entering the cold Offline fast path.
+// ===========================================================================
+
+bool GoApp::recover_offline_tracking_start(const GoSettings &settings, RtcAppState &state) {
+  if (!save_pending_tracking_start(_board.config_store(), false)) {
+    AG_LOGE(TAG, "Tracking recovery: failed to clear pending start");
+    return false;
+  }
+
+  _board.init_core();
+  StorageService &storage = _board.storage();
+  const uint32_t session_id = generate_tracking_session_id(storage);
+  if (session_id == 0 || !storage.create_route(session_id)) {
+    AG_LOGE(TAG, "Tracking recovery: failed to create route");
+    return false;
+  }
+  if (!storage.end_route()) {
+    AG_LOGE(TAG, "Tracking recovery: failed to close new route");
+    return false;
+  }
+
+  state = {};
+  state.mode = OperatingMode::Offline;
+  state.behavior = Behavior::Tracking;
+  state.tracking_state = TrackingState::Recording;
+  state.tracking_session_id = session_id;
+  state.set_flag(RtcAppFlag::GpsEnabled, settings.gps_mode != GpsMode::AlwaysOff);
+  if (!tracking_timing_start(state.tracking_timing,
+                             tracking_seconds_from_ms(RTOS::get_retained_time_ms()))) {
+    state.tracking_timing = {};
+  }
+  AG_LOGI(TAG, "Tracking recovery: starting Offline fast path");
+  return true;
 }
 
 // ===========================================================================
@@ -522,7 +570,7 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
     stor.cache_measurement(ago);
 
     if (state.tracking_state == TrackingState::Recording) {
-      // Fast path can only resume — only prepare_for_sleep sets tracking_state.
+      // The session was opened before sleep or during tracking-start recovery.
       if (!stor.resume_route(state.tracking_session_id)) {
         AG_LOGW(TAG, "fast-path: resume_route failed → promote");
         promote = true;

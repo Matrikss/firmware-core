@@ -294,7 +294,7 @@ private:
   void unlock();
   /// Begin a new tracking session. Returns false on session-id exhaustion
   /// or storage-open failure; the snackbar + BLE notify fire inline first.
-  bool start_tracking(bool from_boot = false);
+  bool start_tracking();
   bool pause_tracking();
   bool resume_tracking();
   void stop_tracking();
@@ -462,10 +462,6 @@ private:
 
   /// Recording requires an open route; Paused retains only the session ID.
   bool is_recording() const;
-
-  /// Random 5-digit ID with bounded collision retry. Returns 0 on
-  /// exhaustion (start_tracking treats that as a fatal failure).
-  uint32_t generate_session_id();
 
   RtcAppState snapshot_state() const;
 };

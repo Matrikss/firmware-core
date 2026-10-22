@@ -29,6 +29,7 @@
 #include "go_board.h"
 #include "go_local_api.h"
 #include "go_orchestrator.h"
+#include "go_tracking_session.h"
 #include "go_type_helpers.hpp"
 #include "go_accel_test_access.h"
 #include "gps/gps_power_policy.h"
@@ -598,7 +599,6 @@ public:
 
   // Direct method access
   static bool is_gps_active(const Orchestrator &o) { return o.is_gps_active(); }
-  static uint32_t generate_session_id(Orchestrator &o) { return o.generate_session_id(); }
   static void on_input(Orchestrator &o, const InputEventData &input) { o.on_input(input); }
   static void on_sensor_data(Orchestrator &o, const MeasuresAGo &data) { o.on_sensor_data(data); }
   static void run_led_test(Orchestrator &o) { o.run_led_test(); }
@@ -774,7 +774,6 @@ struct TestFixture {
   std::unique_ptr<trompeloeil::expectation> _exp_time;
   std::unique_ptr<trompeloeil::expectation> _exp_delay;
   std::unique_ptr<trompeloeil::expectation> _exp_get_float;
-  std::unique_ptr<trompeloeil::expectation> _exp_pending_tracking;
   std::unique_ptr<trompeloeil::expectation> _exp_set_float;
 
   explicit TestFixture(AccelSensor *accel_sensor = nullptr)
@@ -816,9 +815,6 @@ struct TestFixture {
     _exp_delay = NAMED_ALLOW_CALL(mock_rtos, delay_ms_impl(trompeloeil::_));
     _exp_get_float = NAMED_ALLOW_CALL(mock_config, get_float(trompeloeil::_, trompeloeil::_))
                          .RETURN(ConfigStoreResult::NOT_FOUND);
-    _exp_pending_tracking = NAMED_ALLOW_CALL(mock_config, get_bool(trompeloeil::_, trompeloeil::_))
-                                .WITH(std::string(_1) == "trk_start")
-                                .RETURN(ConfigStoreResult::NOT_FOUND);
     _exp_set_float = NAMED_ALLOW_CALL(mock_config, set_float(trompeloeil::_, trompeloeil::_))
                          .RETURN(ConfigStoreResult::OK);
   }
@@ -3357,7 +3353,7 @@ TEST_CASE("start_tracking: session-ID exhaustion reports storage error",
   auto orch = f.make_orchestrator();
 
   // Make every possible 5-digit ID look already-taken by inserting the
-  // full range. generate_session_id() must exhaust its retry budget and
+  // full range. generate_tracking_session_id() must exhaust its retry budget and
   // return 0, which start_tracking() treats as a storage error.
   for (uint32_t id = 10000; id <= 99999; ++id) {
     test_spy::existing_route_session_ids.insert(id);
@@ -5182,22 +5178,19 @@ TEST_CASE("on_ble_config_write: unknown key wins precedence over single_field_on
 // 13. Session ID Generation
 // ============================================================================
 
-TEST_CASE("generate_session_id: returns a 5-digit random ID", "[Orchestrator][session]") {
+TEST_CASE("generate_tracking_session_id: returns a 5-digit random ID", "[Orchestrator][session]") {
   TestFixture f;
-  auto orch = f.make_orchestrator();
 
-  uint32_t id = A::generate_session_id(orch);
+  uint32_t id = generate_tracking_session_id(f.storage_service);
   REQUIRE(id >= 10000);
   REQUIRE(id <= 99999);
 }
 
-TEST_CASE("generate_session_id: stays within the 5-digit range across calls",
+TEST_CASE("generate_tracking_session_id: stays within the 5-digit range across calls",
           "[Orchestrator][session]") {
   TestFixture f;
-  auto orch = f.make_orchestrator();
-
-  const uint32_t first_id = A::generate_session_id(orch);
-  const uint32_t second_id = A::generate_session_id(orch);
+  const uint32_t first_id = generate_tracking_session_id(f.storage_service);
+  const uint32_t second_id = generate_tracking_session_id(f.storage_service);
 
   REQUIRE(first_id >= 10000);
   REQUIRE(first_id <= 99999);
@@ -5205,9 +5198,9 @@ TEST_CASE("generate_session_id: stays within the 5-digit range across calls",
   REQUIRE(second_id <= 99999);
 }
 
-TEST_CASE("generate_session_id: returns 0 when all retries collide", "[Orchestrator][session]") {
+TEST_CASE("generate_tracking_session_id: returns 0 when all retries collide",
+          "[Orchestrator][session]") {
   TestFixture f;
-  auto orch = f.make_orchestrator();
 
   // Pre-seed every possible 5-digit ID as taken. The bounded retry loop
   // exhausts and returns 0 instead of silently colliding with an
@@ -5216,7 +5209,7 @@ TEST_CASE("generate_session_id: returns 0 when all retries collide", "[Orchestra
     test_spy::existing_route_session_ids.insert(id);
   }
 
-  CHECK(A::generate_session_id(orch) == 0);
+  CHECK(generate_tracking_session_id(f.storage_service) == 0);
 }
 
 // ============================================================================
@@ -7478,7 +7471,6 @@ struct PmSleepFixture {
   std::unique_ptr<trompeloeil::expectation> _exp_cfg_set_string;
   std::unique_ptr<trompeloeil::expectation> _exp_cfg_set_float;
   std::unique_ptr<trompeloeil::expectation> _exp_cfg_commit;
-  std::unique_ptr<trompeloeil::expectation> _exp_pending_tracking;
 
   PmSleepFixture()
       : payload_cache(stub_cache_storage, 16),
@@ -7519,9 +7511,6 @@ struct PmSleepFixture {
     test_spy::reset();
     RTOS::set_instance(&mock_rtos);
     settings.operating_mode = OperatingMode::Portable;
-    _exp_pending_tracking = NAMED_ALLOW_CALL(mock_config, get_bool(trompeloeil::_, trompeloeil::_))
-                                .WITH(std::string(_1) == "trk_start")
-                                .RETURN(ConfigStoreResult::NOT_FOUND);
     _exp_time = NAMED_ALLOW_CALL(mock_rtos, get_time_ms_impl()).RETURN(0);
     _exp_delay = NAMED_ALLOW_CALL(mock_rtos, delay_ms_impl(trompeloeil::_));
     // Allow all config store operations (mode/settings changes trigger saves)
@@ -10772,9 +10761,26 @@ TEST_CASE("Refresh: uses PM preparation already started by the regular timer",
   CHECK_FALSE(test_spy::measurement_requested); // Wait for the refresh already requested.
 }
 
+TEST_CASE("GPS sleep: Portable and Stationary wait without a tracking reset",
+          "[Orchestrator][gps_sleep]") {
+  TestFixture f;
+  auto orch = f.make_orchestrator();
+  SECTION("Portable") { A::set_mode(orch, OperatingMode::Portable); }
+  SECTION("Stationary") { A::set_mode(orch, OperatingMode::Stationary); }
+  f.stub_bms.status.power_source = BmsPowerSource::OtgMode;
+  test_spy::gps_remaining_ms = GPS_RESET_THRESHOLD_MS + 1;
+  FORBID_CALL(f.mock_config, set_bool(trompeloeil::_, trompeloeil::_));
+  REQUIRE(A::start_tracking(orch));
+  CHECK(f.stub_bms.status_reads == 0);
+  CHECK(f.stub_bms.reset_requests == 0);
+  CHECK(test_spy::route_started);
+  CHECK(test_spy::gps_started);
+}
+
 TEST_CASE("GPS sleep: USB and unknown supply wait without resetting", "[Orchestrator][gps_sleep]") {
   TestFixture f;
   auto orch = f.make_orchestrator();
+  A::set_mode(orch, OperatingMode::Offline);
   f.stub_bms.status_ok = true;
   test_spy::gps_remaining_ms = GPS_RESET_THRESHOLD_MS + 1;
   SECTION("USB") { f.stub_bms.status.power_source = BmsPowerSource::UsbDcp; }
@@ -10801,6 +10807,7 @@ TEST_CASE("GPS sleep: short wait and AlwaysOff never request a tracking reset",
     test_spy::gps_remaining_ms = GPS_ALWAYS_OFF_SLEEP_MS;
   }
   auto orch = f.make_orchestrator();
+  A::set_mode(orch, OperatingMode::Offline);
   REQUIRE(A::start_tracking(orch));
   CHECK(f.stub_bms.status_reads == 0);
   CHECK(f.stub_bms.reset_requests == 0);
@@ -10812,6 +10819,7 @@ TEST_CASE("GPS sleep: battery reset persists only intent before creating a route
   struct PowerCut {};
   TestFixture f;
   auto orch = f.make_orchestrator();
+  A::set_mode(orch, OperatingMode::Offline);
   f.stub_bms.status_ok = true;
   SECTION("No adapter") { f.stub_bms.status.power_source = BmsPowerSource::None; }
   SECTION("OTG boost") { f.stub_bms.status.power_source = BmsPowerSource::OtgMode; }
@@ -10842,6 +10850,7 @@ TEST_CASE("GPS sleep: failed reset clears intent and starts while waiting",
           "[Orchestrator][gps_sleep]") {
   TestFixture f;
   auto orch = f.make_orchestrator();
+  A::set_mode(orch, OperatingMode::Offline);
   f.stub_bms.status_ok = true;
   f.stub_bms.status.power_source = BmsPowerSource::None;
   test_spy::gps_remaining_ms = GPS_RESET_THRESHOLD_MS + 1;
@@ -10864,6 +10873,7 @@ TEST_CASE("GPS sleep: failed intent save starts tracking without reset or cleari
           "[Orchestrator][gps_sleep]") {
   TestFixture f;
   auto orch = f.make_orchestrator();
+  A::set_mode(orch, OperatingMode::Offline);
   f.stub_bms.status_ok = true;
   f.stub_bms.status.power_source = BmsPowerSource::None;
   test_spy::gps_remaining_ms = GPS_RESET_THRESHOLD_MS + 1;
@@ -10883,32 +10893,6 @@ TEST_CASE("GPS sleep: failed intent save starts tracking without reset or cleari
   CHECK(test_spy::gps_started);
 }
 
-TEST_CASE("GPS sleep: boot consumes pending intent and starts without another reset",
-          "[Orchestrator][gps_sleep]") {
-  TestFixture f;
-  SECTION("OnWhenTracking") { f.settings.gps_mode = GpsMode::OnWhenTracking; }
-  SECTION("AlwaysOn") { f.settings.gps_mode = GpsMode::AlwaysOn; }
-  SECTION("AlwaysOff") { f.settings.gps_mode = GpsMode::AlwaysOff; }
-  auto orch = f.make_orchestrator();
-  f.stub_bms.status_ok = true;
-  f.stub_bms.status.power_source = BmsPowerSource::None;
-  test_spy::gps_remaining_ms = GPS_RESET_THRESHOLD_MS + 1;
-  REQUIRE_CALL(f.mock_config, get_bool(trompeloeil::_, trompeloeil::_))
-      .WITH(std::string(_1) == "trk_start")
-      .SIDE_EFFECT(_2 = true)
-      .RETURN(ConfigStoreResult::OK);
-  REQUIRE_CALL(f.mock_config, set_bool(trompeloeil::_, false))
-      .WITH(std::string(_1) == "trk_start")
-      .RETURN(ConfigStoreResult::OK);
-  REQUIRE_CALL(f.mock_config, commit()).RETURN(ConfigStoreResult::OK);
-  orch.init(WakeCause::PowerOn);
-  CHECK(f.stub_bms.reset_requests == 0);
-  CHECK(test_spy::route_started);
-  CHECK(A::tracking_active(orch));
-  CHECK(test_spy::gps_start_count == (f.settings.gps_mode != GpsMode::AlwaysOff ? 1 : 0));
-  CHECK(test_spy::gps_sleeping_start_count == (f.settings.gps_mode == GpsMode::AlwaysOff ? 1 : 0));
-  CHECK_FALSE(test_spy::gps_stopped);
-}
 
 TEST_CASE("GPS sleep: initialization selects GPS mode after restoring tracking",
           "[Orchestrator][gps_sleep]") {
@@ -10941,7 +10925,7 @@ TEST_CASE("GPS sleep: initialization selects GPS mode after restoring tracking",
 TEST_CASE("GPS sleep: initialization configures maintenance once and timers leave it alone",
           "[Orchestrator][gps_sleep]") {
   TestFixture f;
-  uint32_t expected = GPS_IDLE_SLEEP_MS;
+  uint32_t expected = 30000;
   SECTION("Portable") { f.settings.operating_mode = OperatingMode::Portable; }
   SECTION("Stationary") { f.settings.operating_mode = OperatingMode::Stationary; }
   SECTION("Offline") {
@@ -10983,6 +10967,7 @@ TEST_CASE("GPS sleep: uncleared intent prevents a duplicate session after failed
           "[Orchestrator][gps_sleep]") {
   TestFixture f;
   auto orch = f.make_orchestrator();
+  A::set_mode(orch, OperatingMode::Offline);
   f.stub_bms.status_ok = true;
   f.stub_bms.status.power_source = BmsPowerSource::None;
   test_spy::gps_remaining_ms = GPS_RESET_THRESHOLD_MS + 1;
@@ -10992,32 +10977,4 @@ TEST_CASE("GPS sleep: uncleared intent prevents a duplicate session after failed
   CHECK_FALSE(A::start_tracking(orch));
   CHECK(f.stub_bms.reset_requests == 1);
   CHECK_FALSE(test_spy::route_started);
-}
-
-TEST_CASE("GPS sleep: failed boot recovery initializes inactive GPS once",
-          "[Orchestrator][gps_sleep]") {
-  TestFixture f;
-  auto orch = f.make_orchestrator();
-  REQUIRE_CALL(f.mock_config, get_bool(trompeloeil::_, trompeloeil::_))
-      .WITH(std::string(_1) == "trk_start")
-      .SIDE_EFFECT(_2 = true)
-      .RETURN(ConfigStoreResult::OK);
-  SECTION("Intent cannot be cleared") {
-    REQUIRE_CALL(f.mock_config, set_bool(trompeloeil::_, false))
-        .WITH(std::string(_1) == "trk_start")
-        .RETURN(ConfigStoreResult::ERROR);
-    orch.init(WakeCause::PowerOn);
-  }
-  SECTION("Route cannot be created") {
-    test_spy::create_route_result = false;
-    REQUIRE_CALL(f.mock_config, set_bool(trompeloeil::_, false))
-        .WITH(std::string(_1) == "trk_start")
-        .RETURN(ConfigStoreResult::OK);
-    REQUIRE_CALL(f.mock_config, commit()).RETURN(ConfigStoreResult::OK);
-    orch.init(WakeCause::PowerOn);
-  }
-  CHECK_FALSE(test_spy::route_started);
-  CHECK_FALSE(A::tracking_active(orch));
-  CHECK(test_spy::gps_sleeping_start_count == 1);
-  CHECK(test_spy::gps_start_count == 0);
 }

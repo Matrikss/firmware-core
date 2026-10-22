@@ -30,6 +30,7 @@ private:
 
   /// Try BMS initialization twice to recover transient communication failures.
   bool init_bms_with_retry();
+  bool recover_offline_tracking_start(const GoSettings &settings, RtcAppState &state);
   void prepare_gps_for_sleep(uint32_t duration_ms, RtcAppState &state);
 
   // --- Testable fast-path core ---

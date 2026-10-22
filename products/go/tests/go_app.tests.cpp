@@ -81,6 +81,9 @@ extern bool input_started;
 extern bool cache_measurement_called;
 extern MeasuresAGo last_cached_measurement;
 extern bool route_started;
+extern bool create_route_result;
+extern bool route_exists_result;
+extern std::function<void()> before_create_route;
 extern bool route_resumed;
 extern uint32_t route_session_id;
 extern bool route_point_appended;
@@ -226,6 +229,9 @@ static const gpio::Hal stub_gpio_hal = {
 class EmptyConfigStore : public ConfigStore {
 public:
   bool tracking_start = false;
+  bool fail_tracking_write = false;
+  bool fail_commit = false;
+  bool tracking_committed = false;
   ConfigStoreResult get_int(const char *, int &) override { return ConfigStoreResult::NOT_FOUND; }
   ConfigStoreResult get_bool(const char *key, bool &out) override {
     if (std::string(key) == "trk_start" && tracking_start) {
@@ -241,13 +247,22 @@ public:
     return ConfigStoreResult::NOT_FOUND;
   }
   ConfigStoreResult set_int(const char *, int) override { return ConfigStoreResult::ERROR; }
-  ConfigStoreResult set_bool(const char *, bool) override { return ConfigStoreResult::ERROR; }
+  ConfigStoreResult set_bool(const char *key, bool value) override {
+    if (std::string(key) != "trk_start" || fail_tracking_write) {
+      return ConfigStoreResult::ERROR;
+    }
+    tracking_start = value;
+    return ConfigStoreResult::OK;
+  }
   ConfigStoreResult set_string(const char *, const std::string &) override {
     return ConfigStoreResult::ERROR;
   }
   ConfigStoreResult set_float(const char *, float) override { return ConfigStoreResult::ERROR; }
   ConfigStoreResult erase(const char *) override { return ConfigStoreResult::ERROR; }
-  ConfigStoreResult commit() override { return ConfigStoreResult::ERROR; }
+  ConfigStoreResult commit() override {
+    tracking_committed = !fail_commit;
+    return fail_commit ? ConfigStoreResult::ERROR : ConfigStoreResult::OK;
+  }
 };
 
 class MockBoard : public GoBoard {
@@ -2073,7 +2088,7 @@ TEST_CASE("button wake path: exhausted BMS retries restart before orchestrator")
   CHECK(board.call_index("sensors") < 0);
 }
 
-TEST_CASE("GoApp: interactive boot leaves tracking recovery and GPS startup to orchestrator") {
+TEST_CASE("GoApp: interactive boot leaves GPS startup to orchestrator") {
   test_spy::reset();
   MockBoard board;
   board._bms.status.power_source = BmsPowerSource::None;
@@ -2104,10 +2119,106 @@ TEST_CASE("GoApp: interactive boot leaves tracking recovery and GPS startup to o
   CHECK(test_spy::light_sleep_count == 0);
 }
 
+TEST_CASE("GoApp: Offline tracking reset creates a session and runs the cold fast path") {
+  test_spy::reset();
+  ScopedRetainedClock clock(200999);
+  MockBoard board;
+  board.settings.operating_mode = OperatingMode::Offline;
+  board._bms.status.power_source = BmsPowerSource::OtgMode;
+  SECTION("GPS when tracking") { board.settings.gps_mode = GpsMode::OnWhenTracking; }
+  SECTION("GPS always on") { board.settings.gps_mode = GpsMode::AlwaysOn; }
+  SECTION("GPS always off") { board.settings.gps_mode = GpsMode::AlwaysOff; }
+  auto &store = static_cast<EmptyConfigStore &>(board.config_store());
+  store.tracking_start = true;
+  test_spy::rtc_state = recording_rtc_state();
+  test_spy::rtc_state.gps_wake_deadline_ms = clock.retained_ms + 300000;
+  test_spy::before_create_route = [&] {
+    CHECK_FALSE(store.tracking_start);
+    CHECK(store.tracking_committed);
+  };
+
+  GoApp app(board);
+  app.run();
+
+  CHECK_FALSE(store.tracking_start);
+  CHECK(test_spy::route_started);
+  CHECK(test_spy::route_resumed);
+  CHECK(test_spy::route_point_appended);
+  CHECK(test_spy::route_ended);
+  CHECK_FALSE(board.sensors_warm_arg);
+  CHECK(test_spy::warmup_step_count > 0);
+  CHECK(test_spy::gps_read_called == (board.settings.gps_mode != GpsMode::AlwaysOff));
+  CHECK_FALSE(test_spy::orchestrator_init_called);
+  CHECK(test_spy::enter_sleep_called);
+  const auto &state = test_spy::last_saved_state;
+  CHECK(state.mode == OperatingMode::Offline);
+  CHECK(state.behavior == Behavior::Tracking);
+  CHECK(state.tracking_state == TrackingState::Recording);
+  CHECK(state.tracking_session_id == test_spy::route_session_id);
+  CHECK(state.tracking_session_id >= 10000);
+  CHECK(state.tracking_session_id <= 99999);
+  CHECK(state.tracking_timing.session_started_s == 200);
+  CHECK(state.tracking_timing.last_record_s == 200);
+  if (board.settings.gps_mode != GpsMode::AlwaysOff) {
+    CHECK(state.gps_wake_deadline_ms == 0);
+    CHECK_FALSE(test_spy::gps_sleep_requested);
+  }
+}
+
+TEST_CASE("GoApp: failed Offline tracking recovery returns to interactive without recording") {
+  test_spy::reset();
+  MockBoard board;
+  board.settings.operating_mode = OperatingMode::Offline;
+  auto &store = static_cast<EmptyConfigStore &>(board.config_store());
+  store.tracking_start = true;
+  SECTION("Cannot clear intent") { store.fail_tracking_write = true; }
+  SECTION("Cannot commit cleared intent") { store.fail_commit = true; }
+  SECTION("Route creation fails") { test_spy::create_route_result = false; }
+  SECTION("Session IDs exhausted") { test_spy::route_exists_result = true; }
+  GoApp app(board);
+  app.run();
+  CHECK(test_spy::orchestrator_init_called);
+  CHECK_FALSE(test_spy::route_started);
+  CHECK_FALSE(test_spy::route_point_appended);
+  CHECK_FALSE(test_spy::enter_sleep_called);
+}
+
+TEST_CASE("GoApp: recovered Offline tracking can promote on a button press") {
+  test_spy::reset();
+  MockBoard board;
+  board.settings.operating_mode = OperatingMode::Offline;
+  board.press_button_on_isr_install = true;
+  auto &store = static_cast<EmptyConfigStore &>(board.config_store());
+  store.tracking_start = true;
+  int created = 0;
+  test_spy::before_create_route = [&] { ++created; };
+  GoApp app(board);
+  app.run();
+  CHECK(created == 1);
+  CHECK_FALSE(store.tracking_start);
+  CHECK(test_spy::orchestrator_init_called);
+  CHECK(test_spy::orchestrator_rtc_state.tracking_state == TrackingState::Recording);
+  CHECK(test_spy::orchestrator_rtc_state.tracking_session_id == test_spy::route_session_id);
+  CHECK_FALSE(test_spy::route_point_appended);
+  CHECK_FALSE(test_spy::enter_sleep_called);
+}
+
+TEST_CASE("GoApp: ordinary Offline power-on keeps interactive boot") {
+  test_spy::reset();
+  MockBoard board;
+  board.settings.operating_mode = OperatingMode::Offline;
+  GoApp app(board);
+  app.run();
+  CHECK(test_spy::orchestrator_init_called);
+  CHECK_FALSE(test_spy::route_started);
+  CHECK_FALSE(test_spy::enter_sleep_called);
+}
+
 TEST_CASE("GoApp: pending tracking start does not override USB charging-only boot") {
   test_spy::reset();
   test_spy::power_on_reset = true;
   MockBoard board;
+  board.settings.operating_mode = OperatingMode::Offline;
   board._bms.status.power_source = BmsPowerSource::UsbDcp;
   auto &store = static_cast<EmptyConfigStore &>(board.config_store());
   store.tracking_start = true;

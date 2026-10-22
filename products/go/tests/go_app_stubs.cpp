@@ -76,6 +76,9 @@ bool input_stopped = false;
 bool cache_measurement_called = false;
 MeasuresAGo last_cached_measurement{};
 bool route_started = false;
+bool create_route_result = true;
+bool route_exists_result = false;
+std::function<void()> before_create_route;
 bool route_resumed = false;
 uint32_t route_session_id = 0;
 bool route_point_appended = false;
@@ -187,6 +190,9 @@ void reset() {
   cache_measurement_called = false;
   last_cached_measurement = MeasuresAGo{};
   route_started = false;
+  create_route_result = true;
+  route_exists_result = false;
+  before_create_route = nullptr;
   route_resumed = false;
   route_session_id = 0;
   route_point_appended = false;
@@ -479,6 +485,12 @@ void StorageService::restore_cache() { test_spy::cache_restored = true; }
 void StorageService::clear_cache() {}
 
 bool StorageService::create_route(uint32_t session_id) {
+  if (test_spy::before_create_route) {
+    test_spy::before_create_route();
+  }
+  if (!test_spy::create_route_result) {
+    return false;
+  }
   test_spy::route_started = true;
   test_spy::route_file_open = true;
   test_spy::route_session_id = session_id;
@@ -495,7 +507,9 @@ bool StorageService::resume_route(uint32_t session_id) {
   return true;
 }
 
-bool StorageService::route_file_exists(uint32_t /*session_id*/) const { return false; }
+bool StorageService::route_file_exists(uint32_t /*session_id*/) const {
+  return test_spy::route_exists_result;
+}
 
 bool StorageService::append_route_point(const RoutePoint &point) {
   test_spy::route_point_appended = true;
@@ -975,7 +989,7 @@ void Orchestrator::on_ble_pairing_request(uint32_t /*passkey*/) {}
 void Orchestrator::on_ble_auth_complete(bool /*success*/) {}
 void Orchestrator::lock() {}
 void Orchestrator::unlock() {}
-bool Orchestrator::start_tracking(bool) { return true; }
+bool Orchestrator::start_tracking() { return true; }
 void Orchestrator::stop_tracking() {}
 void Orchestrator::change_mode(OperatingMode /*new_mode*/, bool /*persist*/) {}
 void Orchestrator::enter_manufacturing_mode() {}
@@ -1001,7 +1015,6 @@ void Orchestrator::prepare_for_sleep(uint32_t /*sleep_duration_ms*/) {}
 void Orchestrator::init_ble_if_portable() {}
 bool Orchestrator::is_gps_active() const { return false; }
 void Orchestrator::deactivate_gps() {}
-uint32_t Orchestrator::generate_session_id() { return 10000; }
 RtcAppState Orchestrator::snapshot_state() const { return RtcAppState{}; }
 
 // ============================================================================

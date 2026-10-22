@@ -130,7 +130,7 @@ bool end_route_result = true;
 
 // Session IDs that should appear "already on NAND" to the orchestrator's
 // session-ID collision retry probe. Tests pre-populate this set to force
-// generate_session_id() to retry; the orchestrator's bounded loop then
+// generate_tracking_session_id() to retry; the shared helper's bounded loop then
 // either lands on a free slot or exhausts the budget.
 std::set<uint32_t> existing_route_session_ids;
 
