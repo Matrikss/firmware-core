@@ -124,7 +124,7 @@ private:
   uint32_t _last_bms_poll_ms = 0;
   uint32_t _last_bms_status_poll_ms = 0;
   uint32_t _last_ext_wdt_ms = 0;
-  uint32_t _last_input_ms = 0;                ///< Inactivity baseline: input or explicit UI exit
+  uint32_t _last_input_ms = 0; ///< Inactivity baseline: input or explicit UI exit
   bool _shutting_down = false;
   uint32_t _snackbar_refresh_deadline_ms = 0; ///< 0 = inactive; non-zero = absolute deadline
   bool _first_measurement_done = false;

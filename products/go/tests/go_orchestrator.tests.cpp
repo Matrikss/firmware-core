@@ -10898,7 +10898,6 @@ TEST_CASE("GPS sleep: failed intent save starts tracking without reset or cleari
   CHECK(test_spy::gps_started);
 }
 
-
 TEST_CASE("GPS sleep: initialization selects GPS mode after restoring tracking",
           "[Orchestrator][gps_sleep]") {
   TestFixture f;
