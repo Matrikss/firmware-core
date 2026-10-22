@@ -24,7 +24,7 @@ bool UsbSerialCommandChannel::initialize() {
   }
 
   usb_serial_jtag_vfs_use_driver();
-  _tx_fd = open("/dev/secondary", O_WRONLY);
+  _tx_fd = open("/dev/usbserjtag", O_WRONLY);
   if (_tx_fd < 0) {
     return false;
   }
