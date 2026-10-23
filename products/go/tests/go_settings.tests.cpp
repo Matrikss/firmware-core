@@ -834,3 +834,21 @@ TEST_CASE("factory settings load ignores out-of-range stage", "[settings][fg]") 
   REQUIRE(load_factory_settings(store, out));
   REQUIRE(out.fg_learning_stage == FgLearningStage::Idle);
 }
+
+TEST_CASE("Pending tracking start can be cleared and is excluded from user settings") {
+  FakeConfigStore store;
+  CHECK_FALSE(pending_tracking_start(store));
+  REQUIRE(save_pending_tracking_start(store, true));
+  REQUIRE(save_go_settings(store, GoSettings{}));
+  REQUIRE(pending_tracking_start(store));
+  CHECK(save_pending_tracking_start(store, false));
+  CHECK_FALSE(pending_tracking_start(store));
+}
+
+TEST_CASE("Pending tracking recovery requires a successful clear before creating a session") {
+  FakeConfigStore store;
+  REQUIRE(save_pending_tracking_start(store, true));
+  store.set_fail_writes(true);
+  CHECK_FALSE(save_pending_tracking_start(store, false));
+  CHECK(pending_tracking_start(store));
+}

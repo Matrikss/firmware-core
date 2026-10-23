@@ -216,6 +216,17 @@ calls are no-ops. Because the guide gate is evaluated on the `Interactive`
 does not need an `RtcAppState` mirror. Factory reset clears it (default
 `false`) so refurbished / returned units re-show the guide.
 
+## Pending Tracking Start
+
+| NVS Key | Type | Default | Purpose |
+|---|---|---|---|
+| `trk_start` | Boolean | `false` | Resume a requested tracking start after the Offline GPS power-reset path |
+
+`pending_tracking_start()` reads the flag; `save_pending_tracking_start()`
+writes and commits it separately from `GoSettings`. Recovery clears it before
+creating a new route. No session ID or points are persisted for this transition
+because recording has not started. See [Boot Path Selection](hardware_init.md#boot-path-selection).
+
 ## Factory Settings
 
 `FactorySettings` is **production-level** state, distinct from user `GoSettings`.
@@ -255,8 +266,8 @@ flag layout and defaults.
 
 - **Fresh power-on:** Load from `GoSettings` (NVS), then initialize
   `RtcAppState` from those values.
-- **Deep sleep timer wake:** Read `RtcAppState` directly; skip NVS to keep
-  the fast path minimal.
+- **Deep sleep timer wake:** Restore session state and the GPS wake deadline
+  from `RtcAppState`; load settings to apply the current GPS mode.
 - **Mode or GPS toggle:** Write both `GoSettings` (NVS) and `RtcAppState`.
 
 ## Usage Example

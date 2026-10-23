@@ -46,6 +46,7 @@ public:
   bool update_watchdog() override;
   bool feature_ship_available() const override;
   bool enter_ship_mode() override;
+  [[nodiscard]] bool request_system_power_reset() override;
   bool set_pmid_enabled(bool enabled) override;
   bool resync_pmid() override;
   bool set_charge_enable(bool enabled) override;

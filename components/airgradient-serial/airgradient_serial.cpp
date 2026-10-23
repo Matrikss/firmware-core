@@ -21,6 +21,8 @@ void AirgradientSerial::print(const char *str) {}
 
 int AirgradientSerial::write(const uint8_t *data, int len) { return 0; }
 
+bool AirgradientSerial::wait_tx_done(uint32_t /*timeout_ms*/) { return false; }
+
 int AirgradientSerial::read() { return -1; }
 
 int AirgradientSerial::read(uint8_t *buf, int len) {

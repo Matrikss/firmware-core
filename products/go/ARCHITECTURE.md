@@ -411,48 +411,19 @@ is more honest than showing an unreliable index.
 
 ### GPS Producer
 
-Product-specific `GpsService` task in `products/go/main/`. Uses the shared
-`airgradient-gps` component for all NMEA parsing and serial I/O. The
-service holds a `GpsSensor &` reference (concrete type: `NmeaGps`) and
-calls its non-blocking `read()` method in a loop. NMEA sentence
-accumulation, checksum validation, and field extraction are fully handled
-by the component.
+The product's `GpsService` uses `GpsDriver` for UART, CASIC commands, and NMEA
+parsing. It maintains a mutex-protected fix, synchronizes time from GPS, and
+posts `GpsFixUpdate` at the configured interval, including `NoFix` updates.
 
-```text
-GPS Task:
-  loop:
-    Call GpsSensor::read()            // drains serial buffer, parses sentences
-    If read() returned true:
-      Update _latest_fix from GpsSensor::get_data()
-      If timestamp valid and clock not yet synced:
-        Set ESP32 system clock via settimeofday()
-    If posting interval elapsed and GpsSensor::has_valid_fix():
-      Post Event::GpsFixUpdate to event queue
-    Delay 10 ms                       // yield, avoid busy-wait
-```
+Inactive GPS uses timed `CFG-SLEEP`: 30-second intervals in Portable/Stationary,
+the next ESP wake interval in Offline, or the maximum interval for Always Off.
+Active GPS remains running through ESP deep sleep; stopping its worker only
+closes UART. The expected wake deadline is retained in `RtcAppState`.
 
-`GpsData` (from `airgradient-gps/types/gps_types.h`) carries position
-(`GpsPosition`), altitude, fix metadata (`GpsFix` — type, satellite count,
-DOP values), and a UTC timestamp (`GpsTimestamp`). The orchestrator can
-also call `GpsService::get_latest_fix()` directly at any time
-(mutex-protected).
-
-GPS hardware is always powered (no power-enable GPIO), but the TAU1113
-GNSS receiver engine can be stopped / started via CASIC binary commands
-(`CFG-GNSS`). When `is_gps_active()` returns false (e.g., `AlwaysOff`, or
-`OnWhenTracking` while idle), firmware sends GNSS stop and destroys the
-GPS RTOS task to save power. When GPS becomes active again, firmware sends
-GNSS start and recreates the task. `GpsService::start()` is idempotent.
-See [GPS Service](docs/gps_service.md#deep-sleep-and-gnss-power-mode-sync) for
-full details.
-
-When entering deep sleep with GPS active, only the RTOS task is stopped —
-the TAU1113 keeps tracking so timer-wake can acquire a fix immediately
-(hot-start). When entering deep sleep with GPS inactive, GNSS stop is sent
-before sleep. The driver waits for the TAU1113 ACK response before closing
-the UART to ensure the module has fully processed the stop command;
-without this the module may remain in tracking mode (~16–21 mA) during
-deep sleep.
+Offline tracking start can reset the system on battery to avoid a long GPS
+wait. Only a pending-start boolean is saved to NVS; GoApp creates the route after
+reset and confirms it before entering the fast path. See
+[GPS Service](docs/gps_service.md) for the policy, UART behavior, and failures.
 
 ### Input Producer
 
@@ -569,15 +540,15 @@ configured interval.
 ### Sleep Entry
 
 ```text
-1. Final display update (wait=true — ensures the e-paper refresh completes)
+1. Final display update (wait=true — waits for framebuffer ownership)
 2. Save RTC display snapshot (sensor values, battery, status flags,
    rendering settings) so the next button wake can render immediately
 3. Stop all task-based services (BLE, sensor, GPS, input, display worker)
 4. Put SSD1680 into deep sleep mode 1 (~100 µA → <1 µA during ESP deep sleep)
-5. Backup chart cache to RTC memory
+5. Close the route, backup chart cache, and send sleep if GPS is inactive
 6. Persist app state to RTC memory:
    - Current mode, behavior, lock status
-   - Tracking-state enum, session ID
+   - Tracking-state enum, session ID, GPS wake deadline
    - RtcAppFlag::GpsEnabled in the flags mask
    - RtcAppFlag::SensorsWarm (set when sleep < sensor_hold_max_sleep_ms)
 7. Pulse external watchdog (gives it a full timeout window during sleep)
@@ -610,6 +581,11 @@ charging_only_eligible)` function:
 | `Button` + `Offline` | -- | `ButtonWake` — four-phase early paint |
 | `Button` + non-Offline | -- | `Interactive` |
 | `PowerOn` | Not charging-only eligible, including software reset | `Interactive` |
+
+After selection, a pending Offline tracking start can override a
+non-charging-only `PowerOn` path. GoApp creates the session, shows its
+confirmation, and enters the cold fast path; failures return to interactive
+boot. See [Hardware Init](docs/hardware_init.md#boot-path-selection).
 
 Charging-only boot shows a static battery-and-bolt icon with "Charging" and
 "Hold power button / to turn on". Charge completion shows a filled battery
@@ -764,30 +740,15 @@ detailed implementation notes, see [Service Documentation](#service-documentatio
 
 ### GPS Service
 
-- Product-specific service (`gps/gps_service.h` / `gps/gps_service.cpp`)
-- Delegates all NMEA parsing and serial I/O to `GpsDriver`
-  (`gps/gps_driver.h`)
-- `GpsData` type comes from `gps/gps_types.h`
-- Independent task (GPS Producer); clean shutdown via `stop()` which
-  blocks until the task self-signals before deleting itself
-- API: `start()`, `stop()`, `stop_and_idle_gnss()`, `idle_gnss()`,
-  `get_latest_fix()` (mutex-protected), `set_posting_interval_ms()`
-- `start()` is idempotent — returns true if already running
-- `stop()` stops the task and closes UART without sending GNSS stop
-  (preserves TAU1113 tracking for deep-sleep hot-start)
-- `stop_and_idle_gnss()` stops the task, sends GNSS stop, then closes
-  UART (used when GPS mode becomes inactive)
-- `idle_gnss()` opens UART, sends GNSS stop, closes UART (used at boot
-  when GPS is inactive to halt the TAU1113's default tracking)
-- Posts `GpsFixUpdate` events to the orchestrator queue at the configured
-  interval
-- Syncs ESP32 system clock (`settimeofday`) on the first valid GPS
-  timestamp
-- `gps_read_once()` free function provides a synchronous one-shot read
-  for the fast-path timer-wake boot path, without starting the full task
-  infrastructure. Sends a defensive `gnss_start()` after `begin()`.
-  Accepts an optional `const volatile bool &abort` parameter for
-  ISR-driven early exit during fast-path button detection
+- `start()` runs acquisition; `start_sleeping()` maintains timed receiver sleep.
+- `stop()` joins the worker and closes UART without changing receiver power.
+- `request_sleep()` sends one sleep interval; it cannot replace an existing one.
+- `get_latest_fix()` returns a protected snapshot; `set_aiding_data()` queues
+  approximate position/time for the receiver.
+- `gps_read_once()` reads synchronously after fast-path sensor warmup, skips a
+  still-sleeping receiver, and supports power-button abort.
+
+See [GPS Service](docs/gps_service.md) for the API and wake-deadline handling.
 
 ### Input Service (Button Service)
 

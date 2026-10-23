@@ -11,6 +11,7 @@
  */
 
 #include "go_orchestrator.h"
+#include "gps/gps_power_policy.h"
 
 #include <algorithm>
 #include <cinttypes>
@@ -28,17 +29,14 @@
 #include "go_melody.h"
 #include "go_melody_sync.h"
 #include "go_power.h"
+#include "go_tracking_session.h"
 #include "go_type_helpers.hpp"
 #include "rtos.h"
 #include "services/ag_client.h"
 
 static constexpr const char *TAG = "Orchestrator";
 
-static constexpr uint8_t SESSION_ID_LENGTH = 5;
 static constexpr uint32_t MAX_SHAKE_EVENT_AGE_MS = 500;
-
-// 5 random draws against ~90k slots: collision probability is negligible.
-static constexpr int SESSION_ID_MAX_RETRIES = 5;
 
 // --- OTA poll cadences (unified _last_ota_check_ms baseline) ---
 // Stationary WiFi OTA availability-check cadence (1 h).
@@ -312,6 +310,11 @@ void Orchestrator::init(WakeCause cause, const BootHandoff &handoff) {
   publish_local_wifi_snapshot();
 
   init_ble_if_portable();
+  if (is_gps_active()) {
+    _svc.gps_service.start();
+  } else {
+    deactivate_gps();
+  }
   if (_settings.operating_mode == OperatingMode::Stationary) {
     enter_stationary();
   }
@@ -1598,10 +1601,48 @@ bool Orchestrator::start_tracking() {
 
   AG_LOGI(TAG, "start_tracking");
 
-  const bool was_gps_active = is_gps_active(); // snapshot before any state flip
+  const bool starting_gps = !is_gps_active() && _settings.gps_mode != GpsMode::AlwaysOff;
+  if (starting_gps) {
+    // Finish any sleep command in flight before deciding whether to wait/reset.
+    _svc.gps_service.stop();
+  }
 
-  const uint32_t session_id = generate_session_id();
+  const uint32_t gps_wait_ms = _svc.gps_service.sleep_remaining_ms();
+  if (_mode == OperatingMode::Offline && _settings.gps_mode != GpsMode::AlwaysOff &&
+      gps_wait_ms > GPS_RESET_THRESHOLD_MS) {
+    BmsStatus status{};
+    // Re-read immediately; a cached status can miss a newly attached USB cable.
+    if (_svc.power_service.poll_status(status) && status.is_power_source_valid() &&
+        (status.power_source == BmsPowerSource::None ||
+         status.power_source == BmsPowerSource::OtgMode)) {
+      if (save_pending_tracking_start(_config_store, true)) {
+        _svc.ui_manager.show_snackbar("Starting tracking...");
+        update_display(/*wait=*/true);
+        _svc.display_service.flush();
+        AG_LOGI(TAG, "GPS wake in %lu ms: requesting battery-powered tracking restart",
+                static_cast<unsigned long>(gps_wait_ms));
+        if (_svc.power_service.request_system_power_reset()) {
+          RTOS::delay_ms(GPS_RESET_CONFIRM_MS); // Successful power cut never returns here.
+        }
+        AG_LOGW(TAG, "System still running; waiting for GPS instead");
+        if (!save_pending_tracking_start(_config_store, false)) {
+          // Reset the tracking state, so next boot not continue tracking
+          if (starting_gps) {
+            deactivate_gps();
+          }
+          _svc.ui_manager.show_snackbar("Tracking start could not be saved");
+          update_display();
+          return false;
+        }
+      }
+    }
+  }
+
+  const uint32_t session_id = generate_tracking_session_id(_svc.storage_service);
   if (session_id == 0 || !_svc.storage_service.create_route(session_id)) {
+    if (starting_gps) {
+      deactivate_gps();
+    }
     AG_LOGE(TAG, "start_tracking: failed to open route (session=%" PRIu32 ")", session_id);
     _svc.ui_manager.show_snackbar("Storage error — can't track");
     update_display();
@@ -1619,7 +1660,7 @@ bool Orchestrator::start_tracking() {
     _tracking_timing = TrackingTiming{};
   }
 
-  if (!was_gps_active && is_gps_active()) {
+  if (starting_gps) {
     _svc.gps_service.start();
   }
 
@@ -2188,7 +2229,7 @@ void Orchestrator::apply_settings_runtime_delta(const GoSettings &previous_setti
   const bool is_gps_active_now = is_gps_active();
   if (!was_gps_active && is_gps_active_now) {
     _svc.gps_service.start();
-  } else if (was_gps_active && !is_gps_active_now) {
+  } else if (!is_gps_active_now && _svc.ui_manager.current_screen() != Screen::GpsTest) {
     deactivate_gps();
   }
   _gps_enabled = (_settings.gps_mode != GpsMode::AlwaysOff);
@@ -2292,7 +2333,8 @@ bool Orchestrator::factory_reset(bool preserve_corrections) {
   if (should_preserve_corrections) {
     defaults.corrections = corrections;
   }
-  if (!activate_settings_candidate(defaults, /*persist=*/true, /*force_persist=*/true)) {
+  if (!save_pending_tracking_start(_config_store, false) ||
+      !activate_settings_candidate(defaults, /*persist=*/true, /*force_persist=*/true)) {
     _svc.ui_manager.show_snackbar("Factory reset failed");
     update_display();
     return false;
@@ -2323,6 +2365,7 @@ void Orchestrator::save_tag(uint8_t tag_index, const char *tag_label) {
 
 void Orchestrator::shutdown(ShipModeRequest reason) {
   AG_LOGI(TAG, "shutdown (reason=%d)", static_cast<int>(reason));
+  _shutting_down = true;
   _svc.accel_service.stop();
 
   // Manufacturing units retain corrections but clear all other settings and
@@ -2367,7 +2410,7 @@ void Orchestrator::shutdown(ShipModeRequest reason) {
 
   // 3. Disable peripherals to reduce power draw before final shutdown.
   _svc.power_service.set_pm_power(false);
-  // TODO: stop GPS when the method is available
+  _svc.gps_service.stop();
 
   // 4. Slow down before power cut so the painted reason screen is visible and
   // the BLE disconnect notice can drain.
@@ -3138,7 +3181,7 @@ void Orchestrator::pause_provisioning_sensitive_services() {
   _pm_state = PmState::Asleep;
   finish_peripheral_test();
   if (is_gps_active()) {
-    _svc.gps_service.stop_and_idle_gnss();
+    _svc.gps_service.stop(); // Preserve receiver operation while tracking/Always On.
   }
   _svc.power_service.set_pm_power(false);
   _provisioning_sensitive_services_paused = true;
@@ -3178,7 +3221,7 @@ void Orchestrator::enter_ota() {
     }
     discard_local_requests("entering committed OTA");
   }
-  pause_provisioning_sensitive_services(); // stop sensor, idle GPS, drop PM rail
+  pause_provisioning_sensitive_services(); // pause sensor/GPS tasks, drop PM rail
 
   // Disarm cloud (parks the task, heap kept; resume is a plain arm()). Not
   // stop() — avoids heap churn for no real gain. See docs/cloud_service.md.
@@ -3446,13 +3489,8 @@ void Orchestrator::prepare_for_sleep(uint32_t sleep_duration_ms) {
   _svc.ble_service.deinit();
   _svc.sensor_producer.stop(/*sleep_pm=*/!hold_pm_sensor);
 
-  // Active GPS: stop task only — leave TAU1113 tracking for hot-start.
-  // Inactive GPS: stop task and send GNSS stop before sleep.
-  if (is_gps_active()) {
-    _svc.gps_service.stop();
-  } else {
-    _svc.gps_service.stop_and_idle_gnss();
-  }
+  // Stop UART ownership first. Active receivers stay powered through MCU sleep.
+  _svc.gps_service.stop();
 
   _svc.input_service.stop();
   _svc.display_service.stop();
@@ -3467,6 +3505,10 @@ void Orchestrator::prepare_for_sleep(uint32_t sleep_duration_ms) {
   _svc.storage_service.end_route();
 
   _svc.storage_service.backup_cache();
+
+  if (!is_gps_active()) {
+    (void)_svc.gps_service.request_sleep(gps_inactive_sleep_ms(_mode, sleep_duration_ms));
+  }
 
   // Persist RTC state with the warm-sensor flag for the next wake cycle.
   RtcAppState state = snapshot_state();
@@ -3486,7 +3528,17 @@ void Orchestrator::prepare_for_sleep(uint32_t sleep_duration_ms) {
 // ---------------------------------------------------------------------------
 
 void Orchestrator::deactivate_gps() {
-  _svc.gps_service.stop_and_idle_gnss();
+  if (_shutting_down) {
+    _svc.gps_service.stop();
+    _latest_gps = GpsData{};
+    return;
+  }
+  const uint32_t interval = static_cast<uint32_t>(_settings.measure_interval_seconds) * 1000;
+  const uint32_t elapsed = static_cast<uint32_t>(RTOS::get_time_ms()) - _last_measurement_ms;
+  const uint32_t next_wake = elapsed < interval ? interval - elapsed : interval;
+  if (!_svc.gps_service.start_sleeping(gps_inactive_sleep_ms(_mode, next_wake))) {
+    AG_LOGE(TAG, "Failed to start GPS sleep maintenance");
+  }
   _latest_gps = GpsData{};
 }
 
@@ -3505,30 +3557,16 @@ bool Orchestrator::is_recording() const {
   return _tracking_state == TrackingState::Recording && _svc.storage_service.is_route_active();
 }
 
-uint32_t Orchestrator::generate_session_id() {
-  // Probe each random draw against existing route files so a collision
-  // never surfaces as a user-visible storage error.
-  for (int i = 0; i < SESSION_ID_MAX_RETRIES; ++i) {
-    const uint32_t id = generate_random_number(SESSION_ID_LENGTH);
-    if (!_svc.storage_service.route_file_exists(id)) {
-      AG_LOGI(TAG, "generate_session_id: %" PRIu32 " (try %d)", id, i + 1);
-      return id;
-    }
-    AG_LOGW(TAG, "generate_session_id: collision on %" PRIu32 " (try %d)", id, i + 1);
-  }
-  AG_LOGE(TAG, "generate_session_id: exhausted %d retries", SESSION_ID_MAX_RETRIES);
-  return 0; // start_tracking treats 0 as a fatal generate failure
-}
-
 RtcAppState Orchestrator::snapshot_state() const {
   RtcAppState state{
       .mode = _mode,
       .behavior = _behavior,
       .lock_state = _lock_state,
       .tracking_state = _tracking_state,
-      .tracking_session_id = _tracking_session_id,
       .tracking_timing =
           tracking_session_active(_tracking_state) ? _tracking_timing : TrackingTiming{},
+      .tracking_session_id = _tracking_session_id,
+      .gps_wake_deadline_ms = _svc.gps_service.sleep_deadline_ms(),
   };
   state.set_flag(RtcAppFlag::GpsEnabled, _gps_enabled);
   return state;

@@ -28,8 +28,9 @@
 class GpsDriver {
 public:
   /// TAU1113 hardware default baud rate (factory setting, restored on every
-  /// power-on reset).
+  /// power-on reset and observed after CFG-SLEEP timed wake).
   static constexpr int MODULE_DEFAULT_BAUD = 9600;
+  static constexpr int MODULE_ACTIVE_BAUD = 115200;
 
   /// Bulk read chunk size used by GpsDriver::read(). Sized to drain the
   /// UART ring buffer in a single call even under worst-case preemption
@@ -39,15 +40,38 @@ public:
   explicit GpsDriver(AirgradientSerial &serial);
   ~GpsDriver();
 
-  /// Initialise the serial link to the GPS module.
+  /// Full acquisition setup: open UART, optionally switch baud, then configure.
   ///
-  /// If @p baud_rate differs from MODULE_DEFAULT_BAUD the driver first opens
+  /// Supports MODULE_DEFAULT_BAUD and MODULE_ACTIVE_BAUD only. Defaults to
+  /// 9600; callers explicitly select 115200 for tracking or Always On.
+  /// If @p baud_rate is MODULE_ACTIVE_BAUD the driver first opens
   /// the UART at 9600 bps, sends the TAU1113 binary command to switch the
   /// module to 115200 bps, tears down the link and re-opens at the target
   /// rate.  If the module was already running at 115200 (e.g. it stayed
   /// powered during deep sleep) the 9600-baud command bytes are received as
   /// garbage and silently ignored, so the sequence is safe in both cases.
-  bool begin(int baud_rate);
+  bool begin(int baud_rate = MODULE_DEFAULT_BAUD);
+
+  /// Open only the host UART at the receiver's current baud rate. Sends no
+  /// receiver commands and does not wake GPS. Clears cached fix/parser state.
+  /// Call end() before changing baud. Use MODULE_DEFAULT_BAUD after timed wake.
+  [[nodiscard]] bool open_uart(int baud_rate);
+
+  /// Poll at the expected baud, then try the other supported baud if silent.
+  /// Returns the responding baud, or zero if neither responds. Leaves UART open
+  /// on success. Does not change receiver configuration or baud.
+  int connect(int expected_baud);
+
+  /// Send the 115200 command over the currently open UART, drain TX, allow
+  /// processing, then reopen the host UART at MODULE_ACTIVE_BAUD. Requires an
+  /// awake receiver. No configuration polls or GNSS start command are sent.
+  /// False means transport failure; receiver baud may then be unknown.
+  [[nodiscard]] bool switch_to_active_baud();
+
+  /// Poll version and configure ephemeris saving/constellations at the current
+  /// baud. Requires an awake receiver and open UART. Failures are logged.
+  /// Separate from open_uart() so sleep-only cycles need no configuration.
+  void configure_receiver();
 
   /// Reconnect to a receiver that remained powered and tracking while the MCU
   /// was in deep sleep. Opens the UART directly at the active baud rate and
@@ -73,6 +97,15 @@ public:
 
   /// Send TAU1113 CFG-GNSS stop. Requires the serial link to be open.
   void gnss_stop();
+
+  /// Request CFG-SLEEP deep sleep for a nonzero duration in milliseconds.
+  /// Requires an awake receiver and an open UART at its current baud rate.
+  /// True means the complete frame finished transmitting, NOT confirmed sleep.
+  /// False means invalid duration, incomplete write, or unconfirmed TX drain;
+  /// after a TX failure the receiver state is unknown. No automatic retry.
+  /// Clears cached data on an attempted request; leaves UART open for end().
+  /// No indefinite-sleep sentinel is defined. The caller owns wake scheduling.
+  [[nodiscard]] bool request_sleep(uint32_t duration_ms);
 
   /// Get the latest GPS data snapshot.
   GpsData get_data() const;
@@ -109,9 +142,6 @@ private:
   // to signed decimal degrees. Negative for South / West.
   static double _to_decimal_degrees(const nmea_position &pos);
 
-  // Send the TAU1113 binary command to switch the module UART to 115200 bps.
-  void _send_baud_115200_command();
-
   /// Send AID-POS (0x0B 0x10) with LLA position.
   void _send_aid_pos(double lat_deg, double lon_deg, float alt_m, float pos_acc_m);
 
@@ -119,7 +149,7 @@ private:
   void _send_aid_time(int64_t epoch_s, uint32_t time_acc_ms);
 
   /// Poll MON-VER (0x0A 0x04) and log the module software/hardware version.
-  void _poll_mon_ver();
+  bool _poll_mon_ver();
 
   /// Send CFG-EPHSAVE (0x06 0x10) to enable ephemeris persistence.
   void _send_cfg_ephsave();

@@ -78,6 +78,13 @@ charts, GPS, and existing data export continue; Stationary cloud upload and
 configuration polling also continue. The display replaces the recording dot
 with a pause icon. A paused route must be stopped before it can be deleted.
 
+Starting tracking may wait for a sleeping GPS. Portable and Stationary do not
+reboot for this; Offline on battery may restart to shorten the wait. The display
+shows “Starting tracking...” before reset, then “Started” with the new
+session ID, or “Tracking not started” on recovery failure. A started session can
+record sensor data before GPS has a position. Always Off still keeps GPS asleep
+while tracking.
+
 The device also keeps a short temporary measurement history for on-device charts.
 This chart data is separate from the persistent route log.
 

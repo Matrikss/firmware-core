@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "rev": "c30bfb9",
+  "rev": "4d70676",
   "product": {
     "slug": "airgradient-go",
     "name": "AirGradient Go",
@@ -5486,6 +5486,63 @@
       "references": [
         "products/go/docs/power_management.md",
         "products/go/docs/input_service.md"
+      ]
+    },
+    {
+      "id": "go.sleep.gps-tracking-restart",
+      "title": "Offline tracking start resets a sleeping GPS and confirms the session",
+      "objective": "Verify the battery-powered reset and visible acknowledgement when tracking starts during a long Offline GPS sleep, then recording at the next scheduled wake.",
+      "category": "Modes & Sleep",
+      "sub_category": "GPS Sleep",
+      "applicability": [
+        "V1"
+      ],
+      "setup": [
+        "Tracking is idle.",
+        "A USB data connection with VBUS disconnected, so logging does not power Go.",
+        "A computer with access to the AirGradient logging tool.",
+        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+      ],
+      "steps": [
+        {
+          "action": "Record the operating mode, lock state, USB connection state, measurement interval, Auto Lock and GPS mode. Unlock with a short Power press if needed.",
+          "expected_result": "The original settings are recorded for cleanup."
+        },
+        {
+          "action": "Connect the USB data connection without VBUS and start the AirGradient logging tool. Observe a power-status log, allowing 40 seconds.",
+          "expected_result": "Logs are visible and the power source is None or OTG, not USB input. If battery power cannot be confirmed, the case is blocked."
+        },
+        {
+          "action": "Select Offline mode. In Settings, set measurement interval 5m (300 seconds), Auto Lock 10s and GPS On When Tracking. Lock and capture the first sleep, timer wake and return to sleep, allowing six minutes from locking. Reconnect the logging tool after wake if needed.",
+          "expected_result": "Go completes an idle Offline measurement cycle and returns to deep sleep. The long interval leaves time to start tracking well before the next GPS wake.",
+          "evidence": [
+            "Save the sleep-duration and timer-wake log entries. Missing cycle logs make this observation incomplete."
+          ]
+        },
+        {
+          "action": "Within 30 seconds of that return to sleep, short-press Power to wake Go and select Start Tracking. Watch the display through the restart, allowing one minute from selection; reconnect logging when the device returns.",
+          "expected_result": "The display paints Starting tracking... before one system restart, then shows Started with a five-digit session ID. The reset-request log reports more than 30000 ms of GPS sleep remaining. Go continues into Offline measurement and sleep without another Start Tracking action.",
+          "evidence": [
+            "Record the display sequence and session ID. Save the reset-request log with remaining GPS sleep time."
+          ]
+        },
+        {
+          "action": "Leave Go untouched through the next scheduled timer wake, allowing six minutes from its post-restart sleep entry. Observe the Home refresh and route append logs, reconnecting logging after wake if needed.",
+          "expected_result": "The next wake refreshes Home and records another point in the session ID shown by Started, without another system power reset. A GPS position is not required for this acknowledgement check.",
+          "evidence": [
+            "Save the matching session ID and point counts from the first post-restart cycle and the next timer-wake cycle."
+          ]
+        }
+      ],
+      "cleanup": [
+        "Wake Go and stop the tracking session created by this case, including after interruption. Leave pre-existing routes untouched.",
+        "Restore the recorded measurement interval, Auto Lock, GPS mode, operating mode, lock state and USB connection state. Record any setting that cannot be restored.",
+        "Save the required logs and disconnect the AirGradient logging tool."
+      ],
+      "references": [
+        "products/go/docs/gps_service.md",
+        "products/go/docs/hardware_init.md",
+        "products/go/docs/power_management.md"
       ]
     },
     {

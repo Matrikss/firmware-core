@@ -469,6 +469,10 @@ bool PowerService::poll_status(BmsStatus &status) {
   return true;
 }
 
+bool PowerService::request_system_power_reset() {
+  return _bms != nullptr && _bms->request_system_power_reset();
+}
+
 // ---------------------------------------------------------------------------
 // PMID boost recovery
 // ---------------------------------------------------------------------------
