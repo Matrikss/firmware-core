@@ -374,8 +374,12 @@ public:
   esp_err_t enter_shutdown_mode();
 
   /**
-   * @brief System power reset (power cycle)
-   * @return ESP_OK on success
+   * @brief Request system power reset on battery or with an adapter present.
+   * Requires successful init(). Selects the 25 ms initiation delay; BATFET
+   * remains off for the chip's reset interval before system power returns.
+   * Persist application state before calling; this method may not return.
+   * @return ESP_OK if the command was written, not confirmation of restart.
+   *         ESP_ERR_INVALID_STATE if not initialized; otherwise an I2C error.
    */
   esp_err_t system_power_reset();
 

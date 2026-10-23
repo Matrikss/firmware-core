@@ -66,6 +66,12 @@ public:
   /// @return false if ship mode is not supported or if the request failed.
   virtual bool enter_ship_mode() = 0;
 
+  /// Request a full system power cycle on battery or external power.
+  /// Persist application state before calling; power may disappear before return.
+  /// True means the command was written, not that the system restarted.
+  /// False means unsupported or a driver error; the caller owns recovery.
+  [[nodiscard]] virtual bool request_system_power_reset() { return false; }
+
   /// Configure the PMID rail operating mode.
   ///
   /// Products can use this to switch between external-input pass-through and

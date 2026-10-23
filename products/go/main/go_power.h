@@ -245,6 +245,9 @@ public:
   /// @return true if the read succeeded.
   bool poll_status(BmsStatus &status);
 
+  /// Request a system power reset through the charger. Returns false if unavailable or failed.
+  bool request_system_power_reset();
+
   /// Re-kick PMID boost if collapsed.  Acts only when on battery with a
   /// valid vpmid below PMID_HEALTHY_MIN_MV.
   /// @return true if a re-kick was performed.

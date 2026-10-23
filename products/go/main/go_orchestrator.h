@@ -124,7 +124,8 @@ private:
   uint32_t _last_bms_poll_ms = 0;
   uint32_t _last_bms_status_poll_ms = 0;
   uint32_t _last_ext_wdt_ms = 0;
-  uint32_t _last_input_ms = 0;                ///< Inactivity baseline: input or explicit UI exit
+  uint32_t _last_input_ms = 0; ///< Inactivity baseline: input or explicit UI exit
+  bool _shutting_down = false;
   uint32_t _snackbar_refresh_deadline_ms = 0; ///< 0 = inactive; non-zero = absolute deadline
   bool _first_measurement_done = false;
   bool _tracking_status_was_visible = false; ///< Detect Status exit once; not RTC-persisted
@@ -461,10 +462,6 @@ private:
 
   /// Recording requires an open route; Paused retains only the session ID.
   bool is_recording() const;
-
-  /// Random 5-digit ID with bounded collision retry. Returns 0 on
-  /// exhaustion (start_tracking treats that as a fatal failure).
-  uint32_t generate_session_id();
 
   RtcAppState snapshot_state() const;
 };

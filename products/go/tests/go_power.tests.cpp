@@ -51,6 +51,7 @@ public:
   IMPLEMENT_MOCK0(update_watchdog);
   IMPLEMENT_CONST_MOCK0(feature_ship_available);
   IMPLEMENT_MOCK0(enter_ship_mode);
+  IMPLEMENT_MOCK0(request_system_power_reset);
   IMPLEMENT_MOCK1(configure_pmid_mode);
   IMPLEMENT_MOCK1(set_pmid_enabled);
   IMPLEMENT_MOCK0(resync_pmid);
@@ -402,6 +403,25 @@ TEST_CASE("poll_status: charger status pass-through", "[PowerService][status]") 
   }
 }
 
+TEST_CASE("request_system_power_reset: unavailable charger and reset failures",
+          "[PowerService][reset]") {
+  MockBmsDevice mock_bms;
+  PowerService svc(&mock_bms, test_gpio_hal, DEFAULT_CONFIG);
+
+  SECTION("No charger") {
+    svc.set_bms(nullptr);
+    CHECK_FALSE(svc.request_system_power_reset());
+  }
+  SECTION("Charger rejects reset") {
+    REQUIRE_CALL(mock_bms, request_system_power_reset()).RETURN(false);
+    CHECK_FALSE(svc.request_system_power_reset());
+  }
+  SECTION("Charger accepts reset") {
+    REQUIRE_CALL(mock_bms, request_system_power_reset()).RETURN(true);
+    CHECK(svc.request_system_power_reset());
+  }
+}
+
 // ============================================================================
 // TEST CASE 4 — evaluate_sleep
 // ============================================================================
@@ -620,6 +640,7 @@ TEST_CASE("save_state / load_state: RTC state round-trip", "[PowerService][rtc]"
     stale.tracking_session_id = 42731;
     stale.flags = ~uint32_t{0};
     stale.tracking_timing = {100, 20, 130, 140};
+    stale.gps_wake_deadline_ms = uint64_t{UINT32_MAX} + 60000;
     svc.save_state(stale);
     invalidate_rtc_app_state_for_test();
 
@@ -634,6 +655,7 @@ TEST_CASE("save_state / load_state: RTC state round-trip", "[PowerService][rtc]"
       CHECK(loaded.tracking_timing.recording_accumulated_s == TRACKING_TIME_INVALID_S);
       CHECK(loaded.tracking_timing.recording_started_s == TRACKING_TIME_INVALID_S);
       CHECK(loaded.tracking_timing.last_record_s == TRACKING_TIME_INVALID_S);
+      CHECK(loaded.gps_wake_deadline_ms == 0);
     }
   }
 
@@ -651,6 +673,7 @@ TEST_CASE("save_state / load_state: RTC state round-trip", "[PowerService][rtc]"
         saved.tracking_session_id = 42731;
         saved.flags = reserved;
         saved.tracking_timing = {100, 20, 130, 140};
+        saved.gps_wake_deadline_ms = uint64_t{UINT32_MAX} + 60000;
         saved.set_flag(RtcAppFlag::GpsEnabled, (combination & 0x01) != 0);
         saved.set_flag(RtcAppFlag::SensorsWarm, (combination & 0x02) != 0);
         saved.set_flag(RtcAppFlag::ChargingOnlyRequested, (combination & 0x04) != 0);
@@ -662,6 +685,7 @@ TEST_CASE("save_state / load_state: RTC state round-trip", "[PowerService][rtc]"
           CHECK(loaded.lock_state == saved.lock_state);
           CHECK(loaded.tracking_state == saved.tracking_state);
           CHECK(loaded.tracking_session_id == saved.tracking_session_id);
+          CHECK(loaded.gps_wake_deadline_ms == saved.gps_wake_deadline_ms);
           CHECK(loaded.tracking_timing.session_started_s == 100);
           CHECK(loaded.tracking_timing.recording_accumulated_s == 20);
           CHECK(loaded.tracking_timing.recording_started_s == 130);

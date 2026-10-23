@@ -401,19 +401,27 @@ outcome instead of the pre-spec "was-idle" heuristic.
 `start_tracking()`:
 
 1. Returns `false` immediately if a session is Recording or Paused.
-2. Generates a 5-digit session ID (10000–99999) via `generate_session_id()`,
-   which probes each random candidate against
-   `storage.route_file_exists()` and retries up to 5 times on collision.
-   At ~1000 stored sessions the all-five-collide probability is on the
-   order of `1.7×10⁻¹⁰`; on exhaustion the helper returns 0.
-3. Calls `storage.create_route(session_id)`. On `session_id == 0` or
+2. If Offline, GPS is enabled, and its remaining sleep exceeds the reset
+   threshold, rechecks power through `PowerService::poll_status()`. On battery
+   (`None` or `OtgMode`), commits the pending-start flag, paints and flushes
+   “Starting tracking...”, then requests a system power reset. USB input or
+   unknown power status uses the wait path. See [GPS Sleep Policy](gps_service.md#starting-tracking-while-gps-sleeps).
+3. If no reset occurs, generates a 5-digit session ID (10000–99999) via
+   `generate_tracking_session_id()`. The shared helper checks existing routes
+   and tries up to five candidates before returning 0.
+4. Calls `storage.create_route(session_id)`. On `session_id == 0` or
    open-failure, shows the `"Storage error — can't track"` snackbar
    inline, pushes a BLE Status notify with `tracking=false`, `session=0`,
    `trk=0`, and returns `false` while remaining Idle.
-4. On success sets `_tracking_state = Recording`, `_behavior = Tracking`,
+5. On success sets `_tracking_state = Recording`, `_behavior = Tracking`,
    brings up GPS if the `GpsMode` requires it, shows the
    `"Tracking start = NNNNN"` snackbar, and pushes a BLE Status notify
    with `tracking=true`, the new session ID, and `trk=1`.
+
+After a successful power reset, GoApp creates the session and confirms it before
+entering the Offline fast path. Only the pending-start boolean survives this
+transition in NVS; no route or point exists before reset. Portable/Stationary
+never reset to start tracking. A session can start before a valid GPS fix.
 
 `pause_tracking()` changes Recording to Paused, flushes/closes the route with
 `end_route()`, and retains the session ID. It shows `"Tracking paused"` on success
@@ -648,7 +656,7 @@ Unified shutdown pipeline for all shutdown paths. Takes an optional
 3. Queue the shutdown frame with `update_display(wait=true)` and
    `DisplayService::flush()` so the e-paper paint is complete before continuing
 4. Persist state: stop tracking if active, backup chart cache
-5. Disable peripherals: `set_pm_power(false)`, GPS stop (TODO)
+5. Disable peripherals: `set_pm_power(false)`, stop the GPS worker without sending sleep
 6. Slow down before power cut (`SHUTDOWN_POWER_OFF_SETTLE_MS`, 500 ms) so the
    painted reason screen remains visible and the `disc` notice can drain
 7. `PowerService::shutdown()` — BMS ship mode → deep sleep fallback
@@ -768,7 +776,7 @@ through `on_wifi_connected()`; STA failure routes through the disconnect policy.
 `pause_provisioning_sensitive_services()` is called inside
 `enter_provisioning_page()` immediately before
 `WifiService::start_provisioning()`. It stops the sensor producer,
-idles the GNSS receiver if GPS is active, and drops the PM sensor power
+stops the GPS worker while leaving an active receiver running, and drops the PM sensor power
 rail so the Wi-Fi driver has enough DMA-capable contiguous heap while
 the provisioning transport stack is active.
 It also cancels pending refresh UI and clears the pending-measurement flag;
@@ -1098,14 +1106,15 @@ device is locked and the first measurement is complete:
 ### `prepare_for_sleep()`
 
 ```text
-1. Final display update with wait=true (blocks until e-paper refresh done)
+1. Final display update with wait=true (waits for framebuffer ownership)
 2. save_rtc_display_snapshot(values) — persist sensor values, battery,
    status flags, rendering settings to RTC memory for next button wake
 3. Stop services: BLE, sensor producer, GPS, input, display worker
 4. display_service.deep_sleep() — put SSD1680 into sleep mode 1 (<1 µA)
-5. storage.backup_cache() — persist chart data to RTC memory
-6. power_service.save_state(snapshot_state()) — persist app state
-7. power_service.reset_ext_watchdog() — maximize timeout window during sleep
+5. Close the route and backup chart data to RTC memory
+6. If GPS is inactive, request its sleep interval for the planned ESP sleep
+7. power_service.save_state(snapshot_state()) — includes the GPS wake deadline
+8. power_service.reset_ext_watchdog() — maximize timeout window during sleep
 ```
 
 The shared retained uptime utility needs no `prepare_for_sleep()` checkpoint.
@@ -1128,7 +1137,9 @@ after `stop()` to ensure the worker task is no longer using the SPI bus.
 | `OnWhenTracking` | `tracking_session_active(_tracking_state)` — Recording or Paused |
 
 This method gates cached GPS updates and the start/stop decisions for the
-receiver. Pause and Resume leave the receiver and cached fix intact.
+receiver. Pause and Resume leave the receiver and cached fix intact. Inactive
+GPS uses `start_sleeping()` to maintain timed sleep; active GPS stays running
+through ESP sleep. See [GPS Service](gps_service.md#sleep-policy).
 
 ## Sensor Scheduling
 
@@ -1239,7 +1250,7 @@ screens keep their existing suppression. See
 
 ## Session ID Generation
 
-`generate_session_id()` uses the shared `generate_random_number(5)` helper
+`generate_tracking_session_id()` uses the shared `generate_random_number(5)` helper
 from `airgradient-common` and returns a 5-digit ID in the range 10000–99999.
 `0` remains reserved as the "no active session" sentinel.
 

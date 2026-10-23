@@ -12,6 +12,8 @@
 
 #include "go_app.h"
 
+#include <cstdio>
+
 #include "ag_log.h"
 #include "common.h"
 #include "led/go_led_types.h"
@@ -47,11 +49,13 @@ inline esp_reset_reason_t esp_reset_reason() { return ESP_RST_UNKNOWN; }
 #include "go_sensor_producer.h"
 #include "go_settings.h"
 #include "go_storage.h"
+#include "go_tracking_session.h"
 #include "go_type_helpers.hpp"
 #include "go_ui.h"
 #include "go_ulp.h"
 #include "go_wifi.h"
 #include "gps/gps_service.h"
+#include "gps/gps_power_policy.h"
 #include "measurement_corrections.h"
 #include "retained_uptime.h"
 #include "rtos.h"
@@ -158,6 +162,17 @@ bool GoApp::init_bms_with_retry() {
   return false;
 }
 
+static int expected_gps_baud_at_boot(WakeCause cause, const GoSettings &settings,
+                                     const RtcAppState &state) {
+  if (cause == WakeCause::PowerOn) {
+    return GpsDriver::MODULE_DEFAULT_BAUD;
+  }
+  if (is_gps_active_at_boot(settings, state)) {
+    return GpsDriver::MODULE_ACTIVE_BAUD;
+  }
+  return GpsDriver::MODULE_DEFAULT_BAUD;
+}
+
 // ===========================================================================
 // GoApp::run() — boot path selection
 // ===========================================================================
@@ -194,6 +209,21 @@ void GoApp::run() {
           state.has_flag(RtcAppFlag::SensorsWarm));
 
   BootPath path = select_boot_path(cause, state, charging_only_eligible);
+  const char *boot_message = nullptr;
+
+  // Check if its system reset from pending tracking flow
+  if (path != BootPath::ChargingOnly && cause == WakeCause::PowerOn &&
+      pending_tracking_start(_board.config_store())) {
+    const GoSettings settings = _board.load_settings();
+    if (settings.operating_mode == OperatingMode::Offline) {
+      if (recover_offline_tracking_start(settings, state)) {
+        path = BootPath::FastPath;
+      } else {
+        boot_message = "Tracking not\nstarted";
+      }
+    }
+  }
+
   switch (path) {
   case BootPath::ChargingOnly:
     run_charging_only(charging_status);
@@ -206,9 +236,57 @@ void GoApp::run() {
     break; // never reached
   case BootPath::Interactive:
     AG_LOGI(TAG, "Serial number: %s", _board.serial_number().c_str());
-    run_interactive(cause, {});
+    run_interactive(cause, state, {}, boot_message);
     break; // never reached
   }
+}
+
+// ===========================================================================
+// Recover the session before entering the cold Offline fast path.
+// ===========================================================================
+
+bool GoApp::recover_offline_tracking_start(const GoSettings &settings, RtcAppState &state) {
+  if (!save_pending_tracking_start(_board.config_store(), false)) {
+    AG_LOGE(TAG, "Tracking recovery: failed to clear pending start");
+    return false;
+  }
+
+  _board.init_core();
+  StorageService &storage = _board.storage();
+  const uint32_t session_id = generate_tracking_session_id(storage);
+  if (session_id == 0 || !storage.create_route(session_id)) {
+    AG_LOGE(TAG, "Tracking recovery: failed to create route");
+    return false;
+  }
+  if (!storage.end_route()) {
+    AG_LOGE(TAG, "Tracking recovery: failed to close new route");
+    return false;
+  }
+
+  state = {};
+  state.mode = OperatingMode::Offline;
+  state.behavior = Behavior::Tracking;
+  state.tracking_state = TrackingState::Recording;
+  state.tracking_session_id = session_id;
+  state.set_flag(RtcAppFlag::GpsEnabled, settings.gps_mode != GpsMode::AlwaysOff);
+  if (!tracking_timing_start(state.tracking_timing,
+                             tracking_seconds_from_ms(RTOS::get_retained_time_ms()))) {
+    state.tracking_timing = {};
+  }
+  AG_LOGI(TAG, "Tracking recovery: starting Offline fast path");
+
+  char message[48];
+  (void)snprintf(message, sizeof(message), "Started\n%05lu",
+                 static_cast<unsigned long>(session_id));
+  DisplayValues values = build_boot_splash_values();
+  values.info_text = message;
+  values.tracking_state = TrackingState::Recording;
+  DisplayService &display = _board.display();
+  display.init(values);
+  // Leave the confirmation visible during warmup. The fast path initializes
+  // its own display worker when the first measurement is ready.
+  display.stop();
+  return true;
 }
 
 // ===========================================================================
@@ -321,6 +399,22 @@ void GoApp::run_factory_learning_path(const RtcAppState & /*state*/) {
 // Fast-path boot (timer wake, locked)
 // ===========================================================================
 
+void GoApp::prepare_gps_for_sleep(uint32_t duration_ms, RtcAppState &state) {
+  const auto settings = _board.load_settings();
+  if (is_gps_active_at_boot(settings, state) ||
+      state.gps_wake_deadline_ms > RTOS::get_retained_time_ms()) {
+    return;
+  }
+  auto *driver = _board.new_gps_driver();
+  if (driver != nullptr) {
+    GpsService service(*driver, nullptr, {.wake_deadline_ms = state.gps_wake_deadline_ms});
+    if (!service.request_sleep(gps_inactive_sleep_ms(settings.operating_mode, duration_ms))) {
+      AG_LOGW(TAG, "GPS sleep request failed");
+    }
+    state.gps_wake_deadline_ms = service.sleep_deadline_ms();
+  }
+}
+
 void GoApp::run_fast_path(const RtcAppState &state) {
   AG_LOGI(TAG, "run_fast_path: entering fast-path boot (sensors_warm=%d)",
           state.has_flag(RtcAppFlag::SensorsWarm));
@@ -351,12 +445,13 @@ void GoApp::run_fast_path(const RtcAppState &state) {
 
   if (result.outcome == FastPathResult::Outcome::Sleep) {
     save.set_flag(RtcAppFlag::SensorsWarm, result.sensors_warm);
-    _board.power().save_state(save);
 
     _board.display().stop();
     _board.display().deep_sleep();
     _board.ulp_start();
     log_heap(TAG, "boot:fast-path:before-sleep");
+    prepare_gps_for_sleep(result.sleep_duration_ms, save);
+    _board.power().save_state(save);
     _board.power().enter_sleep(result.sleep_duration_ms);
     // Never returns — CPU reboots on wake.
     return;
@@ -378,7 +473,7 @@ void GoApp::run_fast_path(const RtcAppState &state) {
   }
 
   AG_LOGI(TAG, "fast-path promoting to interactive (button=%d)", static_cast<int>(button_pressed));
-  run_interactive(WakeCause::Timer, result.handoff);
+  run_interactive(WakeCause::Timer, save, result.handoff);
 }
 
 // ===========================================================================
@@ -465,9 +560,12 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
   GpsData gps{};
   const bool gps_active = is_gps_active_at_boot(settings, state);
 
-  if (!promote && tracking_session_active(state.tracking_state) && gps_active) {
+  if (!promote && gps_active) {
     auto *gps_driver = _board.new_gps_driver();
-    gps = gps_read_once(*gps_driver, GPS_BAUD, GPS_FAST_PATH_READ_TIMEOUT_MS, button_pressed);
+    if (gps_driver != nullptr) {
+      gps = gps_read_once(*gps_driver, GPS_BAUD, GPS_FAST_PATH_READ_TIMEOUT_MS, button_pressed,
+                          state.gps_wake_deadline_ms);
+    }
     AG_LOGI(TAG, "fast-path: gps fix_type=%d sat=%d lat=%.6f lon=%.6f alt=%.1f hdop=%.1f",
             static_cast<int>(gps.fix.fix_type), gps.fix.satellite_count, gps.position.latitude,
             gps.position.longitude, gps.altitude_m, gps.fix.hdop);
@@ -489,7 +587,7 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
     stor.cache_measurement(ago);
 
     if (state.tracking_state == TrackingState::Recording) {
-      // Fast path can only resume — only prepare_for_sleep sets tracking_state.
+      // The session was opened before sleep or during tracking-start recovery.
       if (!stor.resume_route(state.tracking_session_id)) {
         AG_LOGW(TAG, "fast-path: resume_route failed → promote");
         promote = true;
@@ -684,12 +782,15 @@ void GoApp::run_button_wake_path(const RtcAppState &state) {
                              .nox_learning_offset = settings.nox_learning_offset,
                          });
 
-  auto *gps_service = new GpsService(*gps_driver, event_queue,
-                                     {
-                                         .baud_rate = GPS_BAUD,
-                                         .task_stack_size = 4096,
-                                         .task_priority = 3,
-                                     });
+  auto *gps_service = new GpsService(
+      *gps_driver, event_queue,
+      {
+          .baud_rate = GPS_BAUD,
+          .task_stack_size = 4096,
+          .task_priority = 3,
+          .expected_baud = expected_gps_baud_at_boot(WakeCause::Button, settings, state),
+          .wake_deadline_ms = state.gps_wake_deadline_ms,
+      });
 
   // InputService: suppress the first ButtonPower event (the wake press)
   auto *input_service = new InputService(*touch, _board.gpio_hal(), event_queue,
@@ -724,16 +825,8 @@ void GoApp::run_button_wake_path(const RtcAppState &state) {
       .serial_number = serial.c_str(),
   });
 
-  // Determine whether GPS should be active based on settings and RTC state.
-  const bool gps_active = is_gps_active_at_boot(settings, state);
-
   // Start producer tasks — touch and sensors operational from here (~310 ms)
   sensor_producer->start();
-  if (gps_active) {
-    gps_service->start();
-  } else {
-    gps_service->idle_gnss();
-  }
   input_service->start();
   if (!accel_service->start()) {
     AG_LOGW(TAG, "accelerometer worker not started");
@@ -836,7 +929,9 @@ void GoApp::run_button_wake_path(const RtcAppState &state) {
 // run_interactive — unified interactive entry
 // ===========================================================================
 
-void GoApp::run_interactive(WakeCause cause, BootHandoff handoff) {
+void GoApp::run_interactive(WakeCause cause, RtcAppState boot_state, BootHandoff handoff,
+                            const char *boot_message) {
+  const char *splash_text = boot_message != nullptr ? boot_message : BOOT_SPLASH_TEXT;
   // --- Early display paint ---
   // Start the e-paper refresh before the slower I2C, BMS, sensor, and NAND
   // initialization. The display worker owns SPI while it refreshes; NAND
@@ -851,6 +946,7 @@ void GoApp::run_interactive(WakeCause cause, BootHandoff handoff) {
       initial_values = build_wake_values(*handoff.display_snapshot, true);
     } else {
       initial_values = build_boot_splash_values();
+      initial_values.info_text = splash_text;
       boot_splash_requested = true;
     }
 
@@ -951,7 +1047,11 @@ void GoApp::run_interactive(WakeCause cause, BootHandoff handoff) {
 
   auto *gps_service =
       new GpsService(*gps_driver, event_queue,
-                     {.baud_rate = GPS_BAUD, .task_stack_size = 4096, .task_priority = 3});
+                     {.baud_rate = GPS_BAUD,
+                      .task_stack_size = 4096,
+                      .task_priority = 3,
+                      .expected_baud = expected_gps_baud_at_boot(cause, settings, boot_state),
+                      .wake_deadline_ms = boot_state.gps_wake_deadline_ms});
 
   auto *input_service = new InputService(*touch, _board.gpio_hal(), event_queue,
                                          {.pin_cap_int = PIN_CAP_INT,
@@ -972,7 +1072,7 @@ void GoApp::run_interactive(WakeCause cause, BootHandoff handoff) {
   // Seed UI state after the early splash paint. Orchestrator opens the guide
   // during init for fresh devices; onboarded devices wait for a measurement.
   if (boot_splash_requested) {
-    ui_manager->show_info(BOOT_SPLASH_TEXT);
+    ui_manager->show_info(splash_text);
   }
 
   // --- OtaService (borrows the shared server + PowerService; owns the writer) ---
@@ -1000,22 +1100,8 @@ void GoApp::run_interactive(WakeCause cause, BootHandoff handoff) {
     }
   }
 
-  // --- Determine whether GPS should be active ---
-  // On fresh power-on, tracking is always inactive (no RTC state).
-  // On wake from sleep, load the persisted tracking state.
-  RtcAppState boot_state{};
-  if (cause != WakeCause::PowerOn) {
-    boot_state = load_rtc_app_state();
-  }
-  const bool gps_active = is_gps_active_at_boot(settings, boot_state);
-
   // --- Start producer tasks ---
   sensor_producer->start();
-  if (gps_active) {
-    gps_service->start();
-  } else {
-    gps_service->idle_gnss();
-  }
   input_service->start();
   if (!accel_service->start()) {
     AG_LOGW(TAG, "accelerometer worker not started");

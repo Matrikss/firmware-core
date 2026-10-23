@@ -57,6 +57,13 @@ public:
   virtual int write(const uint8_t *data, int len);
 
   /**
+   * Wait up to timeout_ms for queued bytes to finish transmitting.
+   * True means the transmitter is idle, not that the peer accepted the data.
+   * The default returns false: transports must explicitly support this.
+   */
+  virtual bool wait_tx_done(uint32_t timeout_ms);
+
+  /**
    * Read a single byte.
    *
    * @return Byte value (0-255), or -1 if no data available

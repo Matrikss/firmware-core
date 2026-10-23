@@ -90,11 +90,18 @@ host tests can construct and validate them without the I2C master.
 | `update_watchdog()` | Reset HW watchdog |
 | `feature_ship_available()` | Query ship-mode capability |
 | `enter_ship_mode()` | Power off (should not return) |
+| `request_system_power_reset()` | Request a system power cycle; default implementation returns `false` |
 | `set_pmid_enabled(enabled)` | Enable/disable PMID boost converter (EN_OTG) |
 | `resync_pmid()` | Re-apply full PMID configuration sequence + verify (recovery) |
 | `set_charge_enable(enabled)` | Enable/disable battery charging current path |
 | `set_charge_current_ma(mA)` | Set fast-charge current limit (CC mode) |
 | `set_watchdog_timeout_ms(ms)` | Configure chip-level watchdog timeout |
+
+`BQ25629Bms::request_system_power_reset()` requests a BATFET reset through
+`BQ25629::system_power_reset()`, preserving unrelated charger-control bits.
+Persist required state before calling: `true` means the command was written,
+not that power cycled. Go uses this only on battery; with external USB power,
+it waits for GPS instead. See [GPS Service](../../products/go/docs/gps_service.md#starting-tracking-while-gps-sleeps).
 
 The `set_pmid_enabled` primitive is retained for explicit PMID lifecycle
 control (e.g. shutdown sequencing). It is no longer driven by

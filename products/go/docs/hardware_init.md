@@ -69,6 +69,13 @@ selects the charging-only path even when external power cannot be confirmed.
 GoApp consumes the request and uses the existing charging-only display and
 polling loop.
 
+After selection, a non-charging-only `PowerOn` with pending `trk_start` and
+Offline settings attempts tracking recovery. GoApp clears the NVS flag, creates
+and closes a new route, initializes Recording state, then shows “Started”
+with the session ID before entering the cold fast path. Failure falls
+back to interactive boot with “Tracking not started” as the splash. The fast
+path still permits button promotion; recovery does not rerun the reset decision.
+
 `run_charging_only()` initializes the fuel gauge and display, disables PM power,
 and uses the detection status to show Charging or Battery Full. It feeds the
 external watchdog from the main CPU, sleeps in two-second light-sleep intervals,

@@ -22,16 +22,19 @@
 #include "rtos.h"
 
 #include <cstdint>
+#include <atomic>
 
 inline constexpr int GPS_POSTING_INTERVAL_MS_DEFAULT = 5000;
 
 class GpsService {
 public:
   struct Config {
-    int baud_rate = 115200;
+    int baud_rate = GpsDriver::MODULE_ACTIVE_BAUD;
     int posting_interval_ms = GPS_POSTING_INTERVAL_MS_DEFAULT;
     uint16_t task_stack_size = 4096;
     uint8_t task_priority = 3; // must be below display worker (4)
+    int expected_baud = GpsDriver::MODULE_DEFAULT_BAUD;
+    uint64_t wake_deadline_ms = 0; // restored from RtcAppState after deep sleep
   };
 
   /// Construct the service.  Does not start the task.
@@ -45,20 +48,31 @@ public:
 
   /// Start GPS task and GNSS receiver. Returns true if running or started.
   /// Idempotent: returns true without creating a second task if already running.
+  /// If sleeping, the task waits for the expected wake before acquisition setup.
+  /// stop() cancels that wait. Success means task creation, not GPS readiness.
+  /// Lifecycle calls (start/stop/sleep) require one owning caller.
   bool start();
+
+  /// Keep GPS inactive while ESP is awake. The worker sends sleep, waits for
+  /// its deadline, and repeats. start() changes back to acquisition; stop()
+  /// cancels maintenance. A sleeping receiver keeps its existing deadline.
+  bool start_sleeping(uint32_t interval_ms);
 
   /// Stop GPS task and close UART. Does not send GNSS stop.
   /// Used when entering ESP32 deep sleep while GPS is active (preserves
   /// TAU1113 tracking for hot-start).
   void stop();
 
-  /// Stop GPS task, send GNSS stop while serial is still open, then close UART.
-  /// Used when GPS mode becomes inactive. Safe when the task is already stopped.
-  void stop_and_idle_gnss();
+  /// Stop acquisition, transmit CFG-SLEEP at the expected baud and close UART.
+  /// Zero duration is rejected without changing anything. An already sleeping
+  /// GPS keeps its original deadline; pending activation is cancelled.
+  /// True means TX completed, not confirmed module sleep. False means no new
+  /// request or transport failure. A failed request does not create a deadline.
+  [[nodiscard]] bool request_sleep(uint32_t duration_ms);
 
-  /// Open UART briefly, send GNSS stop, then close UART. Used when no task is
-  /// running (e.g. boot with GPS inactive).
-  void idle_gnss();
+  /// Expected time remaining, not hardware-confirmed sleep status.
+  uint32_t sleep_remaining_ms() const;
+  uint64_t sleep_deadline_ms() const;
 
   /// Return the most recent parsed fix (thread-safe copy).
   GpsData get_latest_fix() const;
@@ -72,22 +86,36 @@ public:
   /// next task-loop iteration.
   void set_aiding_data(const GpsAidingData &data);
 
+#ifdef TEST_HOST
+  friend class GpsServiceTestAccess;
+#endif
+
 private:
   GpsDriver &_driver;
   RtosQueueHandle _event_queue;
   Config _config;
 
   GpsData _latest_fix; // protected by _mutex
-  volatile bool _running = false;
+  std::atomic<bool> _running{false};
   RtosTaskHandle _task_handle = nullptr;
   mutable RtosMutex _mutex;
   RtosBinarySemaphore _done_sem; // signalled by task before self-delete
   bool _clock_synced = false;
   GpsAidingData _aiding_data;   // protected by _mutex
   bool _aiding_pending = false; // protected by _mutex
+  // Worker owns baud while running; lifecycle caller joins before accessing it.
+  int _baud_rate;
+  uint64_t _wake_deadline_ms;      // protected by _mutex
+  uint32_t _sleep_interval_ms = 0; // zero: acquire; nonzero: repeat sleep
 
   static void task_entry(void *arg); // RTOS task entry point
   void run();                        // actual task loop
+  bool start_worker(uint32_t sleep_interval_ms);
+  void run_acquisition();
+  void run_sleep_loop();
+  bool wait_for_wake();
+  bool send_sleep(uint32_t duration_ms); // caller owns UART; never joins worker
+  bool activate_receiver();              // cancellable wait, then acquisition setup
 
   void update_latest_fix(const GpsData &data);    // writes under mutex
   void post_fix_event();                          // post GpsData to event queue
@@ -98,11 +126,10 @@ private:
 /// timeout_ms expires, or abort becomes true. For use in the fast-path
 /// timer-wake boot path only — does not require a running RTOS task.
 ///
-/// The receiver must have remained powered and tracking through deep sleep.
-/// The function reconnects directly at @p baud_rate without reconfiguring or
-/// restarting the receiver, then waits for a valid fix with valid coordinates.
+/// Tries the expected active baud, then the other baud if GPS is silent.
+/// A receiver still within its sleep deadline is left alone.
 ///
-/// @param driver     GPS driver; begin_hot_resume() / end() are called internally.
+/// @param driver     GPS driver; UART is closed before returning.
 /// @param baud_rate  Active receiver baud rate.
 /// @param timeout_ms Maximum time to wait for a valid position, in milliseconds.
 /// @param abort      When true, the polling loop exits early. Intended for
@@ -112,4 +139,4 @@ private:
 inline const volatile bool gps_no_abort = false;
 
 GpsData gps_read_once(GpsDriver &driver, int baud_rate, uint32_t timeout_ms,
-                      const volatile bool &abort = gps_no_abort);
+                      const volatile bool &abort = gps_no_abort, uint64_t wake_deadline_ms = 0);

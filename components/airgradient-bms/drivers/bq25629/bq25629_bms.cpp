@@ -295,7 +295,7 @@ bool BQ25629Bms::update_watchdog() {
 }
 
 // ---------------------------------------------------------------------------
-// BmsDevice -- ship mode
+// BmsDevice -- ship mode and system power reset
 // ---------------------------------------------------------------------------
 
 bool BQ25629Bms::feature_ship_available() const { return true; }
@@ -304,6 +304,15 @@ bool BQ25629Bms::enter_ship_mode() {
   esp_err_t err = _charger.enter_ship_mode();
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "enter_ship_mode failed: %s", esp_err_to_name(err));
+    return false;
+  }
+  return true;
+}
+
+bool BQ25629Bms::request_system_power_reset() {
+  const esp_err_t err = _charger.system_power_reset();
+  if (err != ESP_OK) {
+    ESP_LOGE(TAG, "system_power_reset failed: %s", esp_err_to_name(err));
     return false;
   }
   return true;

@@ -101,6 +101,10 @@ int AirgradientUART::write(const uint8_t *data, int len) {
   return 0;
 }
 
+bool AirgradientUART::wait_tx_done(uint32_t timeout_ms) {
+  return isInitialized && uart_wait_tx_done(_port_num, pdMS_TO_TICKS(timeout_ms)) == ESP_OK;
+}
+
 int AirgradientUART::read() {
   if (!isInitialized) {
     return -1;

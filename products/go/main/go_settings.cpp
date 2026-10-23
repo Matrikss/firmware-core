@@ -6,6 +6,18 @@
 
 static constexpr const char *TAG = "Settings";
 
+static constexpr const char *KEY_PENDING_TRACKING_START = "trk_start";
+
+bool pending_tracking_start(ConfigStore &store) {
+  bool pending = false;
+  return store.get_bool(KEY_PENDING_TRACKING_START, pending) == ConfigStoreResult::OK && pending;
+}
+
+bool save_pending_tracking_start(ConfigStore &store, bool pending) {
+  return store.set_bool(KEY_PENDING_TRACKING_START, pending) == ConfigStoreResult::OK &&
+         store.commit() == ConfigStoreResult::OK;
+}
+
 namespace {
 
 constexpr const char *KEY_MEASURE_INTERVAL_SECONDS = "mi";

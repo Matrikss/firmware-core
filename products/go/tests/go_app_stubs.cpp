@@ -56,8 +56,17 @@ bool sensor_stopped = false;
 // --- GpsService ---
 bool gps_started = false;
 bool gps_stopped = false;
-bool gps_idle_called = false;
+bool gps_sleep_requested = false;
+bool gps_sleeping_started = false;
+uint32_t gps_sleep_interval_ms = 0;
+uint32_t gps_sleep_request_count = 0;
+uint32_t gps_remaining_ms = 0;
+int gps_initial_baud = 0;
+uint64_t gps_initial_deadline_ms = 0;
+uint32_t gps_sleep_duration_ms = 0;
+bool gps_sleep_ok = true;
 GpsData gps_data_to_return{};
+bool gps_read_called = false;
 
 // --- InputService ---
 bool input_started = false;
@@ -67,6 +76,9 @@ bool input_stopped = false;
 bool cache_measurement_called = false;
 MeasuresAGo last_cached_measurement{};
 bool route_started = false;
+bool create_route_result = true;
+bool route_exists_result = false;
+std::function<void()> before_create_route;
 bool route_resumed = false;
 uint32_t route_session_id = 0;
 bool route_point_appended = false;
@@ -160,8 +172,17 @@ void reset() {
 
   gps_started = false;
   gps_stopped = false;
-  gps_idle_called = false;
+  gps_sleep_requested = false;
+  gps_sleeping_started = false;
+  gps_sleep_interval_ms = 0;
+  gps_sleep_request_count = 0;
+  gps_remaining_ms = 0;
+  gps_initial_baud = 0;
+  gps_initial_deadline_ms = 0;
+  gps_sleep_duration_ms = 0;
+  gps_sleep_ok = true;
   gps_data_to_return = GpsData{};
+  gps_read_called = false;
 
   input_started = false;
   input_stopped = false;
@@ -169,6 +190,9 @@ void reset() {
   cache_measurement_called = false;
   last_cached_measurement = MeasuresAGo{};
   route_started = false;
+  create_route_result = true;
+  route_exists_result = false;
+  before_create_route = nullptr;
   route_resumed = false;
   route_session_id = 0;
   route_point_appended = false;
@@ -359,7 +383,11 @@ void SensorProducer::request_tvoc_nox_learning_offsets(int /*tvoc_learning_offse
 // ============================================================================
 
 GpsService::GpsService(GpsDriver &driver, RtosQueueHandle event_queue, const Config &config)
-    : _driver(driver), _event_queue(event_queue), _config(config) {}
+    : _driver(driver), _event_queue(event_queue), _config(config), _baud_rate(config.expected_baud),
+      _wake_deadline_ms(config.wake_deadline_ms) {
+  test_spy::gps_initial_baud = config.expected_baud;
+  test_spy::gps_initial_deadline_ms = config.wake_deadline_ms;
+}
 
 GpsService::~GpsService() = default;
 
@@ -368,11 +396,27 @@ bool GpsService::start() {
   return true;
 }
 
+bool GpsService::start_sleeping(uint32_t interval_ms) {
+  test_spy::gps_sleeping_started = true;
+  test_spy::gps_sleep_interval_ms = interval_ms;
+  return interval_ms != 0;
+}
+
 void GpsService::stop() { test_spy::gps_stopped = true; }
 
-void GpsService::stop_and_idle_gnss() {}
-
-void GpsService::idle_gnss() { test_spy::gps_idle_called = true; }
+bool GpsService::request_sleep(uint32_t duration_ms) {
+  test_spy::gps_sleep_requested = true;
+  ++test_spy::gps_sleep_request_count;
+  test_spy::gps_sleep_duration_ms = duration_ms;
+  if (duration_ms == 0 || test_spy::gps_remaining_ms != 0 || !test_spy::gps_sleep_ok) {
+    return false;
+  }
+  test_spy::gps_remaining_ms = duration_ms;
+  _wake_deadline_ms = RTOS::get_retained_time_ms() + duration_ms;
+  return true;
+}
+uint32_t GpsService::sleep_remaining_ms() const { return test_spy::gps_remaining_ms; }
+uint64_t GpsService::sleep_deadline_ms() const { return _wake_deadline_ms; }
 
 GpsData GpsService::get_latest_fix() const { return GpsData{}; }
 
@@ -381,7 +425,8 @@ void GpsService::set_posting_interval_ms(int /*interval_ms*/) {}
 void GpsService::set_aiding_data(const GpsAidingData & /*data*/) {}
 
 GpsData gps_read_once(GpsDriver & /*driver*/, int /*baud_rate*/, uint32_t /*timeout_ms*/,
-                      const volatile bool & /*abort*/) {
+                      const volatile bool & /*abort*/, uint64_t /*wake_deadline_ms*/) {
+  test_spy::gps_read_called = true;
   return test_spy::gps_data_to_return;
 }
 
@@ -440,6 +485,12 @@ void StorageService::restore_cache() { test_spy::cache_restored = true; }
 void StorageService::clear_cache() {}
 
 bool StorageService::create_route(uint32_t session_id) {
+  if (test_spy::before_create_route) {
+    test_spy::before_create_route();
+  }
+  if (!test_spy::create_route_result) {
+    return false;
+  }
   test_spy::route_started = true;
   test_spy::route_file_open = true;
   test_spy::route_session_id = session_id;
@@ -456,7 +507,9 @@ bool StorageService::resume_route(uint32_t session_id) {
   return true;
 }
 
-bool StorageService::route_file_exists(uint32_t /*session_id*/) const { return false; }
+bool StorageService::route_file_exists(uint32_t /*session_id*/) const {
+  return test_spy::route_exists_result;
+}
 
 bool StorageService::append_route_point(const RoutePoint &point) {
   test_spy::route_point_appended = true;
@@ -962,7 +1015,6 @@ void Orchestrator::prepare_for_sleep(uint32_t /*sleep_duration_ms*/) {}
 void Orchestrator::init_ble_if_portable() {}
 bool Orchestrator::is_gps_active() const { return false; }
 void Orchestrator::deactivate_gps() {}
-uint32_t Orchestrator::generate_session_id() { return 10000; }
 RtcAppState Orchestrator::snapshot_state() const { return RtcAppState{}; }
 
 // ============================================================================

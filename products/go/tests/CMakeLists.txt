@@ -547,6 +547,26 @@ target_link_libraries(go_gps_driver_tests PRIVATE
 catch_discover_tests(go_gps_driver_tests)
 
 # ---------------------------------------------------------------------------
+# go_gps_service tests (real driver, fake serial and retained clock)
+# ---------------------------------------------------------------------------
+
+add_executable(go_gps_service_tests
+    go_gps_service.tests.cpp
+    "${AIRGRADIENT_REPO_ROOT}/products/go/main/gps/gps_service.cpp"
+)
+
+target_include_directories(go_gps_service_tests PRIVATE
+    "${AIRGRADIENT_REPO_ROOT}/components/airgradient-wifi"
+)
+
+target_link_libraries(go_gps_service_tests PRIVATE
+    go_gps_driver_test_support
+    Catch2::Catch2WithMain
+)
+
+catch_discover_tests(go_gps_service_tests)
+
+# ---------------------------------------------------------------------------
 # go_gps_types tests
 # ---------------------------------------------------------------------------
 
