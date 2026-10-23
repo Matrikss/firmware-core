@@ -57,6 +57,7 @@ public:
   bool start();
 
   /// Stop the sensor task and leave the PM sensor in the requested state.
+  /// Always turn off the gas heater after the task stops; start() reconditions it.
   /// @param sleep_pm true to sleep PM; false to keep it measuring.
   void stop(bool sleep_pm);
 
