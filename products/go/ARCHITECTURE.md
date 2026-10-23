@@ -416,9 +416,11 @@ parsing. It maintains a mutex-protected fix, synchronizes time from GPS, and
 posts `GpsFixUpdate` at the configured interval, including `NoFix` updates.
 
 Inactive GPS uses timed `CFG-SLEEP`: 30-second intervals in Portable/Stationary,
-the next ESP wake interval in Offline, or the maximum interval for Always Off.
+or the next ESP wake interval in Offline. This also applies to Always Off.
 Active GPS remains running through ESP deep sleep; stopping its worker only
 closes UART. The expected wake deadline is retained in `RtcAppState`.
+GPS settings changes wait for an existing sleep deadline without resetting
+the system or ending a tracking session.
 
 Offline tracking start can reset the system on battery to avoid a long GPS
 wait. Only a pending-start boolean is saved to NVS; GoApp creates the route after
