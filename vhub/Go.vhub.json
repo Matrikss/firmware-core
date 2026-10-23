@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "rev": "d3f9a28",
+  "rev": "95ff12a",
   "product": {
     "slug": "airgradient-go",
     "name": "AirGradient Go",
@@ -4520,7 +4520,7 @@
         },
         {
           "action": "Scan Bluetooth and Wi-Fi for 30 seconds; inspect router associations and try a GET request to http://airgradient_<serial>.local/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout.",
-          "expected_result": "No Go BLE advertisement, Go setup AP, current association or local API response is available. These checks establish service visibility, not absence of every RF packet."
+          "expected_result": "No connectable Go BLE service, Go setup AP, current Wi-Fi association or local API response is available. Brief, non-connectable measurement broadcasts may occur during Offline timer wakes."
         }
       ],
       "cleanup": [
@@ -4818,7 +4818,7 @@
         },
         {
           "action": "Scan Bluetooth and Wi-Fi for 30 seconds; inspect router associations and try a GET request to http://airgradient_<serial>.local/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout.",
-          "expected_result": "No Go BLE advertisement, Go setup AP, current association or local API response is available. These checks establish service visibility, not absence of every RF packet."
+          "expected_result": "No connectable Go BLE service, Go setup AP, current Wi-Fi association or local API response is available. Brief, non-connectable measurement broadcasts may occur during Offline timer wakes."
         }
       ],
       "cleanup": [
@@ -5212,7 +5212,7 @@
         },
         {
           "action": "Scan Bluetooth and Wi-Fi for 30 seconds; inspect router associations and try a GET request to http://airgradient_<serial>.local/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout.",
-          "expected_result": "No Go BLE advertisement, Go setup AP, current association or local API response is available. These checks establish service visibility, not absence of every RF packet."
+          "expected_result": "No connectable Go BLE service, Go setup AP, current Wi-Fi association or local API response is available. Brief, non-connectable measurement broadcasts may occur during Offline timer wakes."
         }
       ],
       "cleanup": [
@@ -5439,6 +5439,44 @@
       "references": [
         "products/go/docs/power_management.md",
         "products/go/docs/sensor_producer.md"
+      ]
+    },
+    {
+      "id": "go.ble.offline-measurements",
+      "title": "The app receives measurements in Offline mode",
+      "objective": "Verify Offline measurement broadcasts reach the AirGradient mobile app.",
+      "category": "Modes & Sleep",
+      "sub_category": "Timer Wake",
+      "applicability": [
+        "V1"
+      ],
+      "setup": [
+        "Phone with BLE and AirGradient mobile app",
+        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+      ],
+      "steps": [
+        {
+          "action": "Record the current operating mode, lock state and measurement interval. Unlock Go if needed.",
+          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+        },
+        {
+          "action": "Set the measurement interval to 60s in Main Menu > Settings. Select Main Menu > Operating Mode > Offline, return Home and lock Go.",
+          "expected_result": "Go is locked in Offline mode with a 60-second measurement interval."
+        },
+        {
+          "action": "Use the AirGradient mobile app to receive measurements from this Go. Leave Go locked in Offline mode and observe for five minutes.",
+          "expected_result": "The app receives new measurements from this Go during the observation period. Missed individual wakeups are acceptable.",
+          "evidence": [
+            "Save evidence of measurements received during the observation period."
+          ]
+        }
+      ],
+      "cleanup": [
+        "Wake and unlock Go if needed. Restore the recorded measurement interval, operating mode and lock state, including after interruption. Confirm restoration; record any remaining change."
+      ],
+      "references": [
+        "products/go/go_ble_client.md#offline-measurement-broadcasts",
+        "products/go/docs/ble_service.md#offline-broadcast-lifecycle"
       ]
     },
     {
