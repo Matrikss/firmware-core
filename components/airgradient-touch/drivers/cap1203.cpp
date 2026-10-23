@@ -115,8 +115,8 @@ bool CAP1203::set_sleep(bool asleep) {
     return false;
   }
   uint8_t actual = 0;
-  return _read_reg(REG_MAIN_CONTROL, actual) &&
-         (actual & (MAIN_STANDBY | MAIN_DEEP_SLEEP)) == (control & (MAIN_STANDBY | MAIN_DEEP_SLEEP));
+  return _read_reg(REG_MAIN_CONTROL, actual) && (actual & (MAIN_STANDBY | MAIN_DEEP_SLEEP)) ==
+                                                    (control & (MAIN_STANDBY | MAIN_DEEP_SLEEP));
 }
 
 bool CAP1203::read(TouchData &out) {

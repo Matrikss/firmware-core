@@ -2584,7 +2584,8 @@ TEST_CASE("GoApp: interactive GPS initialization uses the supplied boot state") 
   CHECK(test_spy::gps_initial_deadline_ms == expected_deadline_ms);
 }
 
-TEST_CASE("inactive GPS sleeps before warmup and preserves its deadline on promotion", "[GoApp][gps]") {
+TEST_CASE("inactive GPS sleeps before warmup and preserves its deadline on promotion",
+          "[GoApp][gps]") {
   test_spy::reset();
   ScopedRetainedClock clock(200000);
   MockBoard board;
@@ -2632,7 +2633,10 @@ TEST_CASE("inactive GPS final fallback uses ESP sleep duration", "[GoApp][gps]")
   bool early_attempt = true;
   bool final_success = true;
   SECTION("early request fails, final request succeeds") { test_spy::gps_sleep_ok = false; }
-  SECTION("both requests fail") { test_spy::gps_sleep_ok = false; final_success = false; }
+  SECTION("both requests fail") {
+    test_spy::gps_sleep_ok = false;
+    final_success = false;
+  }
   SECTION("existing sleep expires during warmup") {
     state.gps_wake_deadline_ms = clock.retained_ms + 1000;
     test_spy::gps_remaining_ms = 1000;
