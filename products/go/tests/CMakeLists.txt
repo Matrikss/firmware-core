@@ -366,6 +366,7 @@ catch_discover_tests(serial_command_tests)
 
 add_library(go_ble_test_support
     "${AIRGRADIENT_REPO_ROOT}/products/go/main/go_ble.cpp"
+    "${AIRGRADIENT_REPO_ROOT}/products/go/main/go_ble_advertisement.cpp"
     "${AIRGRADIENT_REPO_ROOT}/components/airgradient-common/common.cpp"
     "${AIRGRADIENT_REPO_ROOT}/components/airgradient-common/rtos.cpp"
 )
@@ -396,6 +397,7 @@ target_compile_definitions(go_ble_test_support PUBLIC
 
 add_executable(go_ble_tests
     go_ble.tests.cpp
+    go_ble_advertisement.tests.cpp
 )
 
 target_link_libraries(go_ble_tests PRIVATE

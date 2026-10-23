@@ -3,6 +3,7 @@ idf_component_register(
          "go_app.cpp"
          "go_hardware_board.cpp"
          "go_ble.cpp"
+         "go_ble_advertisement.cpp"
          "go_cloud.cpp"
          "go_settings.cpp"
          "go_display.cpp"
