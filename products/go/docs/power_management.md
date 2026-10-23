@@ -177,7 +177,11 @@ request means the command was accepted, not that a reset occurred.
 
 ## Sleep Entry
 
-`enter_sleep(sleep_duration_ms)` — only called when `decide_sleep()` returns `Deep`:
+`enter_sleep(sleep_duration_ms)` first disables the charger ADC, logging failure.
+Charging and power-path configuration remain active. BMS initialization or a
+later telemetry read re-enables conversions after wake.
+
+The remaining steps run when `decide_sleep()` returns `Deep`:
 
 1. If `should_hold_pm_sensor(sleep_duration_ms)` is true (sleep < `sensor_hold_max_sleep_ms`
    and `pin_pm_power >= 0`):
@@ -193,11 +197,14 @@ request means the command was accepted, not that a reset occurred.
 3. Calls `esp_deep_sleep_start()` — does **not** return.
 
 The caller must set `RtcAppFlag::SensorsWarm` using `set_flag()` with the
-result of `should_hold_pm_sensor()`, then call `save_state()` **before**
-`enter_sleep()`.
+hold decision, then call `save_state()` **before** `enter_sleep()`. A fast-path
+cycle that already attempted PM sleep saves `SensorsWarm=false`, even if the
+final remaining sleep falls below the hold threshold.
 The same decision controls sensor-producer shutdown: held sleeps stop the task
 with `sleep_pm=false`, while longer sleeps use `sleep_pm=true`. This keeps the
 SPS30's internal measurement state consistent with the persisted warm flag.
+Orchestrator preparation also stops the gas heater and sleeps touch through
+their services. Timer fast paths manage gas directly and leave touch asleep.
 
 ### Retained Uptime
 
@@ -251,7 +258,8 @@ the one-shot RTC request described under [Shutdown](#shutdown-qon--ship-mode).
 ## PM Sensor Warm-Hold
 
 For short deep sleeps (< `sensor_hold_max_sleep_ms`, default 20 s) the SPS30
-power-enable GPIO is held HIGH during sleep via `gpio_hold_en()`. On ESP32-C5,
+enable GPIO retains its current ON level during sleep via `gpio_hold_en()`
+(Prototype: HIGH; V1: LOW). On ESP32-C5,
 per-pin hold persists through deep sleep automatically, so no global
 `gpio_deep_sleep_hold_en()` call is needed. The fan keeps spinning and the
 sensor stays in measurement mode.
@@ -261,20 +269,20 @@ On the next timer wake the fast path reads
 
 | `SensorsWarm` | Behavior |
 |---|---|
-| `true`  | `release_sleep_gpio_holds()` calls `gpio_hold_dis()` on the pin, `SPS30::init(skip_reset=true)` re-attaches without resetting, **warmup loop skipped entirely** — boot drops from ~14–17 s to ~4–7 s |
-| `false` | Normal cold boot: full `SPS30::init()` with `CMD_RESET`, 10 s interruptible warmup |
+| `true` | Release the GPIO hold and reattach SPS30 without resetting; skip the PM warmup wait |
+| `false` | Reset/start SPS30 and allow 10 s of PM warmup, overlapping GPS work and gas conditioning |
 
 The same warm flag lets SCD4x reattach to periodic measurement retained across
 deep sleep. When an unread sample is ready, the driver skips wake, stop,
 reinitialization, and start commands. If retained state cannot be confirmed,
-the driver performs clean initialization and waits for the first periodic
-sample before the fast path continues. S12 requires no special handling, and
+the driver performs clean initialization. The fast path does not add a CO2
+readiness wait. S12 requires no special handling, and
 STCC4 already detects retained continuous measurement during initialization.
 
-For sleeps ≥ 20 s the SPS30 powers off normally and the full warmup runs on
-wake — the power saved by sleeping far outweighs the warmup cost. These cold PM
-wakes intentionally use normal SCD4x initialization because the PM warmup gives
-the restarted CO2 measurement enough time to become ready.
+For sleeps ≥ 20 s, the app sends SPS30's sleep command and prepares PM again
+on wake. Gas conditioning still runs on warm PM wakes because its heater was
+turned off before sleep. See [Fast-Path Boot](hardware_init.md#fast-path-boot-goappexecute_fast_path)
+for acquisition timing.
 
 `should_hold_pm_sensor(duration_ms)` is pure logic (testable on host):
 
@@ -473,9 +481,10 @@ Promotion happens when:
 
 - **Sleep too short** (`< deep_sleep_threshold_ms`): stays locked, display
   shows correct locked frame, measurement completed.
-- **Button press during fast path**: ISR detects the press during warmup,
-  measurement, or GPS read. Unlocks, suppresses wake press, loads RTC
-  snapshot for initial display.
+- **Latched button press**: checked after acquisition, storage, and display.
+  Unlocks, suppresses wake press, and loads the RTC snapshot for initial display.
+  Conditioning light sleep is timer-only; the button does not wake it.
+- **Route storage failure**: promotes so interactive mode can retry storage.
 
 ### Button-wake path (button wake, Offline mode)
 

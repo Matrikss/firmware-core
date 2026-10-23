@@ -177,6 +177,15 @@ measurement:
 Passing `condition_gas=false` skips TVOC/NOx conditioning while retaining the
 PM discard reads. The blocking `warmup()` uses the default `true`.
 
+### Caller-Scheduled Gas Acquisition
+
+`SensorManager::start_tvoc_nox_conditioning()` starts conditioning without
+waiting; the caller owns the timing. `read_tvoc_nox_raw()` validates raw fields
+without running the gas-index algorithm. `stop_tvoc_nox_measurement()` turns
+off supported heaters and succeeds when no gas sensor is wired. SGP41 starts
+conditioning from heater-off and exposes heater shutdown through these methods.
+`pm_sleep()` returns failure if any wired PM sensor fails to sleep.
+
 ## Configuration
 
 Tuning knobs live under **AirGradient Sensors** in `menuconfig` (see
