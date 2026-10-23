@@ -26,7 +26,7 @@ from typing import Any
 logger = logging.getLogger("ago_measurements")
 
 # Matches products/go/main/go_ble_advertisement.h.
-SERVICE_UUID = "d2086101-9a63-4acc-8a7c-c07f607cb240"
+SERVICE_UUID = "992f1fe6-4519-4d4f-8ca7-546d36126ee8"
 VERSION = 1
 PAYLOAD = struct.Struct("<BhBHHHhB")
 INVALID_U8 = 0xFF

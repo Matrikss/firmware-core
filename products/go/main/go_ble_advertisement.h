@@ -17,7 +17,7 @@
 
 namespace GoBleAdvertisement {
 
-inline constexpr const char *SERVICE_UUID = "d2086101-9a63-4acc-8a7c-c07f607cb240";
+inline constexpr const char *SERVICE_UUID = "992f1fe6-4519-4d4f-8ca7-546d36126ee8";
 inline constexpr uint8_t VERSION = 1;
 inline constexpr size_t PAYLOAD_SIZE = 13;
 

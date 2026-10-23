@@ -37,7 +37,7 @@ connection, pairing, or bonding. The same payload repeats at a configured
 300 ms interval during display refresh (typically about 3 seconds), then BLE
 shuts down. Reception on every wakeup is not guaranteed.
 
-Match **Service Data UUID `d2086101-9a63-4acc-8a7c-c07f607cb240`**.
+Match **Service Data UUID `992f1fe6-4519-4d4f-8ca7-546d36126ee8`**.
 The non-connectable advertisement contains one 128-bit Service Data AD field
 (type `0x21`): 2 bytes length/type + 16 bytes UUID + 13 bytes payload.
 There are no Flags, local name, separate service UUID list, or scan response;
