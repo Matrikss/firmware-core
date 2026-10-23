@@ -380,8 +380,9 @@ from deep sleep is configured. See [Accelerometer Service](docs/accel_service.md
 ### Gas Index in Offline Mode
 
 The Offline timer fast path records raw SGP41 values without running the
-gas-index algorithm. TVOC/NOx index fields remain invalid and display as
-unavailable. Interactive operation uses the producer's periodic gas-index
+gas-index algorithm. Raw ticks also populate the TVOC/NOx index fields for
+display and storage; these placeholders are not calculated gas indices.
+Interactive operation uses the producer's periodic gas-index
 sampler; its state is not retained across deep sleep. See
 [Sensor Producer](docs/sensor_producer.md#offline-fast-path).
 

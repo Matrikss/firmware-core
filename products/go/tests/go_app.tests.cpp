@@ -1294,9 +1294,15 @@ TEST_CASE("fast path: gas finishes before other sampling and PM stops before sto
   CHECK(result.measures.pm_a.pm_25 == 12);
   CHECK(result.measures.tvoc_nox.tvoc_raw == 21000);
   CHECK(result.measures.tvoc_nox.nox_raw == 22000);
-  CHECK_FALSE(result.measures.tvoc_nox.is_tvoc_index_valid());
-  CHECK_FALSE(result.measures.tvoc_nox.is_nox_index_valid());
+  CHECK(result.measures.tvoc_nox.tvoc_index == 21000);
+  CHECK(result.measures.tvoc_nox.nox_index == 22000);
   CHECK(test_spy::last_cached_measurement.tvoc_nox.tvoc_raw == 21000);
+  CHECK(test_spy::last_cached_measurement.tvoc_nox.tvoc_index == 21000);
+  CHECK(test_spy::last_cached_measurement.tvoc_nox.nox_index == 22000);
+  const auto display =
+      build_fast_path_display(result.measures, {}, {}, board.settings, TrackingState::Idle);
+  CHECK(display.tvoc_index == 21000);
+  CHECK(display.nox_index == 22000);
   CHECK_FALSE(result.sensors_warm);
   CHECK(test_spy::light_sleep_count == 1);
   CHECK(test_spy::fast_path_timer_only);
@@ -1361,6 +1367,8 @@ TEST_CASE("fast path: gas acquisition cleans up late and failed reads") {
   CHECK(test_spy::light_sleep_count == 1);
   CHECK_FALSE(result.measures.tvoc_nox.is_tvoc_raw_valid());
   CHECK_FALSE(result.measures.tvoc_nox.is_nox_raw_valid());
+  CHECK_FALSE(result.measures.tvoc_nox.is_tvoc_index_valid());
+  CHECK_FALSE(result.measures.tvoc_nox.is_nox_index_valid());
 }
 
 TEST_CASE("fast path: failed light sleep delays and completes acquisition") {

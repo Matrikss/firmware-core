@@ -293,8 +293,9 @@ then calls `start_measures(1, TvocNox)` and caches the result in
 
 The Offline timer fast path uses `SensorManager` directly. GoApp schedules
 conditioning and two raw gas reads (first discarded), turns the heater off,
-then reads `PM | Other` once. Raw gas values are stored; gas indices remain
-invalid and are not substituted with raw ticks for display. See
+then reads `PM | Other` once. Raw ticks are retained in the raw fields and
+copied into index fields for display and storage, preserving Offline's
+placeholder behavior. Failed readings remain invalid. See
 [Fast-Path Boot](hardware_init.md#fast-path-boot-goappexecute_fast_path).
 
 ### Orchestrator Signalling

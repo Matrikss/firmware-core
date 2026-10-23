@@ -572,6 +572,9 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
   MeasuresAGo ago{};
   Measures measures = sm.start_measures(1, SensorGroup::PM | SensorGroup::Other);
   measures.tvoc_nox = gas;
+  // Preserve Offline's raw-tick placeholders for display and stored index fields.
+  measures.tvoc_nox.tvoc_index = measures.tvoc_nox.tvoc_raw;
+  measures.tvoc_nox.nox_index = measures.tvoc_nox.nox_raw;
   ago = measures_to_ago(measures);
   AG_LOGI(TAG,
           "fast-path: temp=%.1f hum=%.1f pm25=%.1f co2=%d tvoc=%d nox=%d "
