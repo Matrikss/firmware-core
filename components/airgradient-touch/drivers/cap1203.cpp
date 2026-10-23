@@ -77,8 +77,15 @@ bool CAP1203::init() {
     return false;
   }
 
+  // Resume sensing before applying configuration after a deep-sleep cycle.
+  if (!set_sleep(false)) {
+    ESP_LOGE(TAG, "resume from sleep failed");
+    _rm_device();
+    return false;
+  }
+
   // Apply sensitivity, thresholds, channel enable, and interrupt config.
-  if (!_apply_config() || !set_sleep(false)) {
+  if (!_apply_config()) {
     ESP_LOGE(TAG, "apply config failed");
     _rm_device();
     return false;
