@@ -32,6 +32,7 @@ enum esp_reset_reason_t { ESP_RST_UNKNOWN = 0 };
 inline esp_reset_reason_t esp_reset_reason() { return ESP_RST_UNKNOWN; }
 #endif
 #include "go_ble.h"
+#include "go_ble_advertisement.h"
 #include "accel/accel_service.h"
 #include "go_buzzer.h"
 #include "go_cloud.h"
@@ -80,6 +81,7 @@ static constexpr uint32_t FAST_PATH_GAS_SAMPLE_INTERVAL_MS = 500;
 static constexpr uint32_t FAST_PATH_LIGHT_SLEEP_MIN_MS = 1000;
 // Leave room for waking and issuing the raw command before conditioning expires.
 static constexpr uint32_t FAST_PATH_GAS_WAKE_MARGIN_MS = 100;
+static constexpr uint32_t FAST_PATH_BLE_ADVERTISING_INTERVAL_US = 300000;
 
 /// A transient BMS communication failure gets one same-boot retry.
 static constexpr uint8_t BMS_INIT_MAX_ATTEMPTS = 2;
@@ -663,8 +665,35 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
           .gps_wake_deadline_ms = gps_state.gps_wake_deadline_ms,
       };
     }
+    // Broadcast raw measurements, matching Portable BLE, while the
+    // synchronous display refresh runs.
+    AgBleServer *broadcast = nullptr;
+    if (!button_pressed && preliminary_sleep.type == PowerService::SleepType::Deep &&
+        power_snapshot.ship_mode_request == ShipModeRequest::None) {
+      MeasuresAGo advertised = ago;
+      advertised.power.battery_percentage = power_snapshot.battery_percentage;
+      const auto payload = GoBleAdvertisement::encode(advertised);
+      broadcast = &_board.ble_server();
+      if (!broadcast->init("") ||
+          !broadcast->set_service_broadcast(GoBleAdvertisement::SERVICE_UUID, payload.data(),
+                                            payload.size()) ||
+          !broadcast->set_advertising_interval(FAST_PATH_BLE_ADVERTISING_INTERVAL_US) ||
+          !broadcast->start_advertising()) {
+        AG_LOGW(TAG, "fast-path: BLE broadcast setup failed");
+        broadcast->deinit();
+        broadcast = nullptr;
+      }
+    }
+
     disp.init(values);
     display_painted = true;
+
+    if (broadcast != nullptr) {
+      if (!broadcast->stop_advertising()) {
+        AG_LOGW(TAG, "fast-path: BLE broadcast stop failed");
+      }
+      broadcast->deinit();
+    }
 
     uint32_t awake_ms = static_cast<uint32_t>(RTOS::get_time_ms()) - boot_time_ms;
     decision = pwr.decide_sleep(settings, LockState::Locked, OperatingMode::Offline, awake_ms);

@@ -117,6 +117,7 @@ bool state_saved = false;
 RtcAppState last_saved_state{};
 PowerSnapshot snapshot_to_return{};
 PowerService::SleepDecision sleep_decision_to_return = {PowerService::SleepType::Deep, 60000};
+uint32_t last_sleep_awake_ms = 0;
 bool enter_sleep_called = false;
 uint32_t enter_sleep_duration_ms = 0;
 bool should_hold_pm_result = false;
@@ -245,6 +246,7 @@ void reset() {
   last_saved_state = RtcAppState{};
   snapshot_to_return = PowerSnapshot{};
   sleep_decision_to_return = {PowerService::SleepType::Deep, 60000};
+  last_sleep_awake_ms = 0;
   enter_sleep_called = false;
   enter_sleep_duration_ms = 0;
   should_hold_pm_result = false;
@@ -297,6 +299,7 @@ void reset() {
 
   DisplayService::spy_deep_sleep_called = false;
   DisplayService::spy_init_count = 0;
+  DisplayService::spy_init_delay_ms = 0;
   DisplayService::spy_update_count = 0;
   DisplayService::spy_sync_update_count = 0;
   DisplayService::spy_flush_count = 0;
@@ -679,7 +682,8 @@ RtcAppState PowerService::load_state() const { return test_spy::rtc_state; }
 PowerService::SleepDecision PowerService::decide_sleep(const GoSettings & /*settings*/,
                                                        LockState /*lock_state*/,
                                                        OperatingMode /*mode*/,
-                                                       uint32_t /*awake_ms*/) const {
+                                                       uint32_t awake_ms) const {
+  test_spy::last_sleep_awake_ms = awake_ms;
   return test_spy::sleep_decision_to_return;
 }
 

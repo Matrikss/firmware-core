@@ -596,6 +596,7 @@ add_library(go_app_test_support
     "${AIRGRADIENT_REPO_ROOT}/products/go/main/accel/accel_service.cpp"
     "${AIRGRADIENT_REPO_ROOT}/products/go/main/accel/shake_detector.cpp"
     "${AIRGRADIENT_REPO_ROOT}/products/go/main/go_app.cpp"
+    "${AIRGRADIENT_REPO_ROOT}/products/go/main/go_ble_advertisement.cpp"
     "${AIRGRADIENT_REPO_ROOT}/products/go/main/go_local_api.cpp"
     "${AIRGRADIENT_REPO_ROOT}/components/airgradient-common/retained_uptime.cpp"
     "${AIRGRADIENT_REPO_ROOT}/products/go/main/go_settings.cpp"

@@ -14,6 +14,8 @@
 
 #include "go_app.h"
 #include "go_board.h"
+#include "go_ble_advertisement.h"
+#include "hal/ble_server.h"
 #include "go_events.h"
 #include "go_local_api.h"
 #include "buzzer/go_buzzer.h"
@@ -39,8 +41,14 @@
 class TestClock : public FreeRTOS {
 public:
   uint64_t now = 0;
+  std::function<void()> on_delay;
   uint64_t get_time_ms_impl() override { return now; }
-  void delay_ms_impl(uint32_t ms) override { now += ms; }
+  void delay_ms_impl(uint32_t ms) override {
+    now += ms;
+    if (on_delay) {
+      on_delay();
+    }
+  }
 };
 static TestClock s_rtos;
 
@@ -124,6 +132,7 @@ extern bool state_saved;
 extern RtcAppState last_saved_state;
 extern PowerSnapshot snapshot_to_return;
 extern PowerService::SleepDecision sleep_decision_to_return;
+extern uint32_t last_sleep_awake_ms;
 extern bool enter_sleep_called;
 extern uint32_t enter_sleep_duration_ms;
 extern bool should_hold_pm_result;
@@ -289,6 +298,73 @@ public:
   }
 };
 
+class MockBleServer : public AgBleServer {
+public:
+  std::vector<std::string> calls;
+  std::string fail_at;
+  std::string name;
+  std::string uuid;
+  std::vector<uint8_t> payload;
+  uint32_t interval_us = 0;
+  uint32_t init_delay_ms = 0;
+  uint32_t deinit_delay_ms = 0;
+  uint64_t started_ms = 0;
+  uint64_t stopped_ms = 0;
+  bool active = false;
+  bool initialized = false;
+
+  bool init(const char *value) override {
+    calls.push_back("init");
+    name = value;
+    RTOS::delay_ms(init_delay_ms);
+    initialized = fail_at != "init";
+    return initialized;
+  }
+  void deinit() override {
+    calls.push_back("deinit");
+    RTOS::delay_ms(deinit_delay_ms);
+    active = initialized = false;
+  }
+  bool set_service_broadcast(const char *value, const uint8_t *data, size_t len) override {
+    calls.push_back("payload");
+    uuid = value;
+    payload.assign(data, data + len);
+    return fail_at != "payload";
+  }
+  bool set_advertising_interval(uint32_t value) override {
+    calls.push_back("interval");
+    interval_us = value;
+    return fail_at != "interval";
+  }
+  bool start_advertising() override {
+    calls.push_back("start");
+    CHECK(test_spy::cache_backed_up);
+    CHECK(test_spy::bms_polled);
+    active = fail_at != "start";
+    started_ms = RTOS::get_time_ms();
+    return active;
+  }
+  bool stop_advertising() override {
+    calls.push_back("stop");
+    stopped_ms = RTOS::get_time_ms();
+    if (fail_at == "stop") {
+      return false;
+    }
+    active = false;
+    return true;
+  }
+  bool set_security(AgBleIoCapability, uint8_t) override { return true; }
+  bool delete_all_bonds() override { return true; }
+  AgBleGattService *add_service(const char *) override { return nullptr; }
+  bool set_advertising_name(const char *) override { return true; }
+  bool add_advertised_service_uuid(const char *) override { return true; }
+  bool set_manufacturer_data(const uint8_t *, size_t) override { return true; }
+  void set_connect_callback(AgBleConnectCallback) override {}
+  void set_disconnect_callback(AgBleDisconnectCallback) override {}
+  void set_passkey_display_callback(AgBlePasskeyDisplayCallback) override {}
+  void set_auth_complete_callback(AgBleAuthCompleteCallback) override {}
+};
+
 class MockBoard : public GoBoard {
 public:
   bool sleep_touch() override {
@@ -418,9 +494,7 @@ public:
     return _power;
   }
 
-  // Radio accessors return reinterpret_cast'd dummies.  CP1 production
-  // code never invokes these on MockBoard (Portable boots take only
-  // ble_server(), which goes through BleService stubs that ignore it).
+  // Network accessors return reinterpret_cast'd dummies.
   // Stationary entry — which would dereference these — is not exercised
   // until CP2.
   WifiHal &wifi_hal() override {
@@ -437,7 +511,7 @@ public:
   }
   AgBleServer &ble_server() override {
     call_log.push_back("ble_server");
-    return *reinterpret_cast<AgBleServer *>(&_ble_server_buf);
+    return ble;
   }
   AgClient &ag_client() override {
     call_log.push_back("ag_client");
@@ -510,6 +584,7 @@ public:
 
   // Configurable test state
   GoSettings settings{};
+  MockBleServer ble;
   bool bms_available = false;
   StubBmsDevice _bms;
 
@@ -531,7 +606,6 @@ private:
   alignas(8) static inline char _wifi_hal_buf[64];
   alignas(8) static inline char _wifi_manager_buf[64];
   alignas(8) static inline char _http_server_buf[64];
-  alignas(8) static inline char _ble_server_buf[64];
   AgClient _ag_client{};
 
   StorageService _storage{*reinterpret_cast<PayloadCache *>(s_cache_buf),
@@ -1233,6 +1307,183 @@ TEST_CASE("execute_fast_path: cold sensors full warmup, measure, sleep") {
   // Warmup is elapsed time, not discarded sensor reads.
   CHECK(test_spy::warmup_step_count == 0);
   CHECK(test_spy::light_sleep_count > 0);
+}
+
+TEST_CASE("fast path BLE: advertises raw measurements despite configured corrections") {
+  test_spy::reset();
+  MockBoard board;
+  board.settings.corrections.pm25.algorithm = Pm25CorrectionAlgorithm::CustomViaPm25Raw;
+  board.settings.corrections.pm25.scaling_factor = 2.0f;
+  board.settings.corrections.pm25.intercept = 1.0f;
+  board.settings.corrections.temperature.algorithm = LinearCorrectionAlgorithm::Custom;
+  board.settings.corrections.temperature.scaling_factor = 1.5f;
+  board.settings.corrections.temperature.intercept = -1.0f;
+  board.settings.corrections.humidity.algorithm = LinearCorrectionAlgorithm::Custom;
+  board.settings.corrections.humidity.intercept = -10.0f;
+  test_spy::measures_to_return.temp_hum_a = {20.0f, 50.6f};
+  test_spy::measures_to_return.pm_a.pm_25 = 10.0f;
+  test_spy::measures_to_return.co2.co2 = 400;
+  test_spy::measures_to_return.pressure = {1013.25f, -42.5f};
+  test_spy::snapshot_to_return.battery_percentage = 74.6f;
+  GoApp app(board);
+  GoAppTestAccess access(app);
+  volatile bool button = false;
+
+  const auto result = access.execute_fast_path(RtcAppState{}, button);
+
+  CHECK(result.outcome == GoAppTestAccess::Outcome::Sleep);
+  CHECK(board.ble.name.empty());
+  CHECK(board.ble.uuid == GoBleAdvertisement::SERVICE_UUID);
+  CHECK(board.ble.interval_us == 300000);
+  CHECK(board.ble.payload == std::vector<uint8_t>{0x01, 0xD0, 0x07, 0x33, 0x64, 0x00, 0x90, 0x01,
+                                                  0x95, 0x27, 0xD5, 0xFF, 0x4B});
+  CHECK(board.ble.calls ==
+        std::vector<std::string>{"init", "payload", "interval", "start", "stop", "deinit"});
+  CHECK_FALSE(board.ble.initialized);
+  CHECK_FALSE(board.ble.active);
+  CHECK(test_spy::last_cached_measurement.pm_a.pm_25 == 10.0f);
+  CHECK(test_spy::last_cached_measurement.temp_hum_a.temperature == 20.0f);
+  CHECK(result.measures.pm_a.pm_25 == 10.0f);
+  CHECK(test_spy::bms_poll_count == 1);
+}
+
+TEST_CASE("fast path BLE: window follows display duration and all overhead reaches sleep policy") {
+  test_spy::reset();
+  ScopedRetainedClock clock(0);
+  MockBoard board;
+  board.ble.init_delay_ms = 75;
+  board.ble.deinit_delay_ms = 25;
+  uint32_t display_ms = 3000;
+  SECTION("normal refresh") {}
+  SECTION("slow refresh") { display_ms = 4500; }
+  SECTION("immediate display return adds no advertising wait") { display_ms = 0; }
+  DisplayService::spy_init_delay_ms = display_ms;
+  bool observed_display = false;
+  clock.on_delay = [&] {
+    if (DisplayService::spy_init_count == 1 && !observed_display) {
+      observed_display = true;
+      CHECK(board.ble.active);
+    }
+  };
+  GoApp app(board);
+  GoAppTestAccess access(app);
+  RtcAppState state{};
+  state.set_flag(RtcAppFlag::SensorsWarm, true);
+  volatile bool button = false;
+
+  const auto result = access.execute_fast_path(state, button);
+
+  CHECK(result.outcome == GoAppTestAccess::Outcome::Sleep);
+  CHECK(observed_display);
+  CHECK(board.ble.started_ms == 75);
+  CHECK(board.ble.stopped_ms - board.ble.started_ms == display_ms);
+  CHECK(clock.now == display_ms + 100);
+  CHECK(test_spy::last_sleep_awake_ms == clock.now);
+  CHECK(test_spy::light_sleep_count == 0);
+  CHECK_FALSE(board.ble.initialized);
+}
+
+TEST_CASE("fast path BLE: known promotion and shutdown paths skip broadcasting") {
+  test_spy::reset();
+  MockBoard board;
+  GoApp app(board);
+  GoAppTestAccess access(app);
+  RtcAppState state{};
+  volatile bool button = false;
+  SECTION("button already latched") { button = true; }
+  SECTION("sleep already too short") {
+    test_spy::sleep_decision_to_return = {PowerService::SleepType::None, 0};
+  }
+  SECTION("route storage failure") {
+    state.tracking_state = TrackingState::Recording;
+    state.tracking_session_id = 12345;
+    test_spy::resume_route_result = false;
+  }
+  SECTION("over-temperature") {
+    test_spy::snapshot_to_return.ship_mode_request = ShipModeRequest::OverTemperature;
+  }
+  SECTION("under-temperature") {
+    test_spy::snapshot_to_return.ship_mode_request = ShipModeRequest::UnderTemperature;
+  }
+  SECTION("over-discharge") {
+    test_spy::snapshot_to_return.ship_mode_request = ShipModeRequest::OverDischarge;
+  }
+  access.execute_fast_path(state, button);
+  CHECK(board.call_index("ble_server") == -1);
+  CHECK(board.ble.calls.empty());
+  CHECK(test_spy::cache_backed_up);
+}
+
+TEST_CASE("fast path BLE: setup and stop failures preserve display storage and sleep") {
+  test_spy::reset();
+  MockBoard board;
+  SECTION("initialization") { board.ble.fail_at = "init"; }
+  SECTION("payload") { board.ble.fail_at = "payload"; }
+  SECTION("interval") { board.ble.fail_at = "interval"; }
+  SECTION("start") { board.ble.fail_at = "start"; }
+  SECTION("stop") { board.ble.fail_at = "stop"; }
+  GoApp app(board);
+  GoAppTestAccess access(app);
+  volatile bool button = false;
+
+  const auto result = access.execute_fast_path(RtcAppState{}, button);
+
+  CHECK(result.outcome == GoAppTestAccess::Outcome::Sleep);
+  CHECK(test_spy::cache_backed_up);
+  CHECK(DisplayService::spy_init_count == 1);
+  REQUIRE(board.ble.calls.size() >= 2);
+  CHECK(board.ble.calls[board.ble.calls.size() - 2] == board.ble.fail_at);
+  CHECK(board.ble.calls.back() == "deinit");
+  CHECK_FALSE(board.ble.active);
+  CHECK_FALSE(board.ble.initialized);
+}
+
+TEST_CASE("fast path BLE: promotion after display always releases BLE") {
+  test_spy::reset();
+  ScopedRetainedClock clock(0);
+  DisplayService::spy_init_delay_ms = 3000;
+  MockBoard board;
+  GoApp app(board);
+  GoAppTestAccess access(app);
+  volatile bool button = false;
+  bool button_caused = false;
+  SECTION("button during display") { button_caused = true; }
+  SECTION("elapsed time makes sleep too short") {}
+  clock.on_delay = [&] {
+    if (DisplayService::spy_init_count == 1 && board.ble.active) {
+      if (button_caused) {
+        button = true;
+      } else {
+        test_spy::sleep_decision_to_return = {PowerService::SleepType::None, 0};
+      }
+    }
+  };
+
+  const auto result = access.execute_fast_path(RtcAppState{}, button);
+
+  CHECK(result.outcome == GoAppTestAccess::Outcome::Promote);
+  CHECK(result.handoff.initial_lock_state ==
+        (button_caused ? LockState::Unlocked : LockState::Locked));
+  CHECK(board.ble.calls ==
+        std::vector<std::string>{"init", "payload", "interval", "start", "stop", "deinit"});
+  CHECK_FALSE(board.ble.active);
+  CHECK_FALSE(board.ble.initialized);
+}
+
+TEST_CASE("fast path BLE: unavailable measurements and battery retain wire sentinels") {
+  test_spy::reset();
+  MockBoard board;
+  board.bms_failures_remaining = 2;
+  GoApp app(board);
+  GoAppTestAccess access(app);
+  volatile bool button = false;
+
+  const auto result = access.execute_fast_path(RtcAppState{}, button);
+
+  CHECK(result.outcome == GoAppTestAccess::Outcome::Sleep);
+  CHECK(board.ble.payload == std::vector<uint8_t>{0x01, 0x00, 0x80, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+                                                  0xFF, 0xFF, 0x00, 0x80, 0xFF});
+  CHECK_FALSE(board.ble.initialized);
 }
 
 TEST_CASE("fast path: GoApp starts PM warmup after initialization and overlaps GPS") {
