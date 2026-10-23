@@ -2254,9 +2254,8 @@ TEST_CASE("run_fast_path: GPS sleep follows the planned ESP sleep without changi
     state.gps_wake_deadline_ms = clock.retained_ms + 60000;
     expect_sleep_request = false;
   }
-  SECTION("Always Off uses maximum GPS sleep") {
+  SECTION("Always Off sleeps for the next ESP sleep duration") {
     board.settings.gps_mode = GpsMode::AlwaysOff;
-    expected_gps_sleep_ms = UINT32_MAX;
   }
   SECTION("tracking keeps GPS active when mode permits") {
     state.tracking_state = TrackingState::Recording;

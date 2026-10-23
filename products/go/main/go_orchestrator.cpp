@@ -3507,8 +3507,7 @@ void Orchestrator::prepare_for_sleep(uint32_t sleep_duration_ms) {
   _svc.storage_service.backup_cache();
 
   if (!is_gps_active()) {
-    (void)_svc.gps_service.request_sleep(
-        gps_inactive_sleep_ms(_settings.gps_mode, _mode, sleep_duration_ms));
+    (void)_svc.gps_service.request_sleep(gps_inactive_sleep_ms(_mode, sleep_duration_ms));
   }
 
   // Persist RTC state with the warm-sensor flag for the next wake cycle.
@@ -3537,8 +3536,7 @@ void Orchestrator::deactivate_gps() {
   const uint32_t interval = static_cast<uint32_t>(_settings.measure_interval_seconds) * 1000;
   const uint32_t elapsed = static_cast<uint32_t>(RTOS::get_time_ms()) - _last_measurement_ms;
   const uint32_t next_wake = elapsed < interval ? interval - elapsed : interval;
-  if (!_svc.gps_service.start_sleeping(
-          gps_inactive_sleep_ms(_settings.gps_mode, _mode, next_wake))) {
+  if (!_svc.gps_service.start_sleeping(gps_inactive_sleep_ms(_mode, next_wake))) {
     AG_LOGE(TAG, "Failed to start GPS sleep maintenance");
   }
   _latest_gps = GpsData{};

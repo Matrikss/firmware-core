@@ -10804,7 +10804,7 @@ TEST_CASE("GPS sleep: short wait and AlwaysOff never request a tracking reset",
   SECTION("At threshold") { test_spy::gps_remaining_ms = GPS_RESET_THRESHOLD_MS; }
   SECTION("AlwaysOff") {
     f.settings.gps_mode = GpsMode::AlwaysOff;
-    test_spy::gps_remaining_ms = GPS_ALWAYS_OFF_SLEEP_MS;
+    test_spy::gps_remaining_ms = GPS_RESET_THRESHOLD_MS + GPS_IDLE_SLEEP_MS;
   }
   auto orch = f.make_orchestrator();
   A::set_mode(orch, OperatingMode::Offline);
@@ -10929,7 +10929,7 @@ TEST_CASE("GPS sleep: initialization selects GPS mode after restoring tracking",
 TEST_CASE("GPS sleep: initialization configures maintenance once and timers leave it alone",
           "[Orchestrator][gps_sleep]") {
   TestFixture f;
-  uint32_t expected = 30000;
+  uint32_t expected = GPS_IDLE_SLEEP_MS;
   SECTION("Portable") { f.settings.operating_mode = OperatingMode::Portable; }
   SECTION("Stationary") { f.settings.operating_mode = OperatingMode::Stationary; }
   SECTION("Offline") {
@@ -10937,9 +10937,19 @@ TEST_CASE("GPS sleep: initialization configures maintenance once and timers leav
     f.settings.measure_interval_seconds = 300;
     expected = 300000;
   }
-  SECTION("AlwaysOff") {
+  SECTION("Portable AlwaysOff") {
+    f.settings.operating_mode = OperatingMode::Portable;
     f.settings.gps_mode = GpsMode::AlwaysOff;
-    expected = GPS_ALWAYS_OFF_SLEEP_MS;
+  }
+  SECTION("Stationary AlwaysOff") {
+    f.settings.operating_mode = OperatingMode::Stationary;
+    f.settings.gps_mode = GpsMode::AlwaysOff;
+  }
+  SECTION("Offline AlwaysOff") {
+    f.settings.operating_mode = OperatingMode::Offline;
+    f.settings.gps_mode = GpsMode::AlwaysOff;
+    f.settings.measure_interval_seconds = 300;
+    expected = 300000;
   }
   auto orch = f.make_orchestrator();
   orch.init(WakeCause::PowerOn);

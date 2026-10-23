@@ -408,8 +408,7 @@ void GoApp::prepare_gps_for_sleep(uint32_t duration_ms, RtcAppState &state) {
   auto *driver = _board.new_gps_driver();
   if (driver != nullptr) {
     GpsService service(*driver, nullptr, {.wake_deadline_ms = state.gps_wake_deadline_ms});
-    if (!service.request_sleep(
-            gps_inactive_sleep_ms(settings.gps_mode, settings.operating_mode, duration_ms))) {
+    if (!service.request_sleep(gps_inactive_sleep_ms(settings.operating_mode, duration_ms))) {
       AG_LOGW(TAG, "GPS sleep request failed");
     }
     state.gps_wake_deadline_ms = service.sleep_deadline_ms();
