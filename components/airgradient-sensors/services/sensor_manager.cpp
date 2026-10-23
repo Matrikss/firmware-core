@@ -93,13 +93,38 @@ void SensorManager::warmup() {
   }
 }
 
-void SensorManager::pm_sleep() {
+bool SensorManager::pm_sleep() {
+  bool ok = true;
   if (_sensors.pms_a) {
-    _sensors.pms_a->sleep();
+    ok = _sensors.pms_a->sleep() && ok;
   }
   if (_sensors.pms_b) {
-    _sensors.pms_b->sleep();
+    ok = _sensors.pms_b->sleep() && ok;
   }
+  return ok;
+}
+
+bool SensorManager::start_tvoc_nox_conditioning() {
+  return _sensors.tvoc_nox != nullptr && _sensors.tvoc_nox->start_conditioning();
+}
+
+bool SensorManager::read_tvoc_nox_raw(TVOCNOxData &out) {
+  out = {};
+  TVOCNOxData sample{};
+  if (_sensors.tvoc_nox != nullptr && _sensors.tvoc_nox->read(sample)) {
+    if (sample.is_tvoc_raw_valid()) {
+      out.tvoc_raw = sample.tvoc_raw;
+    }
+    if (sample.is_nox_raw_valid()) {
+      out.nox_raw = sample.nox_raw;
+    }
+    return true;
+  }
+  return false;
+}
+
+bool SensorManager::stop_tvoc_nox_measurement() {
+  return _sensors.tvoc_nox == nullptr || _sensors.tvoc_nox->stop_measurement();
 }
 
 void SensorManager::pm_wake() {

@@ -88,6 +88,11 @@ input_svc.start();
 input_svc.stop();
 ```
 
+`start()` resumes touch sensing. `stop()` joins the worker, removes interrupt
+handlers, and requests touch deep sleep once, logging failure. CAP1203 verifies
+the sleep bits by readback. Timer fast-path boots preserve this state without
+initializing touch; interactive initialization clears sleep before configuration.
+
 ## Event Output
 
 All events are posted to the orchestrator queue as `EventType::InputPress`

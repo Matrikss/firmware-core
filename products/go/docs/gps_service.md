@@ -50,8 +50,7 @@ calls have one owning caller; `stop()` interrupts a pending wake wait.
 | `Config::posting_interval_ms` | `5000` | Fix event interval |
 | `Config::task_stack_size` | `4096` | Worker stack bytes |
 | `Config::task_priority` | `3` | Worker priority, below display |
-| `GPS_IDLE_SLEEP_MS` | `30000` | Inactive GPS interval in Portable/Stationary |
-| `GPS_ALWAYS_OFF_SLEEP_MS` | `UINT32_MAX` | Longest supported sleep, about 49.7 days; finite, not unlimited |
+| `GPS_IDLE_SLEEP_MS` | `30000` | Inactive GPS interval in Portable/Stationary; Offline fallback when no next wake interval is supplied |
 | `GPS_RESET_THRESHOLD_MS` | `30000` | Offline tracking wait/reset threshold (30 seconds); provisional pending boot-time measurement |
 | `GPS_RESET_CONFIRM_MS` | `1000` | Wait after an accepted reset request before falling back |
 
@@ -63,20 +62,37 @@ Inactive GPS uses CASIC `CFG-SLEEP`, rather than only stopping the GNSS engine.
 
 | GPS State | Policy |
 |---|---|
-| Always Off, including tracking | Maximum sleep interval |
-| On When Tracking, no session, Portable/Stationary | Repeated 30-second sleep intervals |
-| On When Tracking, no session, Offline | Sleep until the next planned ESP wake; renew before the next ESP sleep |
+| Inactive in Portable/Stationary: Always Off, or On When Tracking without a session | Repeated 30-second sleep intervals |
+| Inactive in Offline: Always Off, or On When Tracking without a session | Interactive maintenance uses time until the next measurement; fast-path boot requests one full measurement interval before gas conditioning |
 | Active: Always On, or On When Tracking with a Recording/Paused session | Keep the receiver running, including throughout ESP deep sleep |
 
 The service owns wake waiting and repeated sleep commands. Before ESP deep
 sleep, the app requests one sleep interval only if GPS is inactive. An existing
-GPS deadline does not shorten ESP sleep or make the ESP wait for GPS to wake.
+GPS deadline is preserved: it does not shorten ESP sleep or make the ESP wait
+for GPS to wake. The fast path makes a final request using the ESP sleep duration
+only if the earlier deadline has expired. Successful transmission records an
+expected wake deadline; it does not confirm physical receiver sleep.
 Charging-only boot does not manage GPS; shutdown does not send a GPS sleep command.
+When Offline has no next wake interval, the policy falls back to `GPS_IDLE_SLEEP_MS`.
 
 The wake deadline uses `RTOS::get_retained_time_ms()` and is stored as a
 `uint64_t` in `RtcAppState::gps_wake_deadline_ms`. It is an absolute monotonic
 time, not UTC or a sleep duration. Baud is not stored in RTC: boot infers it
 from GPS mode and tracking state, with a fallback to the other baud.
+
+### Settings Changes While GPS Sleeps
+
+Changing GPS settings does not request a system reset. When the new setting
+activates GPS, acquisition waits for the existing sleep deadline, including
+when a tracking session is recording or paused. Selecting On When Tracking
+without a session leaves GPS inactive. Selecting Always Off stops acquisition,
+clears the cached fix, and starts sleep maintenance without ending tracking.
+
+Changing operating mode also preserves any existing GPS sleep deadline. On
+leaving Offline for Portable or Stationary, the remaining Offline interval can
+therefore exceed 30 seconds. Subsequent inactive sleep requests use the new
+mode's policy. The battery-powered reset described below applies only to
+starting a new tracking session.
 
 ### Connection and Acquisition
 
@@ -99,9 +115,9 @@ the lock. Aiding time can seed the system clock until GPS supplies valid time.
 
 ### Fast-Path Read
 
-`GoApp` calls `gps_read_once()` after sensor warmup and measurement, without
-starting a GPS task. A receiver whose wake deadline is still in the future is
-left alone. Otherwise, the helper connects, switches/configures the receiver
+`GoApp` calls `gps_read_once()` after sensor initialization, before gas
+conditioning, so UART work overlaps PM warmup without starting a GPS task.
+A receiver whose wake deadline is still in the future is left alone. Otherwise, the helper connects, switches/configures the receiver
 if needed, and reads until both fix and position are valid, the timeout expires,
 or the power-button abort flag is set. It closes UART on return and leaves
 GPS running. The normal read window is three seconds; lack of a position does

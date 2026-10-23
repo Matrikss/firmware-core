@@ -45,9 +45,9 @@ Set rarely — typically only via UI menu.
 |---|---|---|---|
 | Portable | BLE streams data to phone | Battery | BLE push, phone-initiated |
 | Stationary | Wi-Fi cloud transport plus local HTTP and mDNS | Battery or USB | WiFi pull, hourly device-initiated check while cloud transport is enabled |
-| Offline | No radio | Battery | None |
+| Offline | Brief, non-connectable BLE measurement broadcasts on timer wakes | Battery | None |
 
-OTA runs over whichever radio matches the operating mode. BLE OTA starts after
+OTA runs in Portable or Stationary mode over the corresponding radio. BLE OTA starts after
 sensitive services are paused. A Stationary check starts after cloud is
 disarmed; sensing, GPS, and PM are paused only if downloading begins, and an
 already in-flight cloud request can drain concurrently. See
@@ -379,35 +379,12 @@ from deep sleep is configured. See [Accelerometer Service](docs/accel_service.md
 
 ### Gas Index in Offline Mode
 
-TVOC and NOx index values (Sensirion SGP41 gas-index algorithm) are only
-available in Portable and Stationary modes. In Offline mode, the display
-shows raw SRAW ticks instead of index values.
-
-**Why the algorithm cannot run across deep-sleep cycles:**
-
-The Sensirion gas-index algorithm requires continuous sampling at a fixed
-cadence (1 s or 10 s). It builds a rolling baseline (mean and standard
-deviation of the raw sensor signal) over hours and expresses each new
-reading as a deviation from that baseline. This design assumes temporal
-continuity — thousands of evenly-spaced samples, not isolated snapshots
-separated by seconds or minutes of deep sleep.
-
-Sensirion provides a state persistence API (`GasIndexAlgorithm_get_states`
-/ `set_states`) that saves two floats (the mean-variance estimator's mean
-and std) for restoration after short interruptions. This was evaluated and
-rejected for Offline mode because of hard constraints:
-
-| Constraint | Detail |
-|---|---|
-| VOC only | State persistence is only supported for the VOC algorithm. NOx has no equivalent API |
-| 10-minute max interruption | Sensirion specifies that restored states should not be used after interruptions longer than 10 minutes. Measurement intervals above ~600 s exceed this |
-| 3-hour training minimum | States are only meaningful after 3 hours of continuous operation. Offline deep-sleep cycling never accumulates continuous runtime |
-| Low-cadence samples are meaningless | Even if state restoration worked perfectly, one sample every 10–300 seconds cannot track real air quality dynamics. The index value would be technically computed but environmentally unreliable |
-
-The fundamental issue is that the gas-index algorithm is designed for
-always-on monitoring. Offline mode exists to save battery via deep sleep,
-and these goals are incompatible. Displaying raw SRAW ticks (or dashes)
-is more honest than showing an unreliable index.
+The Offline timer fast path records raw SGP41 values without running the
+gas-index algorithm. Raw ticks also populate the TVOC/NOx index fields for
+display and storage; these placeholders are not calculated gas indices.
+Interactive operation uses the producer's periodic gas-index
+sampler; its state is not retained across deep sleep. See
+[Sensor Producer](docs/sensor_producer.md#offline-fast-path).
 
 ### GPS Producer
 
@@ -416,9 +393,11 @@ parsing. It maintains a mutex-protected fix, synchronizes time from GPS, and
 posts `GpsFixUpdate` at the configured interval, including `NoFix` updates.
 
 Inactive GPS uses timed `CFG-SLEEP`: 30-second intervals in Portable/Stationary,
-the next ESP wake interval in Offline, or the maximum interval for Always Off.
+or the next ESP wake interval in Offline. This also applies to Always Off.
 Active GPS remains running through ESP deep sleep; stopping its worker only
 closes UART. The expected wake deadline is retained in `RtcAppState`.
+GPS settings changes wait for an existing sleep deadline without resetting
+the system or ending a tracking session.
 
 Offline tracking start can reset the system on battery to avoid a long GPS
 wait. Only a pending-start boolean is saved to NVS; GoApp creates the route after
@@ -496,8 +475,8 @@ corrections. Corrections do not rewrite stored or transmitted raw history.
 | Local Server measures GET | Corrected | The synchronized API snapshot exposes the common corrected fields |
 | RTC display snapshot | Corrected display state | It never seeds raw cloud or storage state |
 
-The Offline fast path follows the same boundary: storage receives raw values,
-while the display receives a corrected copy. See
+The Offline fast path follows the same boundary: storage and BLE broadcasts
+receive raw values, while the display receives a corrected copy. See
 [`docs/measurement_corrections.md`](docs/measurement_corrections.md).
 
 Manual refresh results update the current readings, BLE, local API, AQI LEDs,
@@ -531,38 +510,23 @@ sleep_ms = (measure_interval_seconds * 1000) - awake_ms   (clamped to 0)
 | < `deep_sleep_threshold_ms` | None (stay awake) | Reboot overhead ≥ sleep duration; loop instead |
 
 The threshold is a tunable constant (`Config::deep_sleep_threshold_ms`),
-set to 5 s for AGo. Combined with the PM sensor warm-hold (see
-[Sleep Entry](#sleep-entry)), the fast-path boot takes only ~4–7 s for
-warm wakes (skipping the 10 s warmup), making a 5 s threshold viable. The
-awake time is subtracted so the total cycle (awake + sleep) matches the
-configured interval.
+set to 5 s for AGo. PM warm-hold skips PM preparation, while gas conditioning
+still runs. Awake time is subtracted so the total cycle (awake + sleep) matches
+the configured interval when enough time remains for deep sleep.
 
 ### Sleep Entry
 
-```text
-1. Final display update (wait=true — waits for framebuffer ownership)
-2. Save RTC display snapshot (sensor values, battery, status flags,
-   rendering settings) so the next button wake can render immediately
-3. Stop all task-based services (BLE, sensor, GPS, input, display worker)
-4. Put SSD1680 into deep sleep mode 1 (~100 µA → <1 µA during ESP deep sleep)
-5. Close the route, backup chart cache, and send sleep if GPS is inactive
-6. Persist app state to RTC memory:
-   - Current mode, behavior, lock status
-   - Tracking-state enum, session ID, GPS wake deadline
-   - RtcAppFlag::GpsEnabled in the flags mask
-   - RtcAppFlag::SensorsWarm (set when sleep < sensor_hold_max_sleep_ms)
-7. Pulse external watchdog (gives it a full timeout window during sleep)
-8. If sleep < sensor_hold_max_sleep_ms (20 s):
-   - gpio_hold_en(PIN_PM_POWER) — hold PM sensor power HIGH
-     (ESP32-C5 per-pin hold persists through deep sleep automatically)
-9. Configure wake sources:
-   - Timer: next wake time
-   - GPIO: Button Power (unlock) — Button Boot is not RTC-capable on ESP32-C5
-10. Enter deep sleep
-```
+The orchestrator finishes the display update, saves its RTC snapshot, and
+stops services. Sensor shutdown turns off the gas heater and sleeps PM unless
+it will be held warm; input shutdown puts CAP1203 into verified deep sleep.
+It then sleeps the display, closes storage, requests inactive GPS sleep, saves
+RTC state, and starts watchdog maintenance. `PowerService::enter_sleep()`
+disables the charger ADC before holding PM GPIO when required, configuring
+wake sources, and entering deep sleep.
 
-For sleeps ≥ 20 s the PM sensor powers off normally (GPIO floats during
-sleep) and the full 10 s warmup runs on wake.
+See [Power Management](docs/power_management.md#sleep-entry) for the sleep
+policy and [Hardware Initialization](docs/hardware_init.md#fast-path-boot-goappexecute_fast_path)
+for timer wakes.
 
 ### Wake and Boot Path
 
@@ -687,12 +651,10 @@ factory reset.
 
 **Fast path** avoids GPS task, input task, and the full orchestrator for a
 "measure and sleep" cycle. The core logic lives in `execute_fast_path()`
-which returns a `FastPathResult` (Sleep or Promote) instead of calling
-`enter_sleep()` directly — this is the key testability seam. An ISR on
-the power button detects button presses during blocking warmup,
-measurement, and GPS operations. If the user presses the button, the fast
-path aborts early and promotes to interactive mode with the device
-unlocked.
+which returns a `FastPathResult` (Sleep, Promote, or thermal Shutdown).
+Timer-only light sleep covers gas conditioning and any remaining PM warmup.
+An ISR latches power-button presses while awake; the final check promotes to
+interactive mode after acquisition, storage, and display finish.
 
 **Button-wake path** eliminates the double display flash (empty frame →
 unlock frame). The display worker holds the SPI bus during the ~3 s
@@ -745,8 +707,8 @@ detailed implementation notes, see [Service Documentation](#service-documentatio
 - `request_sleep()` sends one sleep interval; it cannot replace an existing one.
 - `get_latest_fix()` returns a protected snapshot; `set_aiding_data()` queues
   approximate position/time for the receiver.
-- `gps_read_once()` reads synchronously after fast-path sensor warmup, skips a
-  still-sleeping receiver, and supports power-button abort.
+- `gps_read_once()` runs before fast-path gas conditioning, overlapping PM
+  warmup; it skips a sleeping receiver and supports power-button abort.
 
 See [GPS Service](docs/gps_service.md) for the API and wake-deadline handling.
 
@@ -1047,51 +1009,16 @@ sequenceDiagram
 
 ### Deep Sleep Fast-Path (Timer Wake)
 
-```text
-1. ESP32 wakes from deep sleep (timer)
-2. GoApp::run() reads wake cause: timer, selects FastPath
-3. GoApp::run_fast_path(state):
-   - Install button ISR via _board.install_button_isr()
-   - _board.ulp_stop()
-   - Load RTC display snapshot (on non-returning stack)
-   - Call execute_fast_path() → returns FastPathResult
-   - Remove button ISR
-   - If Sleep: save state, stop display, ulp_start, enter_sleep (never returns)
-   - If Promote: wire measures pointer, call run_interactive()
+`GoApp::run_fast_path()` installs the button ISR and calls the testable
+`execute_fast_path()`. The core initializes sensors, handles GPS, conditions
+and reads raw gas, reads the remaining sensors, stores data, and paints the
+locked dashboard through `build_fast_path_display()` without UIManager.
+It returns a sleep, promotion, or thermal shutdown result; the wrapper saves
+retained state before sleep or interactive promotion. Timer wakes preserve
+CAP1203 sleep without initializing touch.
 
-4. execute_fast_path() (testable core):
-   - _board.init_core() (NVS, GPIO/I2C, and SPI — idempotent)
-   - _board.init_fuel_gauge() (optional BQ27427, one attempt)
-   - Retry _board.init_bms() twice; continue degraded if unavailable
-    - _board.release_gpio_holds() — pad transitions glitch-free
-    - _board.power().set_pm_power(true) — drives EN_PM GPIO only;
-      `EN_OTG` already armed by `init_bms()`
-    - _board.load_settings()
-    - _board.sensors(state.has_flag(RtcAppFlag::SensorsWarm)) — SPS30 warm: skip_reset
-   - If RtcAppFlag::SensorsWarm is set: skip warmup (200 ms settle only)
-     Else: interruptible warmup loop with button checks
-   - One-shot measurement (skip if button pressed)
-   - One-shot GPS via _board.new_gps_driver() when GPS is active, including Paused
-   - Storage: cache_measurement() always; route point only while Recording
-     - One _board.power().poll_bms() snapshot supplies route SOC, display,
-       and thermal shutdown policy
-     - Display + sleep decision via _board.power().decide_sleep()
-    - Before a long deep sleep (not held warm): sm.pm_sleep() stops the fan
-    - Returns FastPathResult{Outcome::Sleep, ...} or {Outcome::Promote, ...}
-```
-
-The fast path never returns to `app_main()`. It either sleeps (CPU
-reboots) or promotes to `run_interactive()`. The `execute_fast_path()`
-method returns a result struct instead of performing side effects
-directly, making the entire fast-path control flow host-testable via
-`GoAppTestAccess`.
-
-The fast-path bypasses the UIManager entirely. `DisplayValues` is built
-directly from sensor data and RTC state via the pure function
-`build_fast_path_display()` — always `Screen::Home`, `locked=true`, no
-chart data, no snackbar, no menu state. The display call uses `init()`
-which sets up the u8g2 renderer, renders, and drives SPI inline without
-starting the async worker task.
+See [Fast-Path Boot](docs/hardware_init.md#fast-path-boot-goappexecute_fast_path)
+for sequencing, timing, and promotion handoff.
 
 ### Button-Wake Path (Button Wake, Offline Mode)
 

@@ -121,6 +121,9 @@ The orchestrator selects the shutdown mode from the planned sleep duration.
 Short sleeps that hold PM power pass `sleep_pm=false` and set the saved
 `RtcAppFlag::SensorsWarm` flag. Long sleeps pass `sleep_pm=true` and clear
 that flag, ensuring that the next timer boot performs the full PM warmup.
+Both stop modes turn off the gas heater after the worker stops. This also
+applies during provisioning and OTA pauses; restarting the producer runs
+startup conditioning before gas sampling resumes.
 
 ## Event Output
 
@@ -286,14 +289,14 @@ Pushes cached temp/hum compensation to the SGP41 driver (if available),
 then calls `start_measures(1, TvocNox)` and caches the result in
 `_last_tvoc_nox`. Missed ticks are skipped, not replayed.
 
-#### Offline (fast path)
+#### Offline (Fast Path)
 
-In Offline mode, no `SensorProducer` is created. The fast path calls
-`start_measures(1, All)` directly on `SensorManager`. The algorithm is
-never configured (`_index_configured == false`), so index fields stay at
-invalid sentinels. A retained UX placeholder in `execute_fast_path()`
-(`go_app.cpp`) overwrites the index fields with raw ticks so the display
-still shows a value.
+The Offline timer fast path uses `SensorManager` directly. GoApp schedules
+conditioning and two raw gas reads (first discarded), turns the heater off,
+then reads `PM | Other` once. Raw ticks are retained in the raw fields and
+copied into index fields for display and storage, preserving Offline's
+placeholder behavior. Failed readings remain invalid. See
+[Fast-Path Boot](hardware_init.md#fast-path-boot-goappexecute_fast_path).
 
 ### Orchestrator Signalling
 

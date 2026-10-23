@@ -66,6 +66,7 @@ public:
   IMPLEMENT_MOCK0(init);
   IMPLEMENT_MOCK1(read);
   IMPLEMENT_MOCK0(run_conditioning);
+  IMPLEMENT_MOCK0(stop_measurement);
   IMPLEMENT_MOCK2(set_compensation);
 };
 
@@ -111,6 +112,8 @@ public:
   bool last_temp_hum_valid() const { return _p._last_temp_hum_valid; }
 
   void set_running(bool v) { _p._running = v; }
+  void set_task_handle(RtosTaskHandle handle) { _p._task_handle = handle; }
+  bool has_task() const { return _p._task_handle != nullptr; }
 
   void handle_calibration() { _p.handle_calibration(); }
   void handle_prepare() { _p.handle_prepare(); }
@@ -182,12 +185,28 @@ TEST_CASE("SensorProducer handlers", "[SensorProducer]") {
   SensorProducer producer(manager, &event_queue_sentinel, {});
   SensorProducerTestAccess access(producer);
 
-  SECTION("stop keeps PM measuring when requested") { producer.stop(false); }
+  SECTION("stop keeps PM measuring but turns off the gas heater after task teardown") {
+    access.set_task_handle(&event_queue_sentinel);
+    REQUIRE_CALL(mock_tvoc_nox, stop_measurement())
+        .LR_SIDE_EFFECT(CHECK_FALSE(access.has_task()))
+        .RETURN(true);
+    producer.stop(false);
+  }
 
-  SECTION("stop sleeps PM when requested") {
+  SECTION("stop sleeps PM and turns off the gas heater after task teardown") {
+    access.set_task_handle(&event_queue_sentinel);
     REQUIRE_CALL(mock_pm, sleep()).RETURN(true);
-
+    REQUIRE_CALL(mock_tvoc_nox, stop_measurement())
+        .LR_SIDE_EFFECT(CHECK_FALSE(access.has_task()))
+        .RETURN(true);
     producer.stop(true);
+  }
+
+  SECTION("heater-off failure does not leave the worker running") {
+    access.set_task_handle(&event_queue_sentinel);
+    REQUIRE_CALL(mock_tvoc_nox, stop_measurement()).RETURN(false);
+    producer.stop(false);
+    CHECK_FALSE(access.has_task());
   }
 
   // -----------------------------------------------------------------------

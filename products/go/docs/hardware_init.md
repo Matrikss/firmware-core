@@ -237,29 +237,34 @@ via GoBoard lazy accessors:
 Timer wake while locked. Minimal initialization — no event loop, no producer
 tasks, no input handling. Returns a `FastPathResult` for testability.
 
-| # | What | GoBoard call |
-|---|---|---|
-| 1 | Core init | `_board.init_core()` |
-| 2 | Battery devices | `_board.init_fuel_gauge()`, then retry `_board.init_bms()` twice; continue degraded on failure |
-| 3 | GPIO holds + EN_PM | `_board.release_gpio_holds()`, then `_board.power().set_pm_power(true)` |
-| 4 | Load settings | `_board.load_settings()` |
-| 5 | Sensor init | `_board.sensors(state.has_flag(RtcAppFlag::SensorsWarm))` |
-| 6 | Interruptible warmup | `sm.warmup_step()` with button checks |
-| 7 | One-shot measurement | `sm.start_measures()` (skip if button) |
-| 8 | One-shot GPS | `_board.new_gps_driver()` (skip if button/inactive) |
-| 9 | Storage + cache | `_board.storage()` (skip if button); one PowerSnapshot supplies route SOC and display |
-| 10 | Display + sleep decision | `_board.display()`, `_board.power().decide_sleep()` |
-| 11 | Return result | `FastPathResult{Outcome::Sleep, ...}` or `{Outcome::Promote, ...}` |
+| Step | Behavior |
+|---|---|
+| Initialize | Initialize core, battery devices, and sensors; release GPIO holds and enable PM. BMS gets two attempts before continuing degraded. |
+| GPS | Read active GPS or request inactive GPS sleep for one measurement interval; preserve an existing sleep deadline. This work overlaps PM warmup. |
+| Gas | Start SGP41 conditioning, use timer-only light sleep, discard the first raw sample, wait 500 ms, retain the second, then turn the heater off. |
+| Measure | Wait out any remaining cold PM warmup, then read PM and other sensors once. No PM discard reads run during fast-path warmup. |
+| Store and display | Sleep PM early if a long sleep is expected; cache measurements, append only while Recording, poll battery, and paint the dashboard. |
+| BLE during display | If deep sleep is expected with no latched button or shutdown request, broadcast raw measurements during refresh, then stop and deinitialize BLE. See [broadcast lifecycle](ble_service.md#offline-broadcast-lifecycle). |
+| Decide | Recalculate sleep duration, check the latched button once, and return Sleep, Promote, or thermal Shutdown. |
 
-The caller (`run_fast_path`) handles ISR setup/teardown and sleep entry. Before
-promotion to `run_interactive()`, it retries BMS initialization if the degraded
-fast path did not acquire the charger; failure restarts the device.
+GoApp owns acquisition timing. The gas window is 10 s, with wake scheduled
+100 ms before its end; it normally covers the cold PM warmup too. Warm PM
+skips only the PM wait, not gas conditioning. Any remaining PM wait below
+1 s uses an RTOS delay; longer waits use timer-only light sleep. Light-sleep
+failure falls back to a delay without promoting to interactive mode.
+
+The caller (`run_fast_path`) manages the button ISR and saves tracking timing,
+PM warm state, and the GPS wake deadline. Before deep sleep it stops the
+display, starts the watchdog ULP, and requests inactive GPS sleep only if its
+previous deadline has expired. Timer wakes leave CAP1203 untouched. Before
+interactive promotion, missing BMS initialization is retried; failure restarts
+the device.
 
 ### Retained Tracking Timing
 
-Every `FastPathResult` includes only the updated `TrackingTiming` value in
-`tracking_timing`, not a replacement app state. The core derives it from the
-input's timing and normalizes it against the actual tracking state: inactive
+`FastPathResult` carries updated tracking timing, PM warm state, and the GPS
+wake deadline rather than a replacement app state. The core derives tracking
+timing from the input and normalizes it against the actual tracking state: inactive
 tracking clears timing, while a live-segment marker that disagrees with Recording or
 Paused invalidates only accumulated duration and the segment anchor. Session
 and last-record anchors remain independently usable. Paused appends no point.
@@ -273,22 +278,22 @@ errors retain their existing promotion behavior.
 Unknown active duration does not block a valid accepted-record timestamp.
 The helper checks actual Recording state, session elapsed time, and the prior
 last-record anchor independently of duration. If it rejects the accepted
-record's time, only `last_record_s` is invalidated. Early promotion and reopen
-failure carry the normalized timing without timestamping a record.
-The caller (`run_fast_path`) copies the original `RtcAppState` and replaces only
-its timing with the result. Sleep additionally applies the new `SensorsWarm`
-flag; Promote preserves the original flags. Both save the reconstructed state
-before sleeping or entering the BMS retry and interactive initialization, so RTC
-readers receive the accepted-record timestamp without replacing unrelated app
-state. A temperature Shutdown result clears its timing; the wrapper continues
+record's time, only `last_record_s` is invalidated. Reopen failure carries the
+normalized timing without timestamping a record.
+The caller copies the original `RtcAppState`, updates tracking timing,
+`SensorsWarm`, and the GPS wake deadline, then saves it before sleep or
+interactive promotion. Promotion clears `SensorsWarm` so interactive startup
+prepares the sensors again; unrelated state is preserved. A temperature Shutdown
+result clears its timing; the wrapper continues
 directly to shutdown without saving that result or changing the route lifecycle.
 
 ### Button detection during fast path
 
 GoBoard's `install_button_isr()` / `remove_button_isr()` manage a
-falling-edge ISR that sets a volatile flag. The flag is checked between
-warmup iterations, after measurement, after GPS read, and after the sleep
-decision. The ISR is removed before `InputService` construction.
+falling-edge ISR that latches presses while the CPU is awake. Gas and PM
+light sleep use timer wake only. Acquisition, storage, and display finish
+before the final promotion check; the GPS read also accepts the abort flag.
+The ISR is removed before `InputService` construction.
 
 ### Promotion handoff
 

@@ -44,6 +44,10 @@ public:
   // Returns false if the device could not be found or configured.
   virtual bool init() = 0;
 
+  // Suspend or resume touch sensing. Call only while no reader is running.
+  // Returns false when unsupported or when the command fails.
+  virtual bool set_sleep(bool asleep) { return false; }
+
   // Reads the current touch state into out. Returns false on I2C failure.
   // out.noise is only valid when supports_noise() == true.
   // Does NOT acknowledge the interrupt; call clear_interrupt() to ack and

@@ -387,11 +387,10 @@ public:
   /// @param sleep_duration_ms How long to sleep before timer wake.
   void enter_sleep(uint32_t sleep_duration_ms);
 
-  /// Light sleep using the same timer and EXT1 button mask as deep sleep.
-  /// Returns true for a button wake or a held power button. Wake sources are
-  /// cleared and digital GPIO restored before returning. A sleep error falls
-  /// back to a bounded RTOS delay.
-  bool enter_light_sleep(uint32_t sleep_duration_ms);
+  /// Light sleep with timer wake and optional button wake. Sleep errors fall
+  /// back to a bounded RTOS delay. Returns false in timer-only mode; otherwise
+  /// returns true for a button wake or held power button.
+  bool enter_light_sleep(uint32_t sleep_duration_ms, bool wake_on_button = true);
 
   // -------------------------------------------------------------------------
   // Boot path (static — call before any service is constructed)
