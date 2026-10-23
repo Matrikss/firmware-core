@@ -712,6 +712,11 @@ void PowerService::set_pm_power(bool on) {
 // ---------------------------------------------------------------------------
 
 void PowerService::enter_sleep(uint32_t sleep_duration_ms) {
+  // No more telemetry is needed until wake. Driver init / the next telemetry
+  // read enables conversions again; charging and the power path stay active.
+  if (_bms != nullptr && !_bms->set_adc_enabled(false)) {
+    AG_LOGW(TAG, "charger ADC suspension failed");
+  }
 #ifndef TEST_HOST
   // Hold PM sensor power GPIO during short sleeps so the sensor stays warm
   // and the next fast-path boot can skip the 10 s warmup.

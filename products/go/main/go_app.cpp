@@ -453,6 +453,9 @@ void GoApp::run_fast_path(const RtcAppState &state) {
   if (result.outcome == FastPathResult::Outcome::Sleep) {
     _board.display().stop();
     _board.display().deep_sleep();
+    if (!_board.sleep_touch()) {
+      AG_LOGW(TAG, "fast-path: touch sleep failed");
+    }
     _board.ulp_start();
     log_heap(TAG, "boot:fast-path:before-sleep");
     prepare_gps_for_sleep(result.sleep_duration_ms, save);

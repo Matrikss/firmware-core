@@ -33,6 +33,10 @@ public:
   /// @return true if the read succeeded.
   virtual bool read_telemetry(BmsTelemetry &out) = 0;
 
+  /// Enable or suspend telemetry ADC conversions without changing charging
+  /// or the power path. Unsupported devices return false.
+  virtual bool set_adc_enabled(bool enabled) { return false; }
+
   /// Read charger status (charging state).
   /// @param out Populated on success; left at defaults on failure.
   /// @return true if the read succeeded.

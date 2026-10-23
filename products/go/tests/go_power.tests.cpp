@@ -45,6 +45,7 @@ public:
 
   IMPLEMENT_MOCK0(init);
   IMPLEMENT_MOCK1(read_telemetry);
+  IMPLEMENT_MOCK1(set_adc_enabled);
   IMPLEMENT_MOCK1(read_status);
   IMPLEMENT_MOCK1(get_charging_state);
   IMPLEMENT_MOCK1(get_battery_percentage);
@@ -143,6 +144,23 @@ static constexpr PowerService::Config DEFAULT_CONFIG = {
     .pin_wake_button_boot = 1,
     .deep_sleep_threshold_ms = 5000,
 };
+
+TEST_CASE("deep sleep disables charger ADC without requiring a charger", "[PowerService][sleep]") {
+  MockBmsDevice bms;
+  PowerService power(&bms, test_gpio_hal, DEFAULT_CONFIG);
+  SECTION("ADC disable succeeds") {
+    REQUIRE_CALL(bms, set_adc_enabled(false)).RETURN(true);
+    power.enter_sleep(60000);
+  }
+  SECTION("ADC disable failure is tolerated") {
+    REQUIRE_CALL(bms, set_adc_enabled(false)).RETURN(false);
+    power.enter_sleep(60000);
+  }
+  SECTION("charger is unavailable") {
+    power.set_bms(nullptr);
+    power.enter_sleep(60000);
+  }
+}
 
 TEST_CASE("light sleep: timer-only mode ignores a held button", "[PowerService][sleep]") {
   ScopedMockRTOS rtos;

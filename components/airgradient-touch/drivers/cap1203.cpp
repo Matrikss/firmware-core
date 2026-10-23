@@ -78,7 +78,7 @@ bool CAP1203::init() {
   }
 
   // Apply sensitivity, thresholds, channel enable, and interrupt config.
-  if (!_apply_config()) {
+  if (!_apply_config() || !set_sleep(false)) {
     ESP_LOGE(TAG, "apply config failed");
     _rm_device();
     return false;
@@ -91,6 +91,25 @@ bool CAP1203::init() {
 
   ESP_LOGI(TAG, "initialised at 0x%02X", _address);
   return true;
+}
+
+bool CAP1203::set_sleep(bool asleep) {
+  uint8_t control = 0;
+  if (!_read_reg(REG_MAIN_CONTROL, control)) {
+    return false;
+  }
+  // I2C access alone does not leave deep sleep. Clear both mode bits when
+  // resuming, and acknowledge any latched interrupt before changing mode.
+  control &= static_cast<uint8_t>(~(MAIN_STANDBY | MAIN_DEEP_SLEEP | MAIN_INTERRUPT));
+  if (asleep) {
+    control |= MAIN_DEEP_SLEEP;
+  }
+  if (!_write_reg(REG_MAIN_CONTROL, control)) {
+    return false;
+  }
+  uint8_t actual = 0;
+  return _read_reg(REG_MAIN_CONTROL, actual) &&
+         (actual & (MAIN_STANDBY | MAIN_DEEP_SLEEP)) == (control & (MAIN_STANDBY | MAIN_DEEP_SLEEP));
 }
 
 bool CAP1203::read(TouchData &out) {

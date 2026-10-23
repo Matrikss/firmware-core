@@ -69,6 +69,7 @@ public:
 
   // CapTouchSensor interface
   bool init() override;
+  bool set_sleep(bool asleep) override;
   bool read(TouchData &out) override;
   bool supports_noise() const override { return true; }
   bool supports_calibration() const override { return true; }
@@ -92,6 +93,9 @@ private:
 
   // Register addresses
   static constexpr uint8_t REG_MAIN_CONTROL = 0x00;
+  static constexpr uint8_t MAIN_STANDBY = 1u << 5;
+  static constexpr uint8_t MAIN_DEEP_SLEEP = 1u << 4;
+  static constexpr uint8_t MAIN_INTERRUPT = 1u << 0;
   static constexpr uint8_t REG_GENERAL_STATUS = 0x02;
   static constexpr uint8_t REG_SENSOR_INPUT_STATUS = 0x03;
   static constexpr uint8_t REG_NOISE_FLAG_STATUS = 0x0A;
