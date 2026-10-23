@@ -45,9 +45,9 @@ Set rarely — typically only via UI menu.
 |---|---|---|---|
 | Portable | BLE streams data to phone | Battery | BLE push, phone-initiated |
 | Stationary | Wi-Fi cloud transport plus local HTTP and mDNS | Battery or USB | WiFi pull, hourly device-initiated check while cloud transport is enabled |
-| Offline | No radio | Battery | None |
+| Offline | Brief, non-connectable BLE measurement broadcasts on timer wakes | Battery | None |
 
-OTA runs over whichever radio matches the operating mode. BLE OTA starts after
+OTA runs in Portable or Stationary mode over the corresponding radio. BLE OTA starts after
 sensitive services are paused. A Stationary check starts after cloud is
 disarmed; sensing, GPS, and PM are paused only if downloading begins, and an
 already in-flight cloud request can drain concurrently. See
@@ -475,8 +475,8 @@ corrections. Corrections do not rewrite stored or transmitted raw history.
 | Local Server measures GET | Corrected | The synchronized API snapshot exposes the common corrected fields |
 | RTC display snapshot | Corrected display state | It never seeds raw cloud or storage state |
 
-The Offline fast path follows the same boundary: storage receives raw values,
-while the display receives a corrected copy. See
+The Offline fast path follows the same boundary: storage and BLE broadcasts
+receive raw values, while the display receives a corrected copy. See
 [`docs/measurement_corrections.md`](docs/measurement_corrections.md).
 
 Manual refresh results update the current readings, BLE, local API, AQI LEDs,

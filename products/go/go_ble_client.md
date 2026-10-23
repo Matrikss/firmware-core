@@ -2,7 +2,8 @@
 
 Client-side specification for mobile app developers integrating with the
 AirGradient Go (AGo) BLE peripheral. Covers discovery, pairing, GATT
-operations, payload decoding, and the history download protocol.
+operations, payload decoding, Offline measurement broadcasts, and the history
+download protocol.
 
 ---
 
@@ -28,6 +29,58 @@ operations, payload decoding, and the history download protocol.
 ---
 
 ## 1. Discovery and Connection
+
+### Offline Measurement Broadcasts
+
+Offline timer wakes broadcast public, unencrypted measurements without a
+connection, pairing, or bonding. The same payload repeats at a configured
+300 ms interval during display refresh (typically about 3 seconds), then BLE
+shuts down. Reception on every wakeup is not guaranteed.
+
+Match **Service Data UUID `d2086101-9a63-4acc-8a7c-c07f607cb240`**.
+The non-connectable advertisement contains one 128-bit Service Data AD field
+(type `0x21`): 2 bytes length/type + 16 bytes UUID + 13 bytes payload.
+There are no Flags, local name, separate service UUID list, or scan response;
+inspect Service Data rather than filtering by name or a service UUID list.
+
+Offsets below refer to the 13-byte body after the UUID. Multibyte integers
+are little-endian; signed values use two's complement.
+
+| Offset | Type | Measurement | Unit | Invalid |
+|---|---|---|---|---|
+| 0 | `uint8` | Format version (`1`) | — | — |
+| 1–2 | `int16` | Temperature | 0.01 °C | `0x8000` |
+| 3 | `uint8` | Humidity | 1 %RH | `0xFF` |
+| 4–5 | `uint16` | PM2.5 | 0.1 µg/m³ | `0xFFFF` |
+| 6–7 | `uint16` | CO₂ | 1 ppm | `0xFFFF` |
+| 8–9 | `uint16` | Pressure | 0.1 hPa | `0xFFFF` |
+| 10–11 | `int16` | Barometric altitude | 1 m | `0x8000` |
+| 12 | `uint8` | Battery | 1 % | `0xFF` |
+
+Measurements are raw (no user corrections); altitude is pressure-derived,
+not GPS. Values round to nearest, with ties away from zero. Invalid,
+nonfinite, or unrepresentable values use the field's sentinel. Check sentinels
+before scaling, and ignore unsupported versions or bodies other than 13 bytes.
+The payload has no timestamp, sample ID, serial number, or GPS position.
+
+Clients may accept the first report per device and suppress identical payloads
+for 5 seconds from that accepted report, without extending the window for
+duplicates. Accept a changed payload immediately. This is a deduplication
+convention, not a guarantee that reports belong to the same measurement cycle.
+
+The [Python listener](../../scripts/ago_listen_measurements.py) prints every
+matching scanner report as JSON, including duplicates; invalid values become
+`null`, and `received_at` is the client's reception time. From the repo root:
+
+```sh
+python3 -m pip install bleak
+python3 scripts/ago_listen_measurements.py
+# Or run with uv:
+uv run --with bleak python scripts/ago_listen_measurements.py
+```
+
+Stop with Ctrl+C. Optional `--address` filters by Bluetooth address or macOS
+device UUID. The connection and GATT sections below describe Portable mode.
 
 ### Advertised Name
 

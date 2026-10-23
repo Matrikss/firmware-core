@@ -15,7 +15,7 @@ This component owns:
 - BLE stack initialisation and teardown
 - GATT service and characteristic registration
 - BLE advertising control (interval, local name, advertised service UUIDs,
-  manufacturer-specific data)
+  manufacturer-specific data, non-connectable service broadcasts)
 - connect / disconnect event delivery via callbacks
 - per-characteristic write event delivery via callbacks
 - characteristic value updates and notifications to connected clients
@@ -115,8 +115,6 @@ characteristics with the NimBLE GATT database; it must be called before
 `start_advertising()`. The HAL has no separate "server start" call —
 `start_advertising()` starts the underlying `NimBLEServer` first.
 
-For a production wiring, see `products/go/main/go_ble.cpp`.
-
 ### Advertising Interval
 
 `set_advertising_interval(uint32_t interval_us)` configures both the minimum
@@ -134,6 +132,18 @@ until stack teardown. Each fresh stack uses NimBLE's defaults unless its
 owner sets an interval. The component does not choose a product policy or
 change transmit power. The controller still adds the normal random advertising
 delay.
+
+### Service Broadcasts
+
+`set_service_broadcast(uuid, data, len)` replaces the advertising payload with
+one 128-bit Service Data field containing 1–13 data bytes. It copies the data,
+disables connections and scan responses, and omits Flags and local name.
+Call after `init()` while advertising is stopped and no peer is connected,
+then set the interval and call `start_advertising()`.
+
+Broadcasts are public and require no pairing. Stop and `deinit()` when done;
+reinitialize before returning to connectable advertising. On setup failure,
+retry or deinitialize.
 
 ## Security
 
@@ -193,10 +203,8 @@ Bond persistence requires `CONFIG_BT_NIMBLE_NVS_PERSIST=y` in the product
 
 ## Tests
 
-This component does not currently own host tests. BLE-dependent product
-behavior is exercised at the product level (e.g.
-`products/go/tests/go_ble.tests.cpp`) and via the BLE integration suite
-under `products/go/tests/ble-integration/`.
+This component does not currently own host tests. Applications exercise
+BLE-dependent behavior through HAL mocks and hardware integration tests.
 
 ## Notes
 

@@ -5,6 +5,8 @@ device status, configuration, and stored route data to a connected phone app
 over a single custom GATT service. Active only in Portable operating mode.
 Called synchronously by the orchestrator for data output; NimBLE callbacks run
 in the NimBLE task and post lightweight events to the orchestrator queue.
+Offline broadcasts bypass `BleService`; see
+[Offline Broadcast Lifecycle](#offline-broadcast-lifecycle).
 
 ## Files
 
@@ -13,6 +15,8 @@ in the NimBLE task and post lightweight events to the orchestrator queue.
 | `products/go/main/go_ble.h` | `BleService` class declaration |
 | `products/go/main/go_ble.cpp` | GATT setup, CBOR encoding, NimBLE callbacks, binary history streaming |
 | `products/go/main/go_ble_protocol.h` | BLE CBOR protocol string constants (`BLE_KEY_*`, `BLE_VAL_*`) shared across BLE and orchestrator |
+| `products/go/main/go_ble_advertisement.h`, `.cpp` | Offline 13-byte measurement encoder and wire constants |
+| `products/go/main/go_app.cpp` | Offline broadcast lifecycle around display refresh |
 
 ## Dependencies
 
@@ -96,6 +100,22 @@ Portable mode uses a fixed **500 ms** advertising interval, configured via
 `AgBleServer::set_advertising_interval()` and retained across reconnects.
 Attached provisioning shares this interval; Stationary standalone provisioning
 uses the stack defaults.
+
+### Offline Broadcast Lifecycle
+
+`GoApp::execute_fast_path()` encodes raw measurements and the latest battery
+percentage, then starts a non-connectable broadcast before synchronous display
+refresh. The interval is 300 ms; the window follows refresh duration (typically
+about 3 seconds), with no additional wait. The display's 10 ms BUSY-poll delays
+allow NimBLE to run. BLE stops and deinitializes before the final sleep decision,
+which includes BLE setup and teardown time.
+
+Broadcasting is skipped when promotion is already required, a button press is
+latched, or a shutdown request is pending. Setup failures release BLE and allow
+display and sleep handling to continue. These public advertisements require no
+bond and contain no GPS data. See the
+[client guide](../go_ble_client.md#offline-measurement-broadcasts) for the payload
+format, deduplication guidance, and listener command.
 
 ---
 

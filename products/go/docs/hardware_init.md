@@ -244,6 +244,7 @@ tasks, no input handling. Returns a `FastPathResult` for testability.
 | Gas | Start SGP41 conditioning, use timer-only light sleep, discard the first raw sample, wait 500 ms, retain the second, then turn the heater off. |
 | Measure | Wait out any remaining cold PM warmup, then read PM and other sensors once. No PM discard reads run during fast-path warmup. |
 | Store and display | Sleep PM early if a long sleep is expected; cache measurements, append only while Recording, poll battery, and paint the dashboard. |
+| BLE during display | If deep sleep is expected with no latched button or shutdown request, broadcast raw measurements during refresh, then stop and deinitialize BLE. See [broadcast lifecycle](ble_service.md#offline-broadcast-lifecycle). |
 | Decide | Recalculate sleep duration, check the latched button once, and return Sleep, Promote, or thermal Shutdown. |
 
 GoApp owns acquisition timing. The gas window is 10 s, with wake scheduled
