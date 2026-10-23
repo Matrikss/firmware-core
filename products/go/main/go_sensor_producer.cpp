@@ -62,6 +62,11 @@ void SensorProducer::stop(bool sleep_pm) {
     RTOS::task_delete(_task_handle);
     _task_handle = nullptr;
   }
+  // Stop the heater only after the worker can no longer issue gas reads.
+  // A subsequent start() runs warmup/conditioning before sampling again.
+  if (!_manager.stop_tvoc_nox_measurement()) {
+    AG_LOGW(TAG, "gas heater shutdown failed");
+  }
 }
 
 void SensorProducer::request_measurement(uint8_t iterations, SensorGroup groups,

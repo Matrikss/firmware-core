@@ -28,6 +28,7 @@
 class MockCapTouchSensor : public trompeloeil::mock_interface<CapTouchSensor> {
 public:
   IMPLEMENT_MOCK0(init);
+  IMPLEMENT_MOCK1(set_sleep);
   IMPLEMENT_MOCK1(read);
   IMPLEMENT_MOCK0(clear_interrupt);
   IMPLEMENT_CONST_MOCK0(supports_noise);
@@ -61,7 +62,11 @@ static bool gpio_set_level(int, int) { return true; }
 static bool gpio_add_interrupt_handler(int, gpio::InterruptHandler, void *) { return true; }
 static bool gpio_remove_interrupt_handler(int) { return true; }
 static bool gpio_enable_interrupt(int) { return true; }
-static bool gpio_disable_interrupt(int) { return true; }
+static int disabled_interrupts = 0;
+static bool gpio_disable_interrupt(int) {
+  ++disabled_interrupts;
+  return true;
+}
 
 static const gpio::Hal test_gpio_hal = {
     gpio_configure,
@@ -1007,4 +1012,26 @@ TEST_CASE("CH1 gesture queue timeout", "[InputService][touch][gesture][timeout]"
     ALLOW_CALL(mock_rtos, get_time_ms_impl()).RETURN(1100);
     CHECK(svc.compute_queue_timeout_ms() == 301);
   }
+}
+
+TEST_CASE("input stop suspends touch after disabling ISRs and start restores sensing",
+          "[InputService][sleep]") {
+  MockCapTouchSensor touch;
+  FreeRTOS rtos;
+  RTOS::set_instance(&rtos);
+  TestableInputService service(touch, make_config());
+  disabled_interrupts = 0;
+  bool sleep_ok = true;
+  SECTION("sleep succeeds") {}
+  SECTION("sleep fails but sensing is still restored") { sleep_ok = false; }
+  trompeloeil::sequence seq;
+  REQUIRE_CALL(touch, set_sleep(true))
+      .IN_SEQUENCE(seq)
+      .SIDE_EFFECT(CHECK(disabled_interrupts == 3))
+      .LR_RETURN(sleep_ok);
+  REQUIRE_CALL(touch, set_sleep(false)).IN_SEQUENCE(seq).RETURN(true);
+  service.stop();
+  // Host task_create intentionally returns false, after resume has run.
+  CHECK_FALSE(service.start());
+  RTOS::set_instance(nullptr);
 }

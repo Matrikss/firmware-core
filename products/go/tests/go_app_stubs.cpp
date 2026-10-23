@@ -18,6 +18,7 @@
 #include "go_portable_provisioner.h"
 #include "go_power.h"
 #include "go_sensor_producer.h"
+#include "services/sensor_manager.h"
 #include "go_storage.h"
 #include "go_ulp.h"
 #include "gps/gps_service.h"
@@ -29,6 +30,7 @@
 #include <cstring>
 #include <functional>
 #include <string>
+#include <vector>
 
 // ============================================================================
 // test_spy — observable state written by stubs, read by test assertions
@@ -43,6 +45,21 @@ bool rtc_snapshot_valid = false;
 
 // --- SensorManager ---
 int warmup_step_count = 0;
+std::vector<std::string> fast_path_events;
+bool gas_begin_ok = false;
+TVOCNOxData gas_sample{};
+int gas_read_count = 0;
+int gas_fail_read = 0;
+int gas_cancel_count = 0;
+bool light_sleep_failure = false;
+int light_sleep_fallback_count = 0;
+bool fast_path_timer_only = true;
+uint32_t gps_read_duration_ms = 0;
+bool pm_sleep_ok = true;
+std::function<void()> after_pm_sleep;
+std::function<void()> after_cache;
+std::function<void()> before_sensor_measurement;
+SensorGroup last_sensor_groups = SensorGroup::None;
 int pm_sleep_count = 0;
 Measures measures_to_return{};
 uint32_t co2_abc_period_apply_count = 0;
@@ -161,6 +178,21 @@ void reset() {
   rtc_snapshot_valid = false;
 
   warmup_step_count = 0;
+  fast_path_events.clear();
+  gas_begin_ok = false;
+  gas_sample = {};
+  gas_read_count = 0;
+  gas_fail_read = 0;
+  gas_cancel_count = 0;
+  light_sleep_failure = false;
+  light_sleep_fallback_count = 0;
+  fast_path_timer_only = true;
+  gps_read_duration_ms = 0;
+  pm_sleep_ok = true;
+  after_pm_sleep = nullptr;
+  after_cache = nullptr;
+  before_sensor_measurement = nullptr;
+  last_sensor_groups = SensorGroup::None;
   pm_sleep_count = 0;
   measures_to_return = Measures{};
   co2_abc_period_apply_count = 0;
@@ -328,7 +360,33 @@ SensorManager::~SensorManager() = default;
 
 void SensorManager::warmup_step(bool /*condition_gas*/) { test_spy::warmup_step_count++; }
 void SensorManager::warmup() {}
-void SensorManager::pm_sleep() { test_spy::pm_sleep_count++; }
+bool SensorManager::pm_sleep() {
+  test_spy::pm_sleep_count++;
+  test_spy::fast_path_events.push_back("pm_sleep");
+  if (test_spy::after_pm_sleep) {
+    test_spy::after_pm_sleep();
+  }
+  return test_spy::pm_sleep_ok;
+}
+bool SensorManager::start_tvoc_nox_conditioning() {
+  test_spy::fast_path_events.push_back("gas_begin");
+  return test_spy::gas_begin_ok;
+}
+bool SensorManager::read_tvoc_nox_raw(TVOCNOxData &out) {
+  test_spy::fast_path_events.push_back("gas_read");
+  ++test_spy::gas_read_count;
+  if (test_spy::gas_read_count == test_spy::gas_fail_read) {
+    out = {};
+    return false;
+  }
+  out = test_spy::gas_read_count == 1 ? TVOCNOxData{100, 123, 200, 456} : test_spy::gas_sample;
+  return true;
+}
+bool SensorManager::stop_tvoc_nox_measurement() {
+  ++test_spy::gas_cancel_count;
+  test_spy::fast_path_events.push_back("gas_stop");
+  return true;
+}
 void SensorManager::pm_wake() {}
 Co2CalibrationResult SensorManager::calibrate_co2() { return Co2CalibrationResult::Unsupported; }
 Co2AbcPeriodResult SensorManager::set_co2_abc_period_days(int days) {
@@ -349,7 +407,12 @@ SensorManager::set_tvoc_nox_learning_offsets(int /*tvoc_learning_offset*/,
 }
 void SensorManager::set_tvoc_nox_compensation(float /*temperature_c*/, float /*humidity_pct*/) {}
 
-Measures SensorManager::start_measures(int /*iterations*/, SensorGroup /*groups*/) {
+Measures SensorManager::start_measures(int /*iterations*/, SensorGroup groups) {
+  test_spy::fast_path_events.push_back("measure");
+  test_spy::last_sensor_groups = groups;
+  if (test_spy::before_sensor_measurement) {
+    test_spy::before_sensor_measurement();
+  }
   return test_spy::measures_to_return;
 }
 
@@ -405,6 +468,7 @@ bool GpsService::start_sleeping(uint32_t interval_ms) {
 void GpsService::stop() { test_spy::gps_stopped = true; }
 
 bool GpsService::request_sleep(uint32_t duration_ms) {
+  test_spy::fast_path_events.push_back("gps_sleep");
   test_spy::gps_sleep_requested = true;
   ++test_spy::gps_sleep_request_count;
   test_spy::gps_sleep_duration_ms = duration_ms;
@@ -427,6 +491,8 @@ void GpsService::set_aiding_data(const GpsAidingData & /*data*/) {}
 GpsData gps_read_once(GpsDriver & /*driver*/, int /*baud_rate*/, uint32_t /*timeout_ms*/,
                       const volatile bool & /*abort*/, uint64_t /*wake_deadline_ms*/) {
   test_spy::gps_read_called = true;
+  test_spy::fast_path_events.push_back("gps");
+  RTOS::delay_ms(test_spy::gps_read_duration_ms);
   return test_spy::gps_data_to_return;
 }
 
@@ -464,6 +530,10 @@ bool StorageService::init() {
 
 void StorageService::cache_measurement(const MeasuresAGo &m) {
   test_spy::cache_measurement_called = true;
+  test_spy::fast_path_events.push_back("cache");
+  if (test_spy::after_cache) {
+    test_spy::after_cache();
+  }
   test_spy::last_cached_measurement = m;
 }
 
@@ -626,9 +696,22 @@ void PowerService::enter_sleep(uint32_t sleep_duration_ms) {
   test_spy::enter_sleep_duration_ms = sleep_duration_ms;
 }
 
-bool PowerService::enter_light_sleep(uint32_t sleep_duration_ms) {
+bool PowerService::enter_light_sleep(uint32_t sleep_duration_ms, bool wake_on_button) {
   ++test_spy::light_sleep_count;
   test_spy::light_sleep_duration_ms = sleep_duration_ms;
+  if (!wake_on_button) {
+    test_spy::fast_path_events.push_back("sleep");
+    if (test_spy::light_sleep_failure) {
+      ++test_spy::light_sleep_fallback_count;
+      RTOS::delay_ms(sleep_duration_ms);
+    } else if (test_spy::light_sleep_callback) {
+      (void)test_spy::light_sleep_callback();
+    } else {
+      RTOS::delay_ms(sleep_duration_ms);
+    }
+    return false;
+  }
+  test_spy::fast_path_timer_only = false;
   test_spy::light_sleep_prepared &=
       !test_spy::shutdown_called && !test_spy::lp_feeder_started && !test_spy::pm_power_enabled &&
       DisplayService::spy_deep_sleep_called &&

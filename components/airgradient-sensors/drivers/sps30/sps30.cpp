@@ -271,7 +271,9 @@ bool SPS30::sleep() {
     return true;
   }
   if (_measuring) {
-    _stop_measurement(); // Sleep is only entered from Idle
+    if (!_stop_measurement()) { // Sleep is only entered from Idle
+      return false;
+    }
   }
   if (!_write_command(CMD_SLEEP)) {
     return false;
@@ -282,10 +284,12 @@ bool SPS30::sleep() {
 }
 
 bool SPS30::wake() {
-  if (!_sleeping) {
+  if (!_sleeping && _measuring) {
     return true;
   }
-  _send_wakeup();
+  if (_sleeping) {
+    _send_wakeup();
+  }
   // _start_measurement() is the real success/failure signal — the wake
   // transactions are NACK-prone by design.
   if (!_start_measurement()) {

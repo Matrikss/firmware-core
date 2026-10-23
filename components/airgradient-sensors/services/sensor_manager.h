@@ -157,8 +157,14 @@ public:
 
   /// Put wired PM sensors into / out of low-power mode. No-op when none are
   /// wired or the sensor lacks a low-power mode.
-  void pm_sleep();
+  bool pm_sleep();
   void pm_wake();
+
+  /// Gas primitives: callers own acquisition scheduling and heater lifetime.
+  bool start_tvoc_nox_conditioning();
+  /// Read and validate raw fields without advancing the gas-index algorithm.
+  bool read_tvoc_nox_raw(TVOCNOxData &out);
+  bool stop_tvoc_nox_measurement();
 
   /// True if a TVOC/NOx sensor is wired into this manager.
   bool has_tvoc_nox_sensor() const { return _sensors.tvoc_nox != nullptr; }

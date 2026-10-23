@@ -58,12 +58,18 @@ to any service that only needs touch state. Code that also needs
 `clear_interrupt()` holds a `CAP1203 &` directly. ESP-IDF I2C types are
 confined to `drivers/` and never leak to callers.
 
+CAP1203 initialization verifies identity, clears sleep and verifies the mode,
+then applies configuration and clears the interrupt latch. `set_sleep(true)`
+disables sensing and verifies the sleep bits by readback; `set_sleep(false)`
+resumes it. Both report communication or verification failures to the caller.
+
 ### HAL Feature Checks
 
 Optional capabilities follow the same pattern as `PMSensor`:
 
 | Method | Default | CAP1203 |
 |---|---|---|
+| `set_sleep(asleep)` | `false` | sets and verifies deep-sleep mode |
 | `supports_noise()` | `false` | `true` |
 | `supports_calibration()` | `false` | `true` |
 | `calibrate(mask)` | no-op `false` | writes `REG_CALIBRATION_ACTIVATE` |

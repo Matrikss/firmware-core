@@ -137,6 +137,10 @@ bool BQ25629Bms::_apply_pmid_config() {
 // BmsDevice -- telemetry
 // ---------------------------------------------------------------------------
 
+bool BQ25629Bms::set_adc_enabled(bool enabled) {
+  return _charger.enable_adc(enabled, true) == ESP_OK;
+}
+
 bool BQ25629Bms::read_telemetry(BmsTelemetry &out) {
   out = BmsTelemetry{}; // Reset all fields to invalid sentinels.
 

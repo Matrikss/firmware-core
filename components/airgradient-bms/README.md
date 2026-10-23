@@ -84,6 +84,7 @@ host tests can construct and validate them without the I2C master.
 |---|---|
 | `init()` | Initialize hardware |
 | `read_telemetry(out)` | ADC snapshot (voltages, currents, temps) |
+| `set_adc_enabled(enabled)` | Optional ADC control; defaults to `false`. BQ25629 telemetry reads re-enable conversions when needed |
 | `read_status(out)` | Charging state + power source + fault flags |
 | `get_charging_state(state)` | Lightweight single-register read |
 | `get_battery_percentage(output)` | SOC estimate (0-100%) |
