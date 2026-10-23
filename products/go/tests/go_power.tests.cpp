@@ -112,9 +112,8 @@ public:
 // ============================================================================
 // GPIO HAL stub
 //
-// gpio::Hal is a plain function-pointer table.  PowerService only touches
-// GPIO inside configure_wake_sources() which is #ifndef TEST_HOST, so these
-// stubs are never called during tests.
+// gpio::Hal is a plain function-pointer table. Reads report an active-low
+// button held; platform wake-source configuration remains firmware-only.
 // ============================================================================
 
 static bool gpio_configure(int, gpio::Mode, gpio::PullMode, gpio::InterruptType) { return true; }
@@ -144,6 +143,21 @@ static constexpr PowerService::Config DEFAULT_CONFIG = {
     .pin_wake_button_boot = 1,
     .deep_sleep_threshold_ms = 5000,
 };
+
+TEST_CASE("light sleep: timer-only mode ignores a held button", "[PowerService][sleep]") {
+  ScopedMockRTOS rtos;
+  PowerService power(nullptr, test_gpio_hal, DEFAULT_CONFIG);
+  REQUIRE_CALL(rtos.mock, delay_ms_impl(10000));
+  // The GPIO stub reports the active-low button held throughout the wait.
+  CHECK_FALSE(power.enter_light_sleep(10000, false));
+}
+
+TEST_CASE("light sleep: default mode still reports a held button", "[PowerService][sleep]") {
+  ScopedMockRTOS rtos;
+  PowerService power(nullptr, test_gpio_hal, DEFAULT_CONFIG);
+  REQUIRE_CALL(rtos.mock, delay_ms_impl(2000));
+  CHECK(power.enter_light_sleep(2000));
+}
 
 // ============================================================================
 // TEST CASE 1 — poll_bms

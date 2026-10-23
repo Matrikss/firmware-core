@@ -420,7 +420,15 @@ SensorManager &GoHardwareBoard::sensors(bool warm) {
 
     auto *s = new Sensors{};
 
-    // Init DPS368 first: continuous mode starts immediately, giving the
+    // Wait for PMID to reach healthy voltage before probing SPS30.
+    _ensure_pmid_ready();
+
+    if (sps30->init(warm)) {
+      s->pms_a = sps30;
+    } else {
+      AG_LOGE(TAG, "SPS30 init failed");
+    }
+    // Init DPS368 before the remaining sensors: continuous mode starts immediately, giving the
     // pressure sensor time to produce its first measurement (~120 ms)
     if (dps368->init()) {
       s->pressure = dps368;
@@ -443,15 +451,6 @@ SensorManager &GoHardwareBoard::sensors(bool warm) {
       s->tvoc_nox = sgp41;
     } else {
       AG_LOGE(TAG, "SGP41 init failed");
-    }
-
-    // Wait for PMID to reach healthy voltage before probing SPS30.
-    _ensure_pmid_ready();
-
-    if (sps30->init(warm)) {
-      s->pms_a = sps30;
-    } else {
-      AG_LOGE(TAG, "SPS30 init failed");
     }
 
     s->temp_hum_a_fallback.priority[0] = TempHumSource::DEDICATED;

@@ -576,31 +576,40 @@ void PowerService::shutdown() {
 #endif
 }
 
-bool PowerService::enter_light_sleep(uint32_t sleep_duration_ms) {
+bool PowerService::enter_light_sleep(uint32_t sleep_duration_ms, bool wake_on_button) {
   bool button_wake = false;
 #ifndef TEST_HOST
-  configure_wake_sources(sleep_duration_ms);
+  if (wake_on_button) {
+    configure_wake_sources(sleep_duration_ms);
+  } else {
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+    esp_sleep_enable_timer_wakeup(static_cast<uint64_t>(sleep_duration_ms) * 1000ULL);
+  }
   const esp_err_t err = esp_light_sleep_start();
   button_wake = err == ESP_OK && esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_EXT1;
 
-  // Do not leave a polling timer armed for a later ship-mode/deep-sleep entry.
   esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_TIMER);
-  esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_EXT1);
-  // EXT1 leaves its wake pins held in RTC mode; restore digital button reads.
-  const int button_pins[] = {_config.pin_wake_button_power, _config.pin_wake_button_boot};
-  for (int pin : button_pins) {
-    if (pin >= 0) {
-      rtc_gpio_hold_dis(static_cast<gpio_num_t>(pin));
-      rtc_gpio_deinit(static_cast<gpio_num_t>(pin));
+  if (wake_on_button) {
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_EXT1);
+    // EXT1 leaves wake pins in RTC mode; restore digital button reads.
+    const int button_pins[] = {_config.pin_wake_button_power, _config.pin_wake_button_boot};
+    for (int pin : button_pins) {
+      if (pin >= 0) {
+        rtc_gpio_hold_dis(static_cast<gpio_num_t>(pin));
+        rtc_gpio_deinit(static_cast<gpio_num_t>(pin));
+      }
     }
   }
   if (err != ESP_OK) {
-    AG_LOGW(TAG, "light sleep failed (%s); delaying before retry", esp_err_to_name(err));
+    AG_LOGW(TAG, "light sleep failed (%s); delaying instead", esp_err_to_name(err));
     RTOS::delay_ms(sleep_duration_ms);
   }
 #else
   RTOS::delay_ms(sleep_duration_ms);
 #endif
+  if (!wake_on_button) {
+    return false;
+  }
   const int button_pin = _config.pin_wake_button_power;
   return button_wake || (button_pin >= 0 && _gpio.get_level(button_pin) == 0);
 }
