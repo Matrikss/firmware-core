@@ -292,6 +292,11 @@ bool GoApp::recover_offline_tracking_start(const GoSettings &settings, RtcAppSta
   // Leave the confirmation visible during warmup. The fast path initializes
   // its own display worker when the first measurement is ready.
   display.stop();
+  // This cold fast path has no InputService to suspend touch. Timer wakes
+  // preserve this state without initializing or waking the touch controller.
+  if (!_board.sleep_touch()) {
+    AG_LOGW(TAG, "tracking recovery: touch sleep failed");
+  }
   return true;
 }
 
@@ -449,13 +454,11 @@ void GoApp::run_fast_path(const RtcAppState &state) {
   RtcAppState save = state;
   save.tracking_timing = result.tracking_timing;
   save.set_flag(RtcAppFlag::SensorsWarm, result.sensors_warm);
+  save.gps_wake_deadline_ms = result.gps_wake_deadline_ms;
 
   if (result.outcome == FastPathResult::Outcome::Sleep) {
     _board.display().stop();
     _board.display().deep_sleep();
-    if (!_board.sleep_touch()) {
-      AG_LOGW(TAG, "fast-path: touch sleep failed");
-    }
     _board.ulp_start();
     log_heap(TAG, "boot:fast-path:before-sleep");
     prepare_gps_for_sleep(result.sleep_duration_ms, save);
@@ -518,12 +521,18 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
   // GPS UART work overlaps PM warmup. Keep it outside the bounded gas
   // conditioning window, and preserve the existing GPS activity/sleep policy.
   GpsData gps{};
+  RtcAppState gps_state = state;
   if (is_gps_active_at_boot(settings, state)) {
     auto *gps_driver = _board.new_gps_driver();
     if (gps_driver != nullptr) {
       gps = gps_read_once(*gps_driver, GPS_BAUD, GPS_FAST_PATH_READ_TIMEOUT_MS, button_pressed,
                           state.gps_wake_deadline_ms);
     }
+  } else {
+    // Sleep across this acquisition cycle and the following ESP sleep.
+    // The final sleep request remains a fallback if this one fails or expires.
+    const uint32_t interval_ms = static_cast<uint32_t>(settings.measure_interval_seconds) * 1000;
+    prepare_gps_for_sleep(interval_ms, gps_state);
   }
 
   PowerService &power = _board.power();
@@ -648,6 +657,7 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
           .sleep_duration_ms = 0,
           .sensors_warm = false,
           .tracking_timing = {},
+          .gps_wake_deadline_ms = gps_state.gps_wake_deadline_ms,
       };
     }
     disp.init(values);
@@ -679,6 +689,7 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
         .sleep_duration_ms = decision.duration_ms,
         .sensors_warm = warm,
         .tracking_timing = tracking_timing,
+        .gps_wake_deadline_ms = gps_state.gps_wake_deadline_ms,
     };
   }
 
@@ -713,6 +724,7 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
       .sleep_duration_ms = 0,
       .sensors_warm = false,
       .tracking_timing = tracking_timing,
+      .gps_wake_deadline_ms = gps_state.gps_wake_deadline_ms,
   };
 }
 

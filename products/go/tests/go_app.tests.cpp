@@ -95,6 +95,8 @@ extern bool gps_sleep_requested;
 extern bool gps_sleeping_started;
 extern bool gps_read_called;
 extern uint32_t gps_sleep_duration_ms;
+extern uint32_t gps_sleep_request_count;
+extern bool gps_sleep_ok;
 extern uint32_t gps_remaining_ms;
 extern int gps_initial_baud;
 extern uint64_t gps_initial_deadline_ms;
@@ -1658,7 +1660,7 @@ TEST_CASE("execute_fast_path: tracking + GPS off -> no GPS read") {
 
   CHECK(result.outcome == GoAppTestAccess::Outcome::Sleep);
   CHECK_FALSE(test_spy::gps_read_called);
-  CHECK_FALSE(test_spy::gps_sleep_requested);
+  CHECK(test_spy::gps_sleep_requested);
 }
 
 TEST_CASE("execute_fast_path: no tracking -> no route") {
@@ -1949,8 +1951,8 @@ TEST_CASE("run_fast_path: Sleep saves returned timing with SensorsWarm") {
   REQUIRE(test_spy::state_saved);
   CHECK(test_spy::enter_sleep_called);
   CHECK_FALSE(test_spy::orchestrator_init_called);
-  CHECK(std::find(board.call_log.begin(), board.call_log.end(), "sleep_touch") !=
-        board.call_log.end());
+  CHECK(board.call_index("sleep_touch") == -1);
+  CHECK(board.call_index("new_touch_sensor") == -1);
   auto expected = state;
   expected.tracking_timing.last_record_s = 200;
   expected.set_flag(RtcAppFlag::SensorsWarm, test_spy::should_hold_pm_result);
@@ -2384,6 +2386,7 @@ TEST_CASE("GoApp: Offline tracking reset creates a session and runs the cold fas
   CHECK(test_spy::route_point_appended);
   CHECK(test_spy::route_ended);
   CHECK_FALSE(board.sensors_warm_arg);
+  CHECK(board.call_index("sleep_touch") >= 0);
   CHECK(test_spy::warmup_step_count == 0);
   CHECK(test_spy::light_sleep_count > 0);
   CHECK(test_spy::gps_read_called == (board.settings.gps_mode != GpsMode::AlwaysOff));
@@ -2473,31 +2476,36 @@ TEST_CASE("GoApp: pending tracking start does not override USB charging-only boo
   CHECK(store.tracking_start);
 }
 
-TEST_CASE("run_fast_path: GPS sleep follows the planned ESP sleep without changing its duration") {
+TEST_CASE("run_fast_path: early inactive GPS sleep uses the measurement interval") {
   test_spy::reset();
   ScopedRetainedClock clock(200999);
   MockBoard board;
   board.settings.operating_mode = OperatingMode::Offline;
   board.settings.gps_mode = GpsMode::OnWhenTracking;
+  board.settings.measure_interval_seconds = 180;
   constexpr uint32_t planned_sleep_ms = 120000;
   test_spy::sleep_decision_to_return = {PowerService::SleepType::Deep, planned_sleep_ms};
   bool expect_sleep_request = true;
-  uint32_t expected_gps_sleep_ms = planned_sleep_ms;
+  uint32_t expected_gps_sleep_ms = 180000;
   RtcAppState state{};
   state.mode = OperatingMode::Offline;
   state.set_flag(RtcAppFlag::SensorsWarm, true);
 
-  SECTION("inactive GPS sleeps for the next ESP sleep duration") {}
+  SECTION("inactive GPS sleeps for the measurement interval") {}
   SECTION("an existing shorter GPS timer does not shorten ESP sleep") {
     test_spy::gps_remaining_ms = 60000;
     state.gps_wake_deadline_ms = clock.retained_ms + 60000;
     expect_sleep_request = false;
   }
-  SECTION("Always Off sleeps for the next ESP sleep duration") {
+  SECTION("Always Off sleeps for the measurement interval") {
     board.settings.gps_mode = GpsMode::AlwaysOff;
   }
   SECTION("tracking keeps GPS active when mode permits") {
     state.tracking_state = TrackingState::Recording;
+    expect_sleep_request = false;
+  }
+  SECTION("paused tracking also keeps GPS active") {
+    state.tracking_state = TrackingState::Paused;
     expect_sleep_request = false;
   }
   SECTION("Always On keeps GPS active without tracking") {
@@ -2513,6 +2521,7 @@ TEST_CASE("run_fast_path: GPS sleep follows the planned ESP sleep without changi
   CHECK(test_spy::enter_sleep_duration_ms == planned_sleep_ms);
   CHECK(test_spy::gps_sleep_requested == expect_sleep_request);
   if (expect_sleep_request) {
+    CHECK(test_spy::gps_sleep_request_count == 1);
     CHECK(test_spy::gps_sleep_duration_ms == expected_gps_sleep_ms);
     CHECK(test_spy::last_saved_state.gps_wake_deadline_ms ==
           clock.retained_ms + expected_gps_sleep_ms);
@@ -2573,4 +2582,80 @@ TEST_CASE("GoApp: interactive GPS initialization uses the supplied boot state") 
   access.run_interactive(cause, {}, state);
   CHECK(test_spy::gps_initial_baud == expected_baud);
   CHECK(test_spy::gps_initial_deadline_ms == expected_deadline_ms);
+}
+
+TEST_CASE("inactive GPS sleeps before warmup and preserves its deadline on promotion", "[GoApp][gps]") {
+  test_spy::reset();
+  ScopedRetainedClock clock(200000);
+  MockBoard board;
+  board.settings.operating_mode = OperatingMode::Offline;
+  board.settings.gps_mode = GpsMode::AlwaysOff;
+  board.settings.measure_interval_seconds = 60;
+  test_spy::gas_begin_ok = true;
+  RtcAppState state{};
+  state.mode = OperatingMode::Offline;
+  SECTION("button promotion") { board.press_button_on_isr_install = true; }
+  SECTION("short interval promotion") {
+    test_spy::sleep_decision_to_return = {PowerService::SleepType::None, 0};
+  }
+  SECTION("storage failure promotion") {
+    state.tracking_state = TrackingState::Recording;
+    test_spy::resume_route_result = false;
+  }
+  test_spy::before_sensor_measurement = [&] {
+    REQUIRE(test_spy::gps_sleep_request_count == 1);
+    CHECK(test_spy::gps_sleep_duration_ms == 60000);
+  };
+  GoApp app(board);
+  GoAppTestAccess access(app);
+  access.run_fast_path(state);
+  CHECK_FALSE(test_spy::enter_sleep_called);
+  CHECK_FALSE(test_spy::gps_read_called);
+  REQUIRE(test_spy::orchestrator_init_called);
+  CHECK(test_spy::last_saved_state.gps_wake_deadline_ms == 260000);
+  CHECK(test_spy::orchestrator_rtc_state.gps_wake_deadline_ms == 260000);
+  const auto &events = test_spy::fast_path_events;
+  CHECK(std::find(events.begin(), events.end(), "gps_sleep") <
+        std::find(events.begin(), events.end(), "gas_begin"));
+}
+
+TEST_CASE("inactive GPS final fallback uses ESP sleep duration", "[GoApp][gps]") {
+  test_spy::reset();
+  ScopedRetainedClock clock(200000);
+  MockBoard board;
+  board.settings.operating_mode = OperatingMode::Offline;
+  board.settings.gps_mode = GpsMode::AlwaysOff;
+  board.settings.measure_interval_seconds = 60;
+  test_spy::sleep_decision_to_return = {PowerService::SleepType::Deep, 40000};
+  RtcAppState state{};
+  state.mode = OperatingMode::Offline;
+  bool early_attempt = true;
+  bool final_success = true;
+  SECTION("early request fails, final request succeeds") { test_spy::gps_sleep_ok = false; }
+  SECTION("both requests fail") { test_spy::gps_sleep_ok = false; final_success = false; }
+  SECTION("existing sleep expires during warmup") {
+    state.gps_wake_deadline_ms = clock.retained_ms + 1000;
+    test_spy::gps_remaining_ms = 1000;
+    early_attempt = false;
+  }
+  SECTION("early sleep expires during a slow cycle") {}
+  test_spy::before_sensor_measurement = [&] {
+    CHECK(test_spy::gps_sleep_request_count == (early_attempt ? 1 : 0));
+    if (early_attempt) {
+      CHECK(test_spy::gps_sleep_duration_ms == 60000);
+    }
+    // Simulate elapsed retained time and the receiver's timer expiring.
+    clock.retained_ms += 70000;
+    test_spy::gps_remaining_ms = 0;
+    test_spy::gps_sleep_ok = final_success;
+  };
+  GoApp app(board);
+  GoAppTestAccess access(app);
+  access.run_fast_path(state);
+  CHECK(test_spy::enter_sleep_called);
+  CHECK(test_spy::enter_sleep_duration_ms == 40000);
+  CHECK(test_spy::gps_sleep_request_count == (early_attempt ? 2 : 1));
+  CHECK(test_spy::gps_sleep_duration_ms == 40000);
+  CHECK(test_spy::last_saved_state.gps_wake_deadline_ms ==
+        (final_success ? clock.retained_ms + 40000 : 0));
 }

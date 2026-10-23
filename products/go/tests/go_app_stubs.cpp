@@ -468,6 +468,7 @@ bool GpsService::start_sleeping(uint32_t interval_ms) {
 void GpsService::stop() { test_spy::gps_stopped = true; }
 
 bool GpsService::request_sleep(uint32_t duration_ms) {
+  test_spy::fast_path_events.push_back("gps_sleep");
   test_spy::gps_sleep_requested = true;
   ++test_spy::gps_sleep_request_count;
   test_spy::gps_sleep_duration_ms = duration_ms;
