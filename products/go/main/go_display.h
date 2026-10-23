@@ -402,6 +402,7 @@ public:
     ++spy_init_count;
     spy_last_screen = values.screen;
     spy_last_init_deferred = defer_refresh;
+    RTOS::delay_ms(spy_init_delay_ms);
     return true;
   }
 
@@ -428,6 +429,7 @@ public:
   // Test spies — reset via test_spy::reset() in stubs.
   inline static bool spy_deep_sleep_called = false;
   inline static uint32_t spy_init_count = 0;
+  inline static uint32_t spy_init_delay_ms = 0;
   inline static uint32_t spy_update_count = 0;
   inline static uint32_t spy_sync_update_count = 0;
   inline static uint32_t spy_flush_count = 0;
