@@ -17,6 +17,13 @@ public:
   virtual bool init() = 0;
   virtual bool read(TVOCNOxData &out) = 0;
 
+  /// Send the conditioning command without waiting for its response.
+  /// The caller owns conditioning duration and measurement scheduling.
+  /// Returns false when unsupported or on a command failure.
+  virtual bool start_conditioning() { return false; }
+  /// Stop measurement and disable sensor heaters when supported.
+  virtual bool stop_measurement() { return true; }
+
   /// Run one conditioning / warmup cycle.
   ///
   /// Drivers that need an initial conditioning period (e.g. SGP41) should

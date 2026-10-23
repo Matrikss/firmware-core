@@ -328,7 +328,10 @@ SensorManager::~SensorManager() = default;
 
 void SensorManager::warmup_step(bool /*condition_gas*/) { test_spy::warmup_step_count++; }
 void SensorManager::warmup() {}
-void SensorManager::pm_sleep() { test_spy::pm_sleep_count++; }
+bool SensorManager::pm_sleep() {
+  test_spy::pm_sleep_count++;
+  return true;
+}
 void SensorManager::pm_wake() {}
 Co2CalibrationResult SensorManager::calibrate_co2() { return Co2CalibrationResult::Unsupported; }
 Co2AbcPeriodResult SensorManager::set_co2_abc_period_days(int days) {

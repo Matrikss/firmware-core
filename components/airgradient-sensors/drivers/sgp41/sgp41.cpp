@@ -45,6 +45,30 @@ bool SGP41::init() {
   return true;
 }
 
+bool SGP41::start_conditioning() {
+  // Conditioning starts from idle, including after an interrupted acquisition.
+  if (!stop_measurement()) {
+    return false;
+  }
+  // Conditioning uses the datasheet's default parameters, independently of
+  // humidity compensation used by actual raw measurements. Reading its VOC
+  // response is optional; no repeated conditioning commands are needed.
+  if (!_sendCommandWithParams(CMD_CONDITIONING, CONDITIONING_HUMIDITY_TICKS,
+                              CONDITIONING_TEMPERATURE_TICKS)) {
+    (void)stop_measurement();
+    return false;
+  }
+  return true;
+}
+
+bool SGP41::stop_measurement() {
+  if (_dev_handle == nullptr || !_sendCommand(CMD_HEATER_OFF)) {
+    return false;
+  }
+  RTOS::delay_ms(HEATER_OFF_DELAY_MS);
+  return true;
+}
+
 bool SGP41::read(TVOCNOxData &out) {
   // Initialize to invalid sentinels
   out.tvoc_index = MeasuresInvalid::TVOC;

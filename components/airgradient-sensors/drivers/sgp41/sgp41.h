@@ -40,6 +40,8 @@ public:
   // TVOCNOxSensor interface implementation
   bool init() override;
   bool read(TVOCNOxData &out) override;
+  bool start_conditioning() override;
+  bool stop_measurement() override;
 
   /**
    * @brief Run single conditioning cycle
@@ -88,6 +90,8 @@ private:
   // Default compensation values
   static constexpr float DEFAULT_TEMPERATURE = 25.0f;
   static constexpr float DEFAULT_HUMIDITY = 50.0f;
+  static constexpr uint16_t CONDITIONING_HUMIDITY_TICKS = 0x8000;
+  static constexpr uint16_t CONDITIONING_TEMPERATURE_TICKS = 0x6666;
 
   // Compensation value ranges
   static constexpr float MIN_TEMPERATURE = -45.0f;

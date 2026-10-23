@@ -68,6 +68,8 @@ public:
   IMPLEMENT_MOCK1(read);
   IMPLEMENT_MOCK0(run_conditioning);
   IMPLEMENT_MOCK2(set_compensation);
+  IMPLEMENT_MOCK0(start_conditioning);
+  IMPLEMENT_MOCK0(stop_measurement);
 };
 
 class MockPressureSensor : public trompeloeil::mock_interface<PressureSensor> {
@@ -1921,7 +1923,7 @@ TEST_CASE("PM sleep/wake forwarding", "[SensorManager]") {
 
     REQUIRE_CALL(mock_pm_a, sleep()).RETURN(true);
     REQUIRE_CALL(mock_pm_b, sleep()).RETURN(true);
-    manager.pm_sleep();
+    CHECK(manager.pm_sleep());
 
     REQUIRE_CALL(mock_pm_a, wake()).RETURN(true);
     REQUIRE_CALL(mock_pm_b, wake()).RETURN(true);
@@ -1935,7 +1937,7 @@ TEST_CASE("PM sleep/wake forwarding", "[SensorManager]") {
     SensorManager manager(sensors);
 
     REQUIRE_CALL(mock_pm_a, sleep()).RETURN(true);
-    manager.pm_sleep();
+    CHECK(manager.pm_sleep());
 
     REQUIRE_CALL(mock_pm_a, wake()).RETURN(true);
     manager.pm_wake();
@@ -1949,8 +1951,60 @@ TEST_CASE("PM sleep/wake forwarding", "[SensorManager]") {
 
     FORBID_CALL(mock_pm_a, sleep());
     FORBID_CALL(mock_pm_a, wake());
-    manager.pm_sleep();
+    CHECK(manager.pm_sleep());
     manager.pm_wake();
+  }
+
+  SECTION("failure still attempts sleep on the other sensor") {
+    Sensors sensors{};
+    sensors.pms_a = &mock_pm_a;
+    sensors.pms_b = &mock_pm_b;
+    SensorManager manager(sensors);
+    REQUIRE_CALL(mock_pm_a, sleep()).RETURN(false);
+    REQUIRE_CALL(mock_pm_b, sleep()).RETURN(true);
+    CHECK_FALSE(manager.pm_sleep());
+  }
+}
+
+TEST_CASE("Raw gas operations", "[SensorManager]") {
+  MockTVOCNOxSensor sensor;
+  Sensors sensors{};
+  sensors.tvoc_nox = &sensor;
+
+  SECTION("missing sensor leaves invalid readings") {
+    sensors.tvoc_nox = nullptr;
+    SensorManager manager(sensors);
+    CHECK_FALSE(manager.start_tvoc_nox_conditioning());
+    TVOCNOxData sample{};
+    CHECK_FALSE(manager.read_tvoc_nox_raw(sample));
+    CHECK_FALSE(sample.is_tvoc_raw_valid());
+    CHECK_FALSE(sample.is_nox_raw_valid());
+    CHECK(manager.stop_tvoc_nox_measurement());
+  }
+
+  SECTION("forwards conditioning and shutdown failure") {
+    SensorManager manager(sensors);
+    REQUIRE_CALL(sensor, start_conditioning()).RETURN(true);
+    REQUIRE(manager.start_tvoc_nox_conditioning());
+    REQUIRE_CALL(sensor, stop_measurement()).RETURN(false);
+    CHECK_FALSE(manager.stop_tvoc_nox_measurement());
+  }
+
+  SECTION("validates raw fields independently and never copies indices") {
+    SensorManager manager(sensors);
+    TVOCNOxData input{100, 25000, 200, 18000};
+    bool read_ok = true;
+    SECTION("both valid") {}
+    SECTION("VOC invalid") { input.tvoc_raw = MeasuresInvalid::TVOC; }
+    SECTION("NOx invalid") { input.nox_raw = MeasuresInvalid::NOX; }
+    SECTION("failed read ignores populated output") { read_ok = false; }
+    REQUIRE_CALL(sensor, read(trompeloeil::_)).LR_SIDE_EFFECT(_1 = input).RETURN(read_ok);
+    TVOCNOxData sample{};
+    CHECK(manager.read_tvoc_nox_raw(sample) == read_ok);
+    CHECK(sample.tvoc_raw == (read_ok ? input.tvoc_raw : MeasuresInvalid::TVOC));
+    CHECK(sample.nox_raw == (read_ok ? input.nox_raw : MeasuresInvalid::NOX));
+    CHECK_FALSE(sample.is_tvoc_index_valid());
+    CHECK_FALSE(sample.is_nox_index_valid());
   }
 }
 
