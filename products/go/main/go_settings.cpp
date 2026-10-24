@@ -101,9 +101,8 @@ MeasurementCorrections load_measurement_corrections(ConfigStore &store) {
   if (store.get_int(KEY_PM25_CORRECTION_ALGORITHM, algorithm) == ConfigStoreResult::OK &&
       is_pm25_algorithm_valid(algorithm)) {
     const auto pm_algorithm = static_cast<Pm25CorrectionAlgorithm>(algorithm);
-    if (pm_algorithm == Pm25CorrectionAlgorithm::Epa2021) {
-      corrections.pm25.algorithm = pm_algorithm;
-    } else if (pm_algorithm == Pm25CorrectionAlgorithm::CustomViaPm25Raw ||
+    // A persisted EPA 2021 selection keeps the default `none`.
+    if (pm_algorithm == Pm25CorrectionAlgorithm::CustomViaPm25Raw ||
                pm_algorithm == Pm25CorrectionAlgorithm::FactoryCalibration) {
       float scaling_factor = 0.0f;
       float intercept = 0.0f;
@@ -305,6 +304,12 @@ GoSettings load_go_settings(ConfigStore &store) {
   settings.corrections = load_measurement_corrections(store);
 
   return settings;
+}
+
+void disable_epa_pm25_correction(GoSettings &settings) {
+  if (settings.corrections.pm25.algorithm == Pm25CorrectionAlgorithm::Epa2021) {
+    settings.corrections.pm25 = Pm25Correction{};
+  }
 }
 
 bool GoSettings::equals(const GoSettings &other) const {

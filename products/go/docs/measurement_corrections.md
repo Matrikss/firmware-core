@@ -59,13 +59,20 @@ Algorithm and property names are case-sensitive.
 | Measure | Algorithm | Behavior |
 |---|---|---|
 | PM2.5 | `none` | Preserve valid raw PM2.5 |
-| PM2.5 | `epa_2021` | Apply the EPA 2021 piecewise correction using raw averaged PM2.5 and raw averaged humidity |
+| PM2.5 | `epa_2021` | Accepted on every interface but stored and applied as `none` (raw PM2.5); Go never applies EPA |
 | PM2.5 | `custom_via_pm25_raw` | Apply a linear scale and intercept to raw PM2.5 |
 | PM2.5 | `factory_calibration` | Same linear transform; selected through Cloud or USB Serial |
 | Temperature | `none` | Preserve valid raw temperature |
 | Temperature | `custom` | Apply `scaling factor * raw + intercept` in Celsius |
 | Humidity | `none` | Preserve valid raw relative humidity |
 | Humidity | `custom` | Apply `scaling factor * raw + intercept` |
+
+`activate_settings_candidate()` maps an EPA PM2.5 selection from Cloud, the
+Local API, or BLE to `none` with identity coefficients before validation, so
+reads and notifications never report EPA. A persisted EPA selection from older
+firmware also loads as `none`. A repeated Cloud `epa_2021` value therefore
+matches the active settings and is a no-op. The shared component's EPA
+transform below remains for other products.
 
 Both linear PM algorithms preserve an exact raw zero and clamp negative results
 to zero. Go ignores `useEpa2021` for both. The shared component still supports

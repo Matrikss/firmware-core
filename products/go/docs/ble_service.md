@@ -459,7 +459,7 @@ and notifications, with unchanged coefficients and clear flags. Schema version
 | Algorithm | PM2.5 | Temperature / Humidity |
 |---|---|---|
 | `none` | Yes | Yes |
-| `epa_2021` | Yes | No |
+| `epa_2021` | Accepted, stored as `none` | No |
 | `custom_via_pm25_raw` | Yes | No |
 | `custom` | No | Yes |
 

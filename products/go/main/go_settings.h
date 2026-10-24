@@ -52,6 +52,9 @@ struct GoSettings {
 
 GoSettings load_go_settings(ConfigStore &store);
 bool is_go_settings_valid(const GoSettings &settings);
+// Go never applies the EPA 2021 PM2.5 correction. An EPA selection from any
+// config source becomes raw PM2.5 (`none`) with identity coefficients.
+void disable_epa_pm25_correction(GoSettings &settings);
 bool save_go_settings(ConfigStore &store, const GoSettings &settings);
 void print_settings(const GoSettings &settings);
 

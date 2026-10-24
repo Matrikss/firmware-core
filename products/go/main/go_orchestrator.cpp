@@ -2184,8 +2184,9 @@ void Orchestrator::apply_settings_change() {
   }
 }
 
-bool Orchestrator::activate_settings_candidate(const GoSettings &candidate, bool persist,
+bool Orchestrator::activate_settings_candidate(GoSettings candidate, bool persist,
                                                bool force_persist) {
+  disable_epa_pm25_correction(candidate);
   const bool settings_changed = !candidate.equals(_settings);
   const OperatingMode previous_mode = _mode;
   if (!is_go_settings_valid(candidate)) {

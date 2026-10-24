@@ -462,6 +462,17 @@ TEST_CASE("measurement corrections round-trip and ignore the retired PM EPA flag
   REQUIRE(loaded.corrections.humidity.intercept == original.corrections.humidity.intercept);
 }
 
+TEST_CASE("persisted EPA PM correction loads as raw PM", "[settings][correction]") {
+  FakeConfigStore store;
+  REQUIRE(store.set_int("mc_pa", static_cast<int>(Pm25CorrectionAlgorithm::Epa2021)) ==
+          ConfigStoreResult::OK);
+
+  const GoSettings loaded = load_go_settings(store);
+  REQUIRE(loaded.corrections.pm25.algorithm == Pm25CorrectionAlgorithm::None);
+  REQUIRE(loaded.corrections.pm25.scaling_factor == 1.0f);
+  REQUIRE(loaded.corrections.pm25.intercept == 0.0f);
+}
+
 TEST_CASE("incomplete custom correction falls back independently", "[settings][correction]") {
   FakeConfigStore store;
   REQUIRE(store.set_int("mc_pa", static_cast<int>(Pm25CorrectionAlgorithm::Epa2021)) ==
@@ -475,7 +486,7 @@ TEST_CASE("incomplete custom correction falls back independently", "[settings][c
   REQUIRE(store.set_float("mc_hi", 0.0f) == ConfigStoreResult::OK);
 
   const GoSettings loaded = load_go_settings(store);
-  REQUIRE(loaded.corrections.pm25.algorithm == Pm25CorrectionAlgorithm::Epa2021);
+  REQUIRE(loaded.corrections.pm25.algorithm == Pm25CorrectionAlgorithm::None);
   REQUIRE(loaded.corrections.temperature.algorithm == LinearCorrectionAlgorithm::None);
   REQUIRE(loaded.corrections.humidity.algorithm == LinearCorrectionAlgorithm::Custom);
 }
