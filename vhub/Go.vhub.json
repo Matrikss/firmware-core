@@ -4515,7 +4515,7 @@
           "expected_result": "Portable is selected."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "The selected mode reaches Home. A transition into Stationary may first show its connection page."
         },
         {
@@ -4660,7 +4660,7 @@
           "expected_result": "The intended Go is connected, its local API responds with measurements, and its serial is recorded for the following checks."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {
@@ -4704,7 +4704,7 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {
@@ -4752,7 +4752,7 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {
@@ -4813,7 +4813,7 @@
           "expected_result": "Stationary is selected."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "The selected mode reaches Home. A transition into Stationary may first show its connection page."
         },
         {
@@ -4958,7 +4958,7 @@
           "expected_result": "The intended Go is connected, its local API responds with measurements, and its serial is recorded for the following checks."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {
@@ -5002,7 +5002,7 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {
@@ -5050,7 +5050,7 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {
@@ -5203,7 +5203,7 @@
           "expected_result": "The intended Go is connected, its local API responds with measurements, and its serial is recorded for the following checks."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {
@@ -5249,7 +5249,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {
@@ -5291,7 +5291,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {
@@ -5333,7 +5333,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {
@@ -5377,7 +5377,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {
@@ -5421,7 +5421,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {
@@ -5460,7 +5460,7 @@
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Set the measurement interval to 60s in Main Menu > Settings. Select Main Menu > Operating Mode > Offline, return Home and lock Go.",
+          "action": "Set the measurement interval to 60s in Main Menu > Settings. Select Main Menu > Operating Mode > Energy Saving, return Home and lock Go.",
           "expected_result": "Go is locked in Offline mode with a 60-second measurement interval."
         },
         {
@@ -5503,7 +5503,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {
@@ -5728,7 +5728,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Offline.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving.",
           "expected_result": "Offline is selected."
         },
         {

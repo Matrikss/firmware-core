@@ -138,7 +138,7 @@ TEST_CASE("UIManager: agreed menu hierarchy", "[UIManager][nav][redesign]") {
   press(ui, InputSource::TouchEnter);
   check_rows(ui, {"Exit Menu", "Start Tracking", "Operating Mode", "Settings"});
   open_row(ui, "Operating Mode");
-  check_rows(ui, {"Exit", "Back", "Portable", "Stationary", "Offline"});
+  check_rows(ui, {"Exit", "Back", "Portable", "Stationary", "Energy Saving"});
   double_press(ui);
   CHECK(ui.build_values(make_default_ctx()).selected_row == 2);
   open_row(ui, "Settings");
@@ -168,7 +168,7 @@ TEST_CASE("UIManager: mode choices preserve identities across every transition",
           "[UIManager][settings][mode]") {
   const OperatingMode modes[] = {OperatingMode::Portable, OperatingMode::Stationary,
                                  OperatingMode::Offline};
-  const char *labels[] = {"Portable", "Stationary", "Offline"};
+  const char *labels[] = {"Portable", "Stationary", "Energy Saving"};
   for (uint8_t from = 0; from < 3; ++from) {
     for (uint8_t to = 0; to < 3; ++to) {
       UIManager ui(DEFAULT_UI_CONFIG);
