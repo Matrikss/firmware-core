@@ -183,7 +183,7 @@ Sensor and correction fields are:
 | `abcDays` | Integer `-1` or 1 .. 200 | `co2_abc_days`; `-1` disables automatic background calibration |
 | `tvocLearningOffset` | Integer 1 .. 1000 | `tvoc_learning_offset` |
 | `noxLearningOffset` | Integer 1 .. 1000 | `nox_learning_offset` |
-| `corrections.pm02` | `none`, `epa_2021`, `custom_via_pm25_raw`, `factory_calibration` | PM2.5 correction |
+| `corrections.pm02` | `none`, `custom_via_pm25_raw`, `factory_calibration` | PM2.5 correction |
 | `corrections.atmp` | `none`, `custom` | Temperature correction |
 | `corrections.rhum` | `none`, `custom` | Humidity correction |
 

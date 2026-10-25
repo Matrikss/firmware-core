@@ -77,13 +77,13 @@ IEEE-754 blob accessors.
 
 | Measure | Supported algorithms | Required custom values |
 |---|---|---|
-| PM2.5 | `none`, `epa_2021`, `custom_via_pm25_raw` | `intercept`, `scalingFactorViaPm25` |
+| PM2.5 | `none`, `custom_via_pm25_raw` | `intercept`, `scalingFactorViaPm25` |
 | Temperature | `none`, `custom` | `intercept`, `scalingFactor` |
 | Humidity | `none`, `custom` | `intercept`, `scalingFactor` |
 
 Missing or invalid algorithms fall back to `none`. A custom correction is
 active only when every required coefficient is present and finite. PM2.5
-`none` and `epa_2021` do not require persisted coefficients and load with
+`none` does not require persisted coefficients and loads with
 identity parameters. Factory reset writes the default all-`none` correction
 set. Go ignores the retired `useEpa2021` custom-PM option and does not read or
 write its former `mc_pe` NVS key.
