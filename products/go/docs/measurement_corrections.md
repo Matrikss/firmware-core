@@ -59,7 +59,6 @@ Algorithm and property names are case-sensitive.
 | Measure | Algorithm | Behavior |
 |---|---|---|
 | PM2.5 | `none` | Preserve valid raw PM2.5 |
-| PM2.5 | `epa_2021` | Apply the EPA 2021 piecewise correction using raw averaged PM2.5 and raw averaged humidity |
 | PM2.5 | `custom_via_pm25_raw` | Apply a linear scale and intercept to raw PM2.5 |
 | PM2.5 | `factory_calibration` | Same linear transform; selected through Cloud or USB Serial |
 | Temperature | `none` | Preserve valid raw temperature |
@@ -68,38 +67,8 @@ Algorithm and property names are case-sensitive.
 | Humidity | `custom` | Apply `scaling factor * raw + intercept` |
 
 Both linear PM algorithms preserve an exact raw zero and clamp negative results
-to zero. Go ignores `useEpa2021` for both. The shared component still supports
-an optional EPA stage after either linear algorithm. Temperature conversion to
+to zero. Go ignores `useEpa2021` for both. Temperature conversion to
 Fahrenheit and presentation rounding happen after correction.
-
-For the EPA transform, let `p` be PM2.5 and `h` be raw relative humidity clamped
-to its valid range. The implemented piecewise equations are:
-
-```text
-p == 0:
-  0
-
-p < 30:
-  0.524p - 0.0862h + 5.75
-
-30 <= p < 50, x = 0.05p - 1.5:
-  (0.786x + 0.524(1 - x))p - 0.0862h + 5.75
-
-50 <= p < 210:
-  0.786p - 0.0862h + 5.75
-
-210 <= p < 260, y = 0.02p - 4.2:
-  (0.69y + 0.786(1 - y))p - 0.0862h(1 - y)
-  + 2.966y + 5.75(1 - y) + 8.84e-4p²y
-
-p >= 260:
-  2.966 + 0.69p + 8.84e-4p²
-```
-
-The final result is floored at zero. The source of truth remains
-[`measurement_corrections.cpp`](../../../components/airgradient-common/measurement_corrections.cpp).
-Tests exercise the boundary inputs and PM custom zero behavior; exact expected
-EPA values are not asserted at every boundary.
 
 ### Wire Names and Shapes
 
@@ -124,7 +93,6 @@ Local API algorithm shapes are:
 
 - `none` requires no SLR parameters. `slr` is absent or null, and GET emits it
   as null.
-- PM2.5 `epa_2021` has the same no-SLR shape.
 - PM2.5 `custom_via_pm25_raw` requires finite, float-representable
   `intercept` and `scalingFactor` numbers. The shared Local API schema accepts
   `useEpa2021`, but Go ignores it and omits it from GET responses.
@@ -134,8 +102,8 @@ Local API algorithm shapes are:
 The cloud parser tolerates unrelated root, correction-entry, and SLR fields,
 but the supported values retain strict types and required names. Cloud PM2.5
 custom and factory inputs require `scalingFactorViaPm25`; `scalingFactor` is not
-an alias. Linear inputs require both coefficients, while `none` and `epa_2021`
-ignore `slr`. Go ignores `useEpa2021` when it is present. A malformed cloud measure
+an alias. Linear inputs require both coefficients, while `none`
+ignores `slr`. Go ignores `useEpa2021` when it is present. A malformed cloud measure
 leaves only that measure's update bit clear, so valid siblings remain
 applicable.
 
@@ -196,8 +164,6 @@ that field's existing invalid sentinel in the corrected copy.
 Temperature and humidity results outside their valid ranges become invalid
 sentinels. PM2.5 results are floored at zero without a separate finite or
 overflow check. Interfaces and persisted loading validate finite coefficients.
-EPA correction with invalid raw humidity falls back to the original valid
-raw PM2.5.
 
 ### Consumer Ownership
 
@@ -255,6 +221,5 @@ for raw handoff and RTC snapshot isolation.
 - Invalid or incomplete persisted custom or factory groups fall back to `none` per
   measure, without disabling valid sibling groups.
 - Temperature and humidity are not clamped into range.
-- EPA correction with invalid raw humidity retains valid raw PM2.5.
 - A settings write or commit failure retains the previous in-memory settings
   and corrected presentation.

@@ -318,11 +318,9 @@ apply those settings locally or use their own correction policy.
 
 Temperature and humidity custom correction is `scale * raw + intercept`. PM
 custom preserves exact raw zero; otherwise it computes
-`max(0, scale * raw + intercept)` without an EPA stage on Go. The separate
-`epa_2021` algorithm uses raw humidity and falls back to raw PM2.5 when humidity
-is invalid. See
-[Measurement Corrections](docs/measurement_corrections.md) for exact EPA
-equations, field-validity behavior, and consumer ownership.
+`max(0, scale * raw + intercept)`. See
+[Measurement Corrections](docs/measurement_corrections.md) for
+field-validity behavior and consumer ownership.
 
 ### Payload
 
@@ -619,7 +617,7 @@ Correction maps contain schema version `s` and a positional value array `v`.
 Schema version 1 uses `[algorithm, scale, intercept]` for temperature and
 humidity, and `[algorithm, scale, intercept, flags]` for PM2.5. All coefficients
 are finite float32 values. Algorithm enums are `0 = none`, `1 = custom` for
-temperature/humidity, and `0 = none`, `1 = epa_2021`, `2 = custom_via_pm25_raw`
+temperature/humidity, and `0 = none`, `2 = custom_via_pm25_raw`
 for PM2.5. PM2.5 flag bit 0 is reserved for compatibility. Go always emits it
 clear and ignores it on `custom_via_pm25_raw` writes.
 Canonical `none` uses scale `1.0`, intercept `0.0`, and clear flags. The current

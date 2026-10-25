@@ -5068,6 +5068,71 @@ TEST_CASE("BLE config set: correction updates derived view without notifying raw
   CHECK(test_spy::ble_notify_config_called);
 }
 
+TEST_CASE("BLE config set: EPA PM correction is rejected without changing settings",
+          "[Orchestrator][correction][ble]") {
+  TestFixture f;
+  SECTION("from none") {}
+  SECTION("from custom") {
+    f.settings.corrections.pm25 = {Pm25CorrectionAlgorithm::CustomViaPm25Raw, 2.0f, 1.0f, false};
+  }
+  SECTION("from factory") {
+    f.settings.corrections.pm25 = {Pm25CorrectionAlgorithm::FactoryCalibration, 2.0f, 1.0f, false};
+  }
+  auto orch = f.make_orchestrator();
+
+  MeasuresAGo raw{};
+  raw.pm_a.pm_25 = 10.0f;
+  raw.temp_hum_a.humidity = 50.0f;
+  A::on_sensor_data(orch, raw);
+  const float previous_pm25 = A::corrected_measures(orch).pm_a.pm_25;
+
+  test_spy::ble_connected = true;
+  test_spy::ble_pending_config_len = 1;
+  test_spy::ble_config_decode_result.op = BleConfigOp::Set;
+  test_spy::ble_decode_updates_settings = true;
+  test_spy::ble_decoded_settings = f.settings;
+  test_spy::ble_decoded_settings.corrections.pm25.algorithm = Pm25CorrectionAlgorithm::Epa2021;
+  FORBID_CALL(f.mock_config, commit());
+
+  Event evt{};
+  evt.type = EventType::BleConfigWrite;
+  A::dispatch(orch, evt);
+
+  CHECK(A::settings(orch).equals(f.settings));
+  CHECK(A::corrected_measures(orch).pm_a.pm_25 == previous_pm25);
+  CHECK(test_spy::ble_notify_command_result_called);
+  CHECK(test_spy::ble_last_command == BleCommand::Set);
+  CHECK_FALSE(test_spy::ble_last_command_success);
+  CHECK(std::string(test_spy::ble_last_command_error) == BLE_VAL_ERR_INVALID_CONFIG_VALUE);
+  CHECK_FALSE(test_spy::ble_notify_config_called);
+}
+
+TEST_CASE("dispatch: unsupported PM correction cannot replace active calibration",
+          "[Orchestrator][dispatch][cloud][correction]") {
+  TestFixture f;
+  f.settings.corrections.pm25 = {Pm25CorrectionAlgorithm::FactoryCalibration, 2.0f, 1.0f, false};
+  auto orch = f.make_orchestrator();
+  FORBID_CALL(f.mock_config, commit());
+  ALLOW_CALL(f.mock_rtos, get_time_ms_impl()).RETURN(9000);
+
+  MeasuresAGo raw{};
+  raw.pm_a.pm_25 = 10.0f;
+  raw.temp_hum_a.humidity = 50.0f;
+  A::on_sensor_data(orch, raw);
+
+  // Cloud parsing filters unsupported algorithms. Reject them here too if an
+  // internal caller ever supplies an unsupported complete candidate.
+  Event evt{};
+  evt.type = EventType::FetchConfigResult;
+  evt.fetch_config.result = static_cast<CloudResultByte>(AgClientResult::Ok);
+  evt.fetch_config.update.update_mask = static_cast<uint32_t>(GoConfigField::Pm25Correction);
+  evt.fetch_config.update.corrections.pm25.algorithm = Pm25CorrectionAlgorithm::Epa2021;
+  A::dispatch(orch, evt);
+
+  CHECK(A::settings(orch).equals(f.settings));
+  CHECK(A::corrected_measures(orch).pm_a.pm_25 == 21.0f);
+}
+
 TEST_CASE("BLE config set: rejected when unknown config key present",
           "[Orchestrator][settings][ble]") {
   TestFixture f;

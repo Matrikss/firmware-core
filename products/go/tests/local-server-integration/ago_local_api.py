@@ -201,7 +201,7 @@ def _validate_correction(entry: object, measure: str) -> None:
     slr = entry["slr"]
 
     if measure == "pm25":
-        assert algorithm in {"none", "epa_2021", "custom_via_pm25_raw"}
+        assert algorithm in {"none", "custom_via_pm25_raw"}
         custom = algorithm == "custom_via_pm25_raw"
     else:
         assert algorithm in {"none", "custom"}

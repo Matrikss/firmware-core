@@ -172,7 +172,7 @@ Connectivity, sensor, and correction fields are:
 | `noxLearningOffset` | Integer 1 .. 1000 | Set the SGP41 NOx gas-index learning-time offset in whole hours. |
 | `corrections` | Object | Configure `pm25`, `temperature`, and `humidity` correction entries |
 
-Go accepts `none`, `epa_2021`, and `custom_via_pm25_raw` for PM2.5. Temperature
+Go accepts `none` and `custom_via_pm25_raw` for PM2.5. Temperature
 and humidity accept `none` and `custom`. Custom entries require finite
 `intercept` and `scalingFactor` values. Go omits the shared `useEpa2021` field
 from GET responses and ignores it when supplied in a PM2.5 PUT.
