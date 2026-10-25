@@ -325,7 +325,7 @@ public:
     RTOS::delay_ms(deinit_delay_ms);
     active = initialized = false;
   }
-  bool set_service_broadcast(const char *value, const uint8_t *data, size_t len) override {
+  bool set_service_list_broadcast(const char *value, const uint8_t *data, size_t len) override {
     calls.push_back("payload");
     uuid = value;
     payload.assign(data, data + len);
@@ -1335,8 +1335,8 @@ TEST_CASE("fast path BLE: advertises raw measurements despite configured correct
   CHECK(board.ble.name.empty());
   CHECK(board.ble.uuid == GoBleAdvertisement::SERVICE_UUID);
   CHECK(board.ble.interval_us == 300000);
-  CHECK(board.ble.payload == std::vector<uint8_t>{0x01, 0xD0, 0x07, 0x33, 0x64, 0x00, 0x90, 0x01,
-                                                  0x95, 0x27, 0xD5, 0xFF, 0x4B});
+  CHECK(board.ble.payload ==
+        std::vector<uint8_t>{0xFF, 0xFF, 0xC1, 0xD2, 0x8C, 0x0C, 0x80, 0x0C, 0xBA, 0xF7, 0x12});
   CHECK(board.ble.calls ==
         std::vector<std::string>{"init", "payload", "interval", "start", "stop", "deinit"});
   CHECK_FALSE(board.ble.initialized);
@@ -1481,8 +1481,8 @@ TEST_CASE("fast path BLE: unavailable measurements and battery retain wire senti
   const auto result = access.execute_fast_path(RtcAppState{}, button);
 
   CHECK(result.outcome == GoAppTestAccess::Outcome::Sleep);
-  CHECK(board.ble.payload == std::vector<uint8_t>{0x01, 0x00, 0x80, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                                                  0xFF, 0xFF, 0x00, 0x80, 0xFF});
+  CHECK(board.ble.payload ==
+        std::vector<uint8_t>{0xFF, 0xFF, 0xF9, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x1F});
   CHECK_FALSE(board.ble.initialized);
 }
 

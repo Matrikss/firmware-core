@@ -672,11 +672,12 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
         power_snapshot.ship_mode_request == ShipModeRequest::None) {
       MeasuresAGo advertised = ago;
       advertised.power.battery_percentage = power_snapshot.battery_percentage;
-      const auto payload = GoBleAdvertisement::encode(advertised);
+      const auto payload =
+          GoBleAdvertisement::manufacturer_data(GoBleAdvertisement::encode(advertised));
       broadcast = &_board.ble_server();
       if (!broadcast->init("") ||
-          !broadcast->set_service_broadcast(GoBleAdvertisement::SERVICE_UUID, payload.data(),
-                                            payload.size()) ||
+          !broadcast->set_service_list_broadcast(GoBleAdvertisement::SERVICE_UUID, payload.data(),
+                                                 payload.size()) ||
           !broadcast->set_advertising_interval(FAST_PATH_BLE_ADVERTISING_INTERVAL_US) ||
           !broadcast->start_advertising()) {
         AG_LOGW(TAG, "fast-path: BLE broadcast setup failed");
