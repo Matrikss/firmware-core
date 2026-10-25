@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "rev": "57fd300",
+  "rev": "0840378",
   "product": {
     "slug": "airgradient-go",
     "name": "AirGradient Go",
@@ -5443,15 +5443,15 @@
     },
     {
       "id": "go.ble.offline-measurements",
-      "title": "The app receives measurements in Energy Saving (Offline) mode",
-      "objective": "Verify Offline measurement broadcasts reach the AirGradient mobile app.",
+      "title": "AirGradient app receives Offline measurements in the foreground",
+      "objective": "Verify Offline measurement broadcasts reach the AirGradient app while it is visible.",
       "category": "Modes & Sleep",
       "sub_category": "Timer Wake",
       "applicability": [
         "V1"
       ],
       "setup": [
-        "Phone with BLE and AirGradient mobile app",
+        "Phone with BLE and the AirGradient app supporting Offline v1 broadcasts.",
         "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
       ],
       "steps": [
@@ -5464,7 +5464,7 @@
           "expected_result": "Go is locked in Offline mode with a 60-second measurement interval."
         },
         {
-          "action": "Use the AirGradient mobile app to receive measurements from this Go. Leave Go locked in Offline mode and observe for five minutes.",
+          "action": "Use the AirGradient app to receive measurements from this Go. Keep the app visible and the phone screen awake for five minutes from starting reception, with Go locked in Offline mode.",
           "expected_result": "The app receives new measurements from this Go during the observation period. Missed individual wakeups are acceptable.",
           "evidence": [
             "Save evidence of measurements received during the observation period."
@@ -5473,6 +5473,53 @@
       ],
       "cleanup": [
         "Wake and unlock Go if needed. Restore the recorded measurement interval, operating mode and lock state, including after interruption. Confirm restoration; record any remaining change."
+      ],
+      "references": [
+        "products/go/go_ble_client.md#offline-measurement-broadcasts",
+        "products/go/docs/ble_service.md#offline-broadcast-lifecycle"
+      ]
+    },
+    {
+      "id": "go.ble.offline-measurements-background",
+      "title": "AirGradient app receives Offline measurements while the phone is locked",
+      "objective": "Verify the AirGradient app receives new Offline broadcasts while backgrounded, before the phone is unlocked.",
+      "category": "Modes & Sleep",
+      "sub_category": "Timer Wake",
+      "applicability": [
+        "V1"
+      ],
+      "setup": [
+        "Phone with BLE and the AirGradient app supporting Offline v1 broadcasts and background reception.",
+        "A documented AirGradient app view of per-reading phone receipt times, including background receipts.",
+        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+      ],
+      "steps": [
+        {
+          "action": "Record the current Go operating mode, lock state and measurement interval. Unlock Go if needed.",
+          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+        },
+        {
+          "action": "Set the measurement interval to 60s in Main Menu > Settings. Select Main Menu > Operating Mode > Energy Saving, return Home and lock Go.",
+          "expected_result": "Go is locked in Offline mode with a 60-second measurement interval."
+        },
+        {
+          "action": "Start receiving this Go's measurements in the AirGradient app. Allow five minutes from starting reception and record the latest reading's receipt time.",
+          "expected_result": "A new reading arrives from the intended Go and its phone receipt time is available as a baseline."
+        },
+        {
+          "action": "Record the phone time, background the AirGradient app without force-closing it, and lock the phone. Keep Go nearby and locked for five minutes. Record the phone time at the end of the locked period before reopening the app.",
+          "expected_result": "The phone remains locked with the app backgrounded for the observation period; its start and end times are recorded."
+        },
+        {
+          "action": "Unlock the phone, reopen the AirGradient app and inspect the phone receipt times of readings from this Go.",
+          "expected_result": "New readings have receipt times after the baseline and within the recorded locked period. Missed individual wakeups are acceptable. Readings received only after reopening the app do not establish a pass.",
+          "evidence": [
+            "Save the baseline receipt time, locked-period start and end times, and app evidence of readings received within that period."
+          ]
+        }
+      ],
+      "cleanup": [
+        "Unlock the phone. Wake and unlock Go if needed. Restore the recorded Go measurement interval, operating mode and lock state, including after interruption. Confirm restoration; record any remaining change."
       ],
       "references": [
         "products/go/go_ble_client.md#offline-measurement-broadcasts",
