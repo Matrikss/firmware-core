@@ -5068,57 +5068,51 @@ TEST_CASE("BLE config set: correction updates derived view without notifying raw
   CHECK(test_spy::ble_notify_config_called);
 }
 
-TEST_CASE("BLE config set: EPA PM correction becomes raw PM",
+TEST_CASE("BLE config set: EPA PM correction is rejected without changing settings",
           "[Orchestrator][correction][ble]") {
   TestFixture f;
-  f.settings.corrections.pm25 = {Pm25CorrectionAlgorithm::CustomViaPm25Raw, 2.0f, 1.0f, false};
+  SECTION("from none") {}
+  SECTION("from custom") {
+    f.settings.corrections.pm25 = {Pm25CorrectionAlgorithm::CustomViaPm25Raw, 2.0f, 1.0f, false};
+  }
+  SECTION("from factory") {
+    f.settings.corrections.pm25 = {Pm25CorrectionAlgorithm::FactoryCalibration, 2.0f, 1.0f, false};
+  }
   auto orch = f.make_orchestrator();
 
   MeasuresAGo raw{};
   raw.pm_a.pm_25 = 10.0f;
   raw.temp_hum_a.humidity = 50.0f;
   A::on_sensor_data(orch, raw);
+  const float previous_pm25 = A::corrected_measures(orch).pm_a.pm_25;
 
   test_spy::ble_connected = true;
   test_spy::ble_pending_config_len = 1;
   test_spy::ble_config_decode_result.op = BleConfigOp::Set;
   test_spy::ble_decode_updates_settings = true;
   test_spy::ble_decoded_settings = f.settings;
-  test_spy::ble_decoded_settings.corrections.pm25 = {Pm25CorrectionAlgorithm::Epa2021, 2.0f,
-                                                     1.0f, false};
-
-  ALLOW_CALL(f.mock_config, set_int(trompeloeil::_, trompeloeil::_)).RETURN(ConfigStoreResult::OK);
-  REQUIRE_CALL(f.mock_config,
-               set_int(trompeloeil::_, static_cast<int>(Pm25CorrectionAlgorithm::None)))
-      .WITH(std::strcmp(_1, "mc_pa") == 0)
-      .RETURN(ConfigStoreResult::OK);
-  ALLOW_CALL(f.mock_config, set_bool(trompeloeil::_, trompeloeil::_)).RETURN(ConfigStoreResult::OK);
-  ALLOW_CALL(f.mock_config, set_string(trompeloeil::_, trompeloeil::_))
-      .RETURN(ConfigStoreResult::OK);
-  ALLOW_CALL(f.mock_config, commit()).RETURN(ConfigStoreResult::OK);
+  test_spy::ble_decoded_settings.corrections.pm25.algorithm = Pm25CorrectionAlgorithm::Epa2021;
+  FORBID_CALL(f.mock_config, commit());
 
   Event evt{};
   evt.type = EventType::BleConfigWrite;
   A::dispatch(orch, evt);
 
-  CHECK(A::settings(orch).corrections.pm25.algorithm == Pm25CorrectionAlgorithm::None);
-  CHECK(A::settings(orch).corrections.pm25.scaling_factor == 1.0f);
-  CHECK(A::settings(orch).corrections.pm25.intercept == 0.0f);
-  CHECK(A::corrected_measures(orch).pm_a.pm_25 == 10.0f);
-  CHECK(test_spy::ble_notify_config_called);
+  CHECK(A::settings(orch).equals(f.settings));
+  CHECK(A::corrected_measures(orch).pm_a.pm_25 == previous_pm25);
+  CHECK(test_spy::ble_notify_command_result_called);
+  CHECK(test_spy::ble_last_command == BleCommand::Set);
+  CHECK_FALSE(test_spy::ble_last_command_success);
+  CHECK(std::string(test_spy::ble_last_command_error) == BLE_VAL_ERR_INVALID_CONFIG_VALUE);
+  CHECK_FALSE(test_spy::ble_notify_config_called);
 }
 
-TEST_CASE("dispatch: Cloud Fetch EPA PM correction becomes raw PM",
+TEST_CASE("dispatch: unsupported PM correction cannot replace active calibration",
           "[Orchestrator][dispatch][cloud][correction]") {
   TestFixture f;
-  f.settings.corrections.pm25 = {Pm25CorrectionAlgorithm::CustomViaPm25Raw, 2.0f, 1.0f, false};
+  f.settings.corrections.pm25 = {Pm25CorrectionAlgorithm::FactoryCalibration, 2.0f, 1.0f, false};
   auto orch = f.make_orchestrator();
-
-  ALLOW_CALL(f.mock_config, set_int(trompeloeil::_, trompeloeil::_)).RETURN(ConfigStoreResult::OK);
-  ALLOW_CALL(f.mock_config, set_bool(trompeloeil::_, trompeloeil::_)).RETURN(ConfigStoreResult::OK);
-  ALLOW_CALL(f.mock_config, set_string(trompeloeil::_, trompeloeil::_))
-      .RETURN(ConfigStoreResult::OK);
-  ALLOW_CALL(f.mock_config, commit()).RETURN(ConfigStoreResult::OK);
+  FORBID_CALL(f.mock_config, commit());
   ALLOW_CALL(f.mock_rtos, get_time_ms_impl()).RETURN(9000);
 
   MeasuresAGo raw{};
@@ -5126,21 +5120,17 @@ TEST_CASE("dispatch: Cloud Fetch EPA PM correction becomes raw PM",
   raw.temp_hum_a.humidity = 50.0f;
   A::on_sensor_data(orch, raw);
 
+  // Cloud parsing filters unsupported algorithms. Reject them here too if an
+  // internal caller ever supplies an unsupported complete candidate.
   Event evt{};
   evt.type = EventType::FetchConfigResult;
   evt.fetch_config.result = static_cast<CloudResultByte>(AgClientResult::Ok);
   evt.fetch_config.update.update_mask = static_cast<uint32_t>(GoConfigField::Pm25Correction);
   evt.fetch_config.update.corrections.pm25.algorithm = Pm25CorrectionAlgorithm::Epa2021;
-
   A::dispatch(orch, evt);
 
-  CHECK(A::settings(orch).corrections.pm25.algorithm == Pm25CorrectionAlgorithm::None);
-  CHECK(A::corrected_measures(orch).pm_a.pm_25 == 10.0f);
-
-  // A repeated EPA fetch matches the active raw selection and is a no-op.
-  FORBID_CALL(f.mock_config, commit());
-  A::dispatch(orch, evt);
-  CHECK(A::settings(orch).corrections.pm25.algorithm == Pm25CorrectionAlgorithm::None);
+  CHECK(A::settings(orch).equals(f.settings));
+  CHECK(A::corrected_measures(orch).pm_a.pm_25 == 21.0f);
 }
 
 TEST_CASE("BLE config set: rejected when unknown config key present",

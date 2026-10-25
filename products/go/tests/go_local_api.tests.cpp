@@ -400,17 +400,16 @@ TEST_CASE("Go local API maps the supported active config subset") {
   CHECK(config.corrections->humidity->algorithm == "custom");
 }
 
-TEST_CASE("Go local API emits canonical disabled and EPA correction shapes") {
+TEST_CASE("Go local API emits canonical disabled correction shapes") {
   Fixture fixture;
   GoSettings settings{};
   settings.configuration_control = ConfigurationControl::Cloud;
-  settings.corrections.pm25.algorithm = Pm25CorrectionAlgorithm::Epa2021;
   fixture.service->publish_config_snapshot(settings);
 
   const LocalServerConfig config = fixture.service->get_config();
   CHECK(*config.configuration_control == "cloud");
   REQUIRE(config.corrections.has_value());
-  CHECK(config.corrections->pm25->algorithm == "epa_2021");
+  CHECK(config.corrections->pm25->algorithm == "none");
   CHECK_FALSE(config.corrections->pm25->slr.has_value());
   CHECK(config.corrections->temperature->algorithm == "none");
   CHECK_FALSE(config.corrections->temperature->slr.has_value());
@@ -987,16 +986,28 @@ TEST_CASE("Go local API resets canonical correction values") {
   CHECK(request.config.corrections.temperature.algorithm == LinearCorrectionAlgorithm::None);
   CHECK(request.config.corrections.temperature.scaling_factor == 1.0f);
   CHECK(request.config.corrections.temperature.intercept == 0.0f);
+}
+
+TEST_CASE("Go local API rejects EPA and other fields in the same request") {
+  Fixture fixture;
+  GoSettings settings{};
+  settings.corrections.pm25 = {Pm25CorrectionAlgorithm::FactoryCalibration, 1.2f, -0.4f, false};
+  fixture.service->publish_config_snapshot(settings);
+  fixture.service->set_access(ConfigAccess::ReadWrite);
 
   CorrectionEntry epa{};
   epa.algorithm = "epa_2021";
-  require_status(fixture.service->submit_config(correction_config(epa, std::nullopt, std::nullopt)),
-                 ConfigSubmitStatus::Accepted);
-  request = fixture.receive_request();
-  CHECK(request.config.corrections.pm25.algorithm == Pm25CorrectionAlgorithm::Epa2021);
-  CHECK(request.config.corrections.pm25.scaling_factor == 1.0f);
-  CHECK(request.config.corrections.pm25.intercept == 0.0f);
-  CHECK_FALSE(request.config.corrections.pm25.use_epa2021);
+  auto config = correction_config(epa, std::nullopt, std::nullopt);
+  config.measurement_interval_seconds = 17;
+  require_status(fixture.service->submit_config(config), ConfigSubmitStatus::InvalidValue,
+                 ConfigFieldId::CorrectionsPm25);
+  CHECK(GoLocalApiServiceTestAccess::request_count(*fixture.service) == 0);
+  const auto active = fixture.service->get_config();
+  CHECK(active.measurement_interval_seconds == settings.measure_interval_seconds);
+  REQUIRE(active.corrections->pm25->slr.has_value());
+  CHECK(active.corrections->pm25->algorithm == "custom_via_pm25_raw");
+  CHECK(*active.corrections->pm25->slr->scaling_factor == 1.2f);
+  CHECK(*active.corrections->pm25->slr->intercept == -0.4f);
 }
 
 TEST_CASE("Go local API FIFO preserves order and enforces four-entry capacity") {

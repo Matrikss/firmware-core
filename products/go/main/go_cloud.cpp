@@ -245,11 +245,6 @@ bool parse_pm25_correction(const cJSON *entry, Pm25Correction &out) {
     out = Pm25Correction{};
     return true;
   }
-  if (std::strcmp(algorithm->valuestring, "epa_2021") == 0) {
-    out = Pm25Correction{};
-    out.algorithm = Pm25CorrectionAlgorithm::Epa2021;
-    return true;
-  }
   const bool is_factory_calibration =
       std::strcmp(algorithm->valuestring, "factory_calibration") == 0;
   const bool is_custom_pm25_raw = std::strcmp(algorithm->valuestring, "custom_via_pm25_raw") == 0;

@@ -81,8 +81,10 @@ bool is_auto_lock_valid(int value) {
 }
 
 bool is_pm25_algorithm_valid(int value) {
-  return value >= static_cast<int>(Pm25CorrectionAlgorithm::None) &&
-         value <= static_cast<int>(Pm25CorrectionAlgorithm::FactoryCalibration);
+  // Go supports only these algorithms; the shared enum also serves other products.
+  return value == static_cast<int>(Pm25CorrectionAlgorithm::None) ||
+         value == static_cast<int>(Pm25CorrectionAlgorithm::CustomViaPm25Raw) ||
+         value == static_cast<int>(Pm25CorrectionAlgorithm::FactoryCalibration);
 }
 
 bool is_linear_algorithm_valid(int value) {
@@ -101,9 +103,8 @@ MeasurementCorrections load_measurement_corrections(ConfigStore &store) {
   if (store.get_int(KEY_PM25_CORRECTION_ALGORITHM, algorithm) == ConfigStoreResult::OK &&
       is_pm25_algorithm_valid(algorithm)) {
     const auto pm_algorithm = static_cast<Pm25CorrectionAlgorithm>(algorithm);
-    // A persisted EPA 2021 selection keeps the default `none`.
     if (pm_algorithm == Pm25CorrectionAlgorithm::CustomViaPm25Raw ||
-               pm_algorithm == Pm25CorrectionAlgorithm::FactoryCalibration) {
+        pm_algorithm == Pm25CorrectionAlgorithm::FactoryCalibration) {
       float scaling_factor = 0.0f;
       float intercept = 0.0f;
       if (load_finite_float(store, KEY_PM25_CORRECTION_SCALING_FACTOR, scaling_factor) &&
@@ -306,12 +307,6 @@ GoSettings load_go_settings(ConfigStore &store) {
   return settings;
 }
 
-void disable_epa_pm25_correction(GoSettings &settings) {
-  if (settings.corrections.pm25.algorithm == Pm25CorrectionAlgorithm::Epa2021) {
-    settings.corrections.pm25 = Pm25Correction{};
-  }
-}
-
 bool GoSettings::equals(const GoSettings &other) const {
   return measure_interval_seconds == other.measure_interval_seconds &&
          use_fahrenheit == other.use_fahrenheit && use_feet == other.use_feet &&
@@ -372,7 +367,8 @@ bool is_go_settings_valid(const GoSettings &settings) {
     return false;
   }
 
-  if (!are_measurement_corrections_valid(settings.corrections)) {
+  if (!is_pm25_algorithm_valid(static_cast<int>(settings.corrections.pm25.algorithm)) ||
+      !are_measurement_corrections_valid(settings.corrections)) {
     return false;
   }
 

@@ -1703,6 +1703,25 @@ TEST_CASE("BLE: decode_config_write ignores the retired PM25 EPA flag") {
   CHECK_FALSE(settings.corrections.pm25.use_epa2021);
 }
 
+TEST_CASE("BLE: decode_config_write rejects EPA without changing PM calibration") {
+  uint8_t buf[192];
+  const size_t len = encode_set_pm25_correction(buf, sizeof(buf), 1, 1.0f, 0.0f, false);
+  GoSettings settings;
+  settings.corrections.pm25 = {Pm25CorrectionAlgorithm::FactoryCalibration, 1.2f, -0.4f, false};
+  const GoSettings original = settings;
+
+  const auto result = BleService::decode_config_write(buf, len, settings);
+
+  CHECK(result.op == BleConfigOp::Set);
+  CHECK(result.recognized_config_key_count == 1);
+  CHECK_FALSE(result.has_unknown_keys);
+  CHECK(result.has_invalid_config_values);
+  CHECK(settings.corrections.pm25.algorithm == original.corrections.pm25.algorithm);
+  CHECK(settings.corrections.pm25.scaling_factor == original.corrections.pm25.scaling_factor);
+  CHECK(settings.corrections.pm25.intercept == original.corrections.pm25.intercept);
+  CHECK(settings.corrections.pm25.use_epa2021 == original.corrections.pm25.use_epa2021);
+}
+
 TEST_CASE("BLE: decode_config_write decodes linear correction group") {
   uint8_t buf[160];
   size_t len = encode_set_linear_correction(buf, sizeof(buf), "temp_corr", 1, 1.01f, -0.4f);

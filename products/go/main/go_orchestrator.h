@@ -311,7 +311,7 @@ private:
   /// Persist the onboarding flag on first engagement. Idempotent (no
   /// redundant NVS write).
   bool mark_onboarding_done();
-  bool activate_settings_candidate(GoSettings candidate, bool persist = true,
+  bool activate_settings_candidate(const GoSettings &candidate, bool persist = true,
                                    bool force_persist = false);
   void apply_settings_runtime_delta(const GoSettings &previous_settings,
                                     OperatingMode previous_mode);

@@ -115,13 +115,12 @@ uint64_t pm25_correction_algorithm_to_wire(Pm25CorrectionAlgorithm algorithm) {
   switch (algorithm) {
   case Pm25CorrectionAlgorithm::None:
     return 0;
-  case Pm25CorrectionAlgorithm::Epa2021:
-    return 1;
   case Pm25CorrectionAlgorithm::CustomViaPm25Raw:
   case Pm25CorrectionAlgorithm::FactoryCalibration:
     return 2;
+  default:
+    return 0;
   }
-  return 0;
 }
 
 uint64_t linear_correction_algorithm_to_wire(LinearCorrectionAlgorithm algorithm) {
@@ -139,9 +138,7 @@ bool pm25_correction_algorithm_from_wire(uint64_t value, Pm25CorrectionAlgorithm
   case 0:
     algorithm = Pm25CorrectionAlgorithm::None;
     return true;
-  case 1:
-    algorithm = Pm25CorrectionAlgorithm::Epa2021;
-    return true;
+  // ID 1 is reserved for EPA 2021, which Go does not support.
   case 2:
     algorithm = Pm25CorrectionAlgorithm::CustomViaPm25Raw;
     return true;
