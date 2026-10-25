@@ -332,8 +332,18 @@ class TestConfigWrite:
             )
             await config_notifications.wait_for(timeout=ago_notify_timeout)
 
+    @pytest.mark.parametrize(
+        "key, algorithm, flags",
+        [
+            pytest.param("temp_corr", 99, None, id="unknown-temperature-algorithm"),
+            pytest.param("pm25_corr", 1, 0, id="epa-pm25"),
+        ],
+    )
     async def test_invalid_correction_is_rejected(
         self,
+        key: str,
+        algorithm: int,
+        flags: int | None,
         ago_client: BleakClient,
         config_notifications: NotificationCollector,
         ago_notify_timeout: float,
@@ -342,9 +352,10 @@ class TestConfigWrite:
         raw = await ago_client.read_gatt_char(proto.CHAR_CONFIG_UUID)
         original = proto.decode_cbor(bytes(raw))
 
+        config_notifications.drain()
         await ago_client.write_gatt_char(
             proto.CHAR_CONFIG_UUID,
-            proto._encode_correction_set("temp_corr", 99, 1.0, 0.0, None),
+            proto._encode_correction_set(key, algorithm, 1.0, 0.0, flags),
             response=True,
         )
 
@@ -361,7 +372,7 @@ class TestConfigWrite:
         updated = proto.decode_cbor(
             await ago_client.read_gatt_char(proto.CHAR_CONFIG_UUID)
         )
-        assert updated["temp_corr"] == original["temp_corr"]
+        assert updated == original, "Rejected correction changed the configuration"
 
     async def test_config_notify_field_types(
         self,

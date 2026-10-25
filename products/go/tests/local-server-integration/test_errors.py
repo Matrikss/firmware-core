@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import time
+
 import httpx
 import pytest
 
 import ago_local_api as api
 
 JSON_HEADERS = {"Content-Type": "application/json"}
+CONFIG_REJECTION_POLL_INTERVAL = 0.25
 
 
 @pytest.mark.parametrize("body", [b"", b"{", b"[]", b"{} trailing"])
@@ -70,6 +73,60 @@ def test_invalid_extended_config_value(
         "invalid value",
         field=field,
     )
+
+
+@pytest.mark.config_write
+@pytest.mark.parametrize("preserved_config_setting", ["measurementInterval"], indirect=True)
+@pytest.mark.parametrize("include_valid_setting", [False, True], ids=["epa-only", "mixed"])
+def test_epa_correction_is_rejected_without_changing_config(
+    ago_http_client: httpx.Client,
+    preserved_config_setting: tuple[str, object, object],
+    ago_convergence_timeout: float,
+    include_valid_setting: bool,
+) -> None:
+    # The preservation fixture requires opt-in and local control, and restores
+    # the interval even if a regression partially accepts the mixed request.
+    field, _original, updated = preserved_config_setting
+    baseline = api.get_config(ago_http_client)
+    request: dict[str, object] = {
+        "corrections": {"pm25": {"correctionAlgorithm": "epa_2021", "slr": None}}
+    }
+    if include_valid_setting:
+        request[field] = updated
+
+    restore_corrections = True
+    try:
+        response = ago_http_client.put(api.CONFIG_PATH, json=request)
+        restore_corrections = response.status_code != 400
+        api.assert_error(
+            response,
+            400,
+            "invalid_value",
+            "invalid value",
+            field="corrections.pm25",
+        )
+
+        # A single immediate GET can miss an incorrectly queued update. Observe
+        # the full convergence window before claiming that nothing changed.
+        deadline = time.monotonic() + ago_convergence_timeout
+        while True:
+            current = api.assert_json_response(ago_http_client.get(api.CONFIG_PATH))
+            restore_corrections = current["corrections"] != baseline["corrections"]
+            assert current == baseline, "Rejected EPA request changed the configuration"
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            time.sleep(min(CONFIG_REJECTION_POLL_INTERVAL, remaining))
+    finally:
+        if restore_corrections:
+            # Queue the original values after any mistakenly accepted request.
+            # Avoid rewriting unchanged PM calibration on the passing path.
+            api.put_and_wait(
+                ago_http_client,
+                "corrections",
+                baseline["corrections"],
+                ago_convergence_timeout,
+            )
 
 
 def test_unknown_nested_correction_field(ago_http_client: httpx.Client) -> None:
