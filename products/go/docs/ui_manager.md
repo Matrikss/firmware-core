@@ -129,7 +129,7 @@ flowchart TD
     TrackingStatus -- Back --> TrackingMenu
     TrackingStatus -- Exit --> Home
     TrackingMenu -- Exit, Pause, Resume, or Stop --> Home
-    MainMenu -- Operating Mode --> Mode["SettingsChoice: Portable / Stationary / Offline"]
+    MainMenu -- Operating Mode --> Mode["SettingsChoice: Portable / Stationary / Energy Saving"]
     Mode -- Back --> MainMenu
     MainMenu --> Settings
     Settings -- Back --> MainMenu
@@ -170,9 +170,13 @@ If a remote Stop ends the session while TrackingMenu or TrackingStatus is open,
 it returns directly to MainMenu with Start Tracking selected. The paused state
 uses a two-bar icon in the recording dot's position.
 
-Operating Mode lists Portable, Stationary, and Offline in
+Operating Mode lists Portable, Stationary, and Energy Saving in
 that order. Selecting a mode returns Home and emits `ChangeMode`; the existing
 Stationary connection/setup flow may then replace Home.
+
+Energy Saving is the display label for `OperatingMode::Offline`. Technical
+docs and logs retain Offline; persisted settings and interface values are
+unchanged.
 
 Every ordinary list submenu starts with Exit (0) and Back (1). The content
 rows follow this order:
@@ -335,7 +339,7 @@ pairs so display ordering cannot change persisted mode identities.
 | PM Display | `PM Display: ug/m3 / USAQI` | ug/m3, USAQI |
 | Measure Interval | `Measure Int.: <value>` | Conditional `Custom (<seconds>s)`, then 3s, 10s, 30s, 60s, 5m, 15m, 1h |
 | GPS Mode | `GPS: ...` (summary uses `When tracking`) | Always Off, On When Tracking, Always On |
-| Mode | Main Menu: `Operating Mode` | Portable, Stationary, Offline |
+| Mode | Main Menu: `Operating Mode` | Portable, Stationary, Energy Saving |
 | Auto Lock | `Auto Lock: Off / 10s / 30s / 60s` | Off, 10 Seconds, 30 Seconds, 60 Seconds |
 | AQI LED | `AQI LED: ...` | Off, Dim, Mid, Bright |
 | Touch LED | `Touch LED: ...` | Off, Dim, Bright |

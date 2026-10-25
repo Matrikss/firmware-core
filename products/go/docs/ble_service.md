@@ -479,6 +479,9 @@ and notifications, with unchanged coefficients and clear flags. Schema version
 | `Stationary` | `"stationary"` |
 | `Offline` | `"offline"` |
 
+Offline appears as **Energy Saving** on the display. BLE retains `"offline"`
+for `op_mode` and `"op_offline"` for disconnect notices.
+
 ### Write (phone writes to characteristic)
 
 The phone sends a CBOR map with an `"op"` field. The BLE service does **not**

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "rev": "95ff12a",
+  "rev": "57fd300",
   "product": {
     "slug": "airgradient-go",
     "name": "AirGradient Go",
@@ -4487,7 +4487,7 @@
     },
     {
       "id": "go.modes.portable-offline",
-      "title": "Portable to Offline changes available services",
+      "title": "Portable to Energy Saving (Offline) changes available services",
       "objective": "Verify outgoing services stop and destination services become available.",
       "category": "Modes & Sleep",
       "sub_category": "Mode Transitions",
@@ -4536,7 +4536,7 @@
     },
     {
       "id": "go.modes.portable-offline-recording",
-      "title": "Recording survives Portable to Offline",
+      "title": "Recording survives Portable to Energy Saving (Offline)",
       "objective": "Verify this active route state is independent of radio mode.",
       "category": "Modes & Sleep",
       "sub_category": "Route Continuity",
@@ -4563,7 +4563,7 @@
           "expected_result": "Status shows Recording and at least three Points; the start snackbar supplied a nonzero session ID."
         },
         {
-          "action": "Record Points from Status alongside the start snackbar ID, select Offline mode, reopen Status and observe for 30 seconds.",
+          "action": "Record Points from Status alongside the start snackbar ID, select Energy Saving mode, reopen Status and observe for 30 seconds.",
           "expected_result": "Status remains Recording. Points increases."
         },
         {
@@ -4584,7 +4584,7 @@
     },
     {
       "id": "go.modes.portable-offline-paused",
-      "title": "Paused survives Portable to Offline",
+      "title": "Paused survives Portable to Energy Saving (Offline)",
       "objective": "Verify this active route state is independent of radio mode.",
       "category": "Modes & Sleep",
       "sub_category": "Route Continuity",
@@ -4615,7 +4615,7 @@
           "expected_result": "The session is Paused."
         },
         {
-          "action": "Record Points from Status alongside the start snackbar ID, select Offline mode, reopen Status and observe for 30 seconds.",
+          "action": "Record Points from Status alongside the start snackbar ID, select Energy Saving mode, reopen Status and observe for 30 seconds.",
           "expected_result": "Status remains Paused. Points stays unchanged and the pause icon remains."
         },
         {
@@ -4636,7 +4636,7 @@
     },
     {
       "id": "go.modes.offline-portable",
-      "title": "Offline to Portable changes available services",
+      "title": "Energy Saving (Offline) to Portable changes available services",
       "objective": "Verify outgoing services stop and destination services become available.",
       "category": "Modes & Sleep",
       "sub_category": "Mode Transitions",
@@ -4661,7 +4661,7 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Select Main Menu > Operating Mode > Portable.",
@@ -4685,7 +4685,7 @@
     },
     {
       "id": "go.modes.offline-portable-recording",
-      "title": "Recording survives Offline to Portable",
+      "title": "Recording survives Energy Saving (Offline) to Portable",
       "objective": "Verify this active route state is independent of radio mode.",
       "category": "Modes & Sleep",
       "sub_category": "Route Continuity",
@@ -4705,7 +4705,7 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Set interval 10s and Auto Lock Off. Start Tracking and record the ID from the Tracking start = <ID> snackbar. Open Status and wait for three points, allowing 40 seconds.",
@@ -4733,7 +4733,7 @@
     },
     {
       "id": "go.modes.offline-portable-paused",
-      "title": "Paused survives Offline to Portable",
+      "title": "Paused survives Energy Saving (Offline) to Portable",
       "objective": "Verify this active route state is independent of radio mode.",
       "category": "Modes & Sleep",
       "sub_category": "Route Continuity",
@@ -4753,7 +4753,7 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Set interval 10s and Auto Lock Off. Start Tracking and record the ID from the Tracking start = <ID> snackbar. Open Status and wait for three points, allowing 40 seconds.",
@@ -4785,7 +4785,7 @@
     },
     {
       "id": "go.modes.stationary-offline",
-      "title": "Stationary to Offline changes available services",
+      "title": "Stationary to Energy Saving (Offline) changes available services",
       "objective": "Verify outgoing services stop and destination services become available.",
       "category": "Modes & Sleep",
       "sub_category": "Mode Transitions",
@@ -4834,7 +4834,7 @@
     },
     {
       "id": "go.modes.stationary-offline-recording",
-      "title": "Recording survives Stationary to Offline",
+      "title": "Recording survives Stationary to Energy Saving (Offline)",
       "objective": "Verify this active route state is independent of radio mode.",
       "category": "Modes & Sleep",
       "sub_category": "Route Continuity",
@@ -4861,7 +4861,7 @@
           "expected_result": "Status shows Recording and at least three Points; the start snackbar supplied a nonzero session ID."
         },
         {
-          "action": "Record Points from Status alongside the start snackbar ID, select Offline mode, reopen Status and observe for 30 seconds.",
+          "action": "Record Points from Status alongside the start snackbar ID, select Energy Saving mode, reopen Status and observe for 30 seconds.",
           "expected_result": "Status remains Recording. Points increases."
         },
         {
@@ -4882,7 +4882,7 @@
     },
     {
       "id": "go.modes.stationary-offline-paused",
-      "title": "Paused survives Stationary to Offline",
+      "title": "Paused survives Stationary to Energy Saving (Offline)",
       "objective": "Verify this active route state is independent of radio mode.",
       "category": "Modes & Sleep",
       "sub_category": "Route Continuity",
@@ -4913,7 +4913,7 @@
           "expected_result": "The session is Paused."
         },
         {
-          "action": "Record Points from Status alongside the start snackbar ID, select Offline mode, reopen Status and observe for 30 seconds.",
+          "action": "Record Points from Status alongside the start snackbar ID, select Energy Saving mode, reopen Status and observe for 30 seconds.",
           "expected_result": "Status remains Paused. Points stays unchanged and the pause icon remains."
         },
         {
@@ -4934,7 +4934,7 @@
     },
     {
       "id": "go.modes.offline-stationary",
-      "title": "Offline to Stationary changes available services",
+      "title": "Energy Saving (Offline) to Stationary changes available services",
       "objective": "Verify outgoing services stop and destination services become available.",
       "category": "Modes & Sleep",
       "sub_category": "Mode Transitions",
@@ -4959,7 +4959,7 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Select Main Menu > Operating Mode > Stationary.",
@@ -4983,7 +4983,7 @@
     },
     {
       "id": "go.modes.offline-stationary-recording",
-      "title": "Recording survives Offline to Stationary",
+      "title": "Recording survives Energy Saving (Offline) to Stationary",
       "objective": "Verify this active route state is independent of radio mode.",
       "category": "Modes & Sleep",
       "sub_category": "Route Continuity",
@@ -5003,7 +5003,7 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Set interval 10s and Auto Lock Off. Start Tracking and record the ID from the Tracking start = <ID> snackbar. Open Status and wait for three points, allowing 40 seconds.",
@@ -5031,7 +5031,7 @@
     },
     {
       "id": "go.modes.offline-stationary-paused",
-      "title": "Paused survives Offline to Stationary",
+      "title": "Paused survives Energy Saving (Offline) to Stationary",
       "objective": "Verify this active route state is independent of radio mode.",
       "category": "Modes & Sleep",
       "sub_category": "Route Continuity",
@@ -5051,7 +5051,7 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Set interval 10s and Auto Lock Off. Start Tracking and record the ID from the Tracking start = <ID> snackbar. Open Status and wait for three points, allowing 40 seconds.",
@@ -5179,7 +5179,7 @@
     },
     {
       "id": "go.modes.persist-offline",
-      "title": "Offline survives a cold restart",
+      "title": "Energy Saving (Offline) survives a cold restart",
       "objective": "Verify saved operating mode at normal startup.",
       "category": "Modes & Sleep",
       "sub_category": "Mode Persistence",
@@ -5204,11 +5204,11 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Disconnect USB, hold Power until Powered off is painted, release Power, wait 10 seconds, then press Power to start. Open Main Menu > Operating Mode.",
-          "expected_result": "The saved selection is Offline."
+          "expected_result": "The saved selection is Energy Saving."
         },
         {
           "action": "Scan Bluetooth and Wi-Fi for 30 seconds; inspect router associations and try a GET request to http://airgradient_<serial>.local/api/v1/measures in the GUI API client with No Auth, no body and a five-second timeout.",
@@ -5227,7 +5227,7 @@
     },
     {
       "id": "go.offline.awake",
-      "title": "Unlocked Offline continues sensing without deep sleep",
+      "title": "Unlocked Energy Saving (Offline) continues sensing without deep sleep",
       "objective": "Verify interaction keeps the radio-free device awake.",
       "category": "Modes & Sleep",
       "sub_category": "Offline",
@@ -5250,7 +5250,7 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Set interval 10s and Auto Lock Off. Capture serial for one minute while navigating Home > Settings > Back > Home.",
@@ -5269,7 +5269,7 @@
     },
     {
       "id": "go.offline.short-interval",
-      "title": "Locked Offline stays awake at a three-second interval",
+      "title": "Locked Energy Saving (Offline) stays awake at a three-second interval",
       "objective": "Verify a short cadence does not enter an unsuitable deep sleep.",
       "category": "Modes & Sleep",
       "sub_category": "Offline",
@@ -5292,7 +5292,7 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Set interval 3s, short-press Power to lock and capture serial for two minutes.",
@@ -5311,7 +5311,7 @@
     },
     {
       "id": "go.sleep.interval-10",
-      "title": "Locked Offline retains sensing at a 10-second interval",
+      "title": "Locked Energy Saving (Offline) retains sensing at a 10-second interval",
       "objective": "Verify sensing and display updates continue when a short interval leaves insufficient time for deep sleep.",
       "category": "Modes & Sleep",
       "sub_category": "Timer Wake",
@@ -5334,7 +5334,7 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Set interval 10s and Auto Lock 10s. Lock, keeping the USB data cable connected and the AirGradient logging tool open. Capture three completed measurements, allowing five minutes; repeated deep-sleep cycles are not required. Watch Home after each completed measurement and save the corresponding measurement log entries. Reconnect the logging tool after a wake if needed; if required measurement logs were missed, record the observation as incomplete.",
@@ -5355,7 +5355,7 @@
     },
     {
       "id": "go.sleep.interval-30",
-      "title": "Offline timer wakes retain sensing at 30 seconds",
+      "title": "Energy Saving (Offline) timer wakes retain sensing at 30 seconds",
       "objective": "Verify real sensor measurements and the display recover across repeated Offline timer wakes.",
       "category": "Modes & Sleep",
       "sub_category": "Timer Wake",
@@ -5378,7 +5378,7 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Set interval 30s and Auto Lock 10s. Lock, keeping the USB data cable connected and the AirGradient logging tool open. Capture three complete sleep/wake/measurement cycles, allowing five minutes. Watch Home after each completed measurement and save the corresponding measurement log entries. Reconnect the logging tool after a wake if needed; if required cycle logs were missed, record the observation as incomplete.",
@@ -5399,7 +5399,7 @@
     },
     {
       "id": "go.sleep.interval-60",
-      "title": "Offline timer wakes retain sensing at 60 seconds",
+      "title": "Energy Saving (Offline) timer wakes retain sensing at 60 seconds",
       "objective": "Verify real sensor measurements and the display recover across repeated Offline timer wakes.",
       "category": "Modes & Sleep",
       "sub_category": "Timer Wake",
@@ -5422,7 +5422,7 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Set interval 60s and Auto Lock 10s. Lock, keeping the USB data cable connected and the AirGradient logging tool open. Capture three complete sleep/wake/measurement cycles, allowing five minutes. Watch Home after each completed measurement and save the corresponding measurement log entries. Reconnect the logging tool after a wake if needed; if required cycle logs were missed, record the observation as incomplete.",
@@ -5443,7 +5443,7 @@
     },
     {
       "id": "go.ble.offline-measurements",
-      "title": "The app receives measurements in Offline mode",
+      "title": "The app receives measurements in Energy Saving (Offline) mode",
       "objective": "Verify Offline measurement broadcasts reach the AirGradient mobile app.",
       "category": "Modes & Sleep",
       "sub_category": "Timer Wake",
@@ -5481,7 +5481,7 @@
     },
     {
       "id": "go.sleep.button-wake",
-      "title": "Power wakes Offline without immediately locking again",
+      "title": "Power wakes Energy Saving (Offline) without immediately locking again",
       "objective": "Verify wake-button suppression and the cached first display.",
       "category": "Modes & Sleep",
       "sub_category": "Button Wake",
@@ -5504,7 +5504,7 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Set interval 60s and Auto Lock 10s. Lock and wait for enter_sleep in serial. Short-press Power once during sleep.",
@@ -5528,7 +5528,7 @@
     },
     {
       "id": "go.sleep.gps-tracking-restart",
-      "title": "Offline tracking start resets a sleeping GPS and confirms the session",
+      "title": "Energy Saving (Offline) tracking start resets a sleeping GPS and confirms the session",
       "objective": "Verify the battery-powered reset and visible acknowledgement when tracking starts during a long Offline GPS sleep, then recording at the next scheduled wake.",
       "category": "Modes & Sleep",
       "sub_category": "GPS Sleep",
@@ -5551,7 +5551,7 @@
           "expected_result": "Logs are visible and the power source is None or OTG, not USB input. If battery power cannot be confirmed, the case is blocked."
         },
         {
-          "action": "Select Offline mode. In Settings, set measurement interval 5m (300 seconds), Auto Lock 10s and GPS On When Tracking. Lock and capture the first sleep, timer wake and return to sleep, allowing six minutes from locking. Reconnect the logging tool after wake if needed.",
+          "action": "Select Energy Saving mode. In Settings, set measurement interval 5m (300 seconds), Auto Lock 10s and GPS On When Tracking. Lock and capture the first sleep, timer wake and return to sleep, allowing six minutes from locking. Reconnect the logging tool after wake if needed.",
           "expected_result": "Go completes an idle Offline measurement cycle and returns to deep sleep. The long interval leaves time to start tracking well before the next GPS wake.",
           "evidence": [
             "Save the sleep-duration and timer-wake log entries. Missing cycle logs make this observation incomplete."
@@ -5585,7 +5585,7 @@
     },
     {
       "id": "go.sleep.route-recording",
-      "title": "Recording survives Offline timer wakes",
+      "title": "Recording survives Energy Saving (Offline) timer wakes",
       "objective": "Verify retained route state and timing across CPU sleep resets.",
       "category": "Modes & Sleep",
       "sub_category": "Route Continuity",
@@ -5617,7 +5617,7 @@
           "expected_result": "The session is Recording."
         },
         {
-          "action": "Photograph Status Points/Active/Elapsed/Last with phone time. Select Offline and lock. Capture two complete timer-wake measurements, allowing three minutes. Reconnect the logging tool after a wake if needed; if required cycle logs were missed, record the observation as incomplete.",
+          "action": "Photograph Status Points/Active/Elapsed/Last with phone time. Select Energy Saving and lock. Capture two complete timer-wake measurements, allowing three minutes. Reconnect the logging tool after a wake if needed; if required cycle logs were missed, record the observation as incomplete.",
           "expected_result": "Both timer wake cycles complete without an unexpected cold reset."
         },
         {
@@ -5643,7 +5643,7 @@
     },
     {
       "id": "go.sleep.route-paused",
-      "title": "Paused survives Offline timer wakes",
+      "title": "Paused survives Energy Saving (Offline) timer wakes",
       "objective": "Verify retained route state and timing across CPU sleep resets.",
       "category": "Modes & Sleep",
       "sub_category": "Route Continuity",
@@ -5679,7 +5679,7 @@
           "expected_result": "The session is Paused."
         },
         {
-          "action": "Photograph Status Points/Active/Elapsed/Last with phone time. Select Offline and lock. Capture two complete timer-wake measurements, allowing three minutes. Reconnect the logging tool after a wake if needed; if required cycle logs were missed, record the observation as incomplete.",
+          "action": "Photograph Status Points/Active/Elapsed/Last with phone time. Select Energy Saving and lock. Capture two complete timer-wake measurements, allowing three minutes. Reconnect the logging tool after a wake if needed; if required cycle logs were missed, record the observation as incomplete.",
           "expected_result": "Both timer wake cycles complete without an unexpected cold reset."
         },
         {
@@ -5705,7 +5705,7 @@
     },
     {
       "id": "go.sleep.status-awake",
-      "title": "Tracking Status prevents Offline sleep until manual lock",
+      "title": "Tracking Status prevents Energy Saving (Offline) sleep until manual lock",
       "objective": "Verify the live status page intentionally keeps the device awake.",
       "category": "Modes & Sleep",
       "sub_category": "Route Continuity",
@@ -5729,7 +5729,7 @@
         },
         {
           "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Offline is selected."
+          "expected_result": "Energy Saving is selected."
         },
         {
           "action": "Set interval 30s and Auto Lock 10s. Start Tracking and leave Status open for 30 seconds while capturing serial.",

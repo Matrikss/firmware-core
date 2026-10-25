@@ -60,7 +60,9 @@ See [`go_local_api.h`](../main/go_local_api.h) for full signatures.
 ### Availability and Discovery
 
 The endpoint exists only while Go is in Stationary mode and has reached its
-first successful IP connection. Portable and Offline modes do not expose it.
+first successful IP connection. Portable and Offline (displayed as
+**Energy Saving**) modes do not expose it.
+
 The Go configuration uses plain HTTP on `CONFIG_AG_HTTP_PORT`, currently port
 80, and advertises this profile after the HTTP routes are reachable:
 
