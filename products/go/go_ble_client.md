@@ -34,37 +34,46 @@ download protocol.
 
 Offline timer wakes broadcast public, unencrypted measurements without a
 connection, pairing, or bonding. The same payload repeats at a configured
-300 ms interval during display refresh (typically about 3 seconds), then BLE
-shuts down. Reception on every wakeup is not guaranteed.
+50 ms interval during display refresh, then BLE shuts down. Reception on every
+wakeup is not guaranteed.
 
-OS scan scheduling or duplicate filtering may cause missed reports. Where
-supported, clients can adjust scan settings or disable duplicate filtering to
-improve reception.
+Filter by **service UUID `992f1fe6-4519-4d4f-8ca7-546d36126ee8`**, then read
+manufacturer data for company ID `0xFFFF` (a testing placeholder to replace
+before release). Match both: provisioning also uses this company ID.
 
-Match **Service Data UUID `992f1fe6-4519-4d4f-8ca7-546d36126ee8`**.
-The non-connectable advertisement contains one 128-bit Service Data AD field
-(type `0x21`): 2 bytes length/type + 16 bytes UUID + 13 bytes payload.
-There are no Flags, local name, separate service UUID list, or scan response;
-inspect Service Data rather than filtering by name or a service UUID list.
+The non-connectable advertisement contains two fields in the same 31-byte
+advertising payload, with no Flags, local name, or scan response:
 
-Offsets below refer to the 13-byte body after the UUID. Multibyte integers
-are little-endian; signed values use two's complement.
+| Field | Type | Bytes Including Length/Type |
+|---|---|---|
+| Complete List of 128-bit Service UUIDs | `0x07` | 18: header + Offline UUID |
+| Manufacturer Specific Data | `0xFF` | 13: header + 2-byte little-endian company ID + 9-byte payload |
 
-| Offset | Type | Measurement | Unit | Invalid |
+For normal iOS background scanning, enable `bluetooth-central` and scan for
+the service UUID. Background discoveries may be coalesced and scanning less
+frequent; the UUID list enables filtering, not guaranteed delivery. See
+[Apple's scanning API](https://developer.apple.com/documentation/corebluetooth/cbcentralmanager/scanforperipherals(withservices:options:)).
+
+The 9-byte **v1** payload follows the company ID. Fields are unsigned and
+bit-packed: bit `n` is bit `n % 8` of byte `n / 8`, least significant bit first.
+
+| Bits | Width | Measurement | Decode | Invalid |
 |---|---|---|---|---|
-| 0 | `uint8` | Format version (`1`) | — | — |
-| 1–2 | `int16` | Temperature | 0.01 °C | `0x8000` |
-| 3 | `uint8` | Humidity | 1 %RH | `0xFF` |
-| 4–5 | `uint16` | PM2.5 | 0.1 µg/m³ | `0xFFFF` |
-| 6–7 | `uint16` | CO₂ | 1 ppm | `0xFFFF` |
-| 8–9 | `uint16` | Pressure | 0.1 hPa | `0xFFFF` |
-| 10–11 | `int16` | Barometric altitude | 1 m | `0x8000` |
-| 12 | `uint8` | Battery | 1 % | `0xFF` |
+| 0–2 | 3 | Format version (`1`) | — | — |
+| 3–13 | 11 | Temperature | value / 10 − 40 °C | `2047` |
+| 14–20 | 7 | Humidity | value %RH | `127` |
+| 21–34 | 14 | PM2.5 | value / 10 µg/m³ | `16383` |
+| 35–48 | 14 | CO₂ | value ppm | `16383` |
+| 49–61 | 13 | Pressure | value / 10 + 300 hPa | `8191` |
+| 62–68 | 7 | Battery | value % | `127` |
+| 69–71 | 3 | Reserved (`0`) | — | — |
 
-Measurements are raw (no user corrections); altitude is pressure-derived,
-not GPS. Values round to nearest, with ties away from zero. Invalid,
-nonfinite, or unrepresentable values use the field's sentinel. Check sentinels
-before scaling, and ignore unsupported versions or bodies other than 13 bytes.
+Measurements are raw (no user corrections). The encoder applies offsets and
+scales before rounding to nearest, with ties away from zero. Invalid,
+nonfinite, or unrepresentable readings use all-ones field sentinels. Check
+sentinels before scaling; ignore versions other than `1` or payloads other
+than 9 bytes. Barometric altitude is not transmitted; derive it from pressure
+as `44330 × (1 − (hPa / 1013.25)^0.1903)` metres, not from GPS.
 The payload has no timestamp, sample ID, serial number, or GPS position.
 
 Clients may accept the first report per device and suppress identical payloads
