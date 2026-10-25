@@ -646,6 +646,9 @@ with unchanged coefficients. Writing this group back selects custom; omit
 | `"stationary"` | Stationary mode (Wi-Fi connected, wall powered) |
 | `"offline"` | Offline mode (no connectivity) |
 
+Offline appears as **Energy Saving** on the display. Keep using `"offline"`
+for `op_mode` and `"op_offline"` for disconnect notices.
+
 #### Example
 
 ```json

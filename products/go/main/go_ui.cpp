@@ -45,7 +45,7 @@ struct ModeOption {
 static constexpr ModeOption MODE_OPTIONS[] = {
     {OperatingMode::Portable, "Portable"},
     {OperatingMode::Stationary, "Stationary"},
-    {OperatingMode::Offline, "Offline"},
+    {OperatingMode::Offline, "Energy Saving"},
 };
 static constexpr uint8_t MODE_COUNT = sizeof(MODE_OPTIONS) / sizeof(MODE_OPTIONS[0]);
 
