@@ -153,10 +153,17 @@ derives `_corrected_measures`. A `display_snapshot` contains corrected display
 state, so it can seed only `_corrected_measures`; raw cloud and storage state
 remains at invalid sentinels until a fresh measurement arrives.
 
+Current readings and chart samples use
+`effective_measurement_corrections(_settings)`: Energy Saving bypasses
+temperature and humidity corrections, while PM2.5 correction stays active.
+Mode changes recompute the current view before the existing transition render,
+so the measurement screen reflects the new mode without a fresh sensor sample.
+Saved correction settings remain intact for Portable and Stationary.
+
 Chart samples are read from raw cache storage into a scratch buffer and corrected
-before the UI builds chart values. A successful cloud correction update is
-persisted before activation and immediately recomputes the current corrected
-snapshot without rewriting raw storage.
+for the current mode before the UI builds chart values. A successful cloud
+correction update is persisted before activation and immediately recomputes
+the current corrected snapshot without rewriting raw storage.
 
 ### Measurement Completed
 
@@ -1160,7 +1167,8 @@ Iterations are always 1 — AGo sensors perform internal averaging, and the
 per-iteration 2 s delay is skipped for single iterations.
 
 `on_sensor_data()` always overwrites all fields in `_raw_measures`, then derives
-`_corrected_measures` with the active measurement corrections. Sensor readings come from the `SensorDataReady` payload; `MeasuresPower`
+`_corrected_measures` with the effective corrections for the current operating
+mode. Sensor readings come from the `SensorDataReady` payload; `MeasuresPower`
 is refreshed from `_latest_power` (`PowerSnapshot`) because Go battery and
 charger telemetry is owned by `PowerService`, not `SensorProducer`.
 The event wraps readings and `MeasurementOrigin` in `SensorEventData`.

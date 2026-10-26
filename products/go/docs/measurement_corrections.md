@@ -15,7 +15,7 @@ measurement transports retain raw sensor values.
 | [`go_cloud.cpp`](../main/go_cloud.cpp) | AirGradient cloud wire parsing into `GoConfigUpdate` |
 | [`go_local_api.cpp`](../main/go_local_api.cpp) | Local API mapping, semantic validation, and translation into `GoConfigUpdate` |
 | [`serial_command.cpp`](../main/serial_command/serial_command.cpp) | Manufacturing USB command parser and typed correction requests |
-| [`go_settings.cpp`](../main/go_settings.cpp) | Grouped correction persistence and boot-time loading |
+| [`go_settings.cpp`](../main/go_settings.cpp) | Grouped correction persistence, boot-time loading, and operating-mode policy |
 | [`go_orchestrator.cpp`](../main/go_orchestrator.cpp) | Persist-before-activate updates and raw/corrected consumer routing |
 | [`go_app.cpp`](../main/go_app.cpp) | Offline timer-wake fast-path correction |
 
@@ -40,6 +40,7 @@ measurement transports retain raw sensor values.
 | `are_measurement_corrections_valid()` | Validate the complete correction set before persistence or activation |
 | `measurement_corrections_equal()` | Detect whether the corrected presentation must be recomputed |
 | `apply_measurement_corrections()` | Copy a raw `MeasuresAGo` and replace only corrected PM2.5, temperature, and humidity fields |
+| `effective_measurement_corrections(settings)` | Return a correction copy selected for the Go operating mode without changing saved calibration |
 | `GoConfigUpdate` | Queue-copyable partial update shared by cloud fetch and the local API adapter |
 | `GET /api/v1/config` | Return the active corrections using local API names and canonical shapes |
 | `PUT /api/v1/config` | Submit a partial local correction update for validation and queued application |
@@ -69,6 +70,32 @@ Algorithm and property names are case-sensitive.
 Both linear PM algorithms preserve an exact raw zero and clamp negative results
 to zero. Go ignores `useEpa2021` for both. Temperature conversion to
 Fahrenheit and presentation rounding happen after correction.
+
+### Operating Mode
+
+`effective_measurement_corrections()` copies the saved correction set. In
+Energy Saving (`OperatingMode::Offline`), it selects `none` for temperature
+and humidity in that copy. Portable and Stationary use the configured
+algorithms. PM2.5 correction remains active in every mode.
+
+The rule applies to current display readings, chart samples, and the derived
+measurement snapshot, including timer-wake rendering and promotion to the
+orchestrator. Temperature and humidity show valid raw values in Energy Saving;
+normal display rounding and Celsius/Fahrenheit conversion still apply. Invalid
+raw fields retain their invalid sentinels.
+
+A mode change recomputes the current view from the latest raw snapshot before
+the existing mode-transition display update. The next measurement screen uses
+the new policy without waiting for another sensor reading. Charts apply the
+current mode to all cached samples at render time; stored history is unchanged.
+
+Saved algorithms and coefficients remain intact. Returning to Portable or
+Stationary reapplies them. Config reads describe the configured corrections,
+not the temporary copy used to bypass temperature and humidity correction.
+Host coverage in [`go_app.tests.cpp`](../tests/go_app.tests.cpp) and
+[`go_orchestrator.tests.cpp`](../tests/go_orchestrator.tests.cpp) checks mode
+transitions, boot handoff, timer-wake charts, invalid fields, and preserved
+PM2.5 correction.
 
 ### Wire Names and Shapes
 
@@ -195,8 +222,10 @@ ownership. Raw BLE history export is verified in
 The locked Offline timer-wake path loads persisted `GoSettings` before sensor
 measurement and does not construct the cloud service or orchestrator. It keeps
 the one-shot measurement raw for the RTC measurement cache and route append,
-then `build_fast_path_display()` applies the same shared transform to a copy for
-the e-paper frame.
+then `build_fast_path_display()` applies the shared transform with the effective
+Go corrections to a copy for the e-paper frame. Temperature and humidity stay
+raw in Energy Saving, including chart history; PM2.5 keeps its configured
+correction.
 
 If the fast path promotes to interactive operation, its boot handoff carries
 the raw measurement. The orchestrator derives a fresh corrected view from that
