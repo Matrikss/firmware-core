@@ -127,6 +127,9 @@ public:
   ///                   (= min(cached_count(), max_count)).
   uint16_t read_cache(MeasuresAGo *out, uint16_t max_count) const;
 
+  /// Copy the newest raw sample, including invalid fields. Returns false if empty.
+  bool read_latest_cached_measurement(MeasuresAGo &out) const;
+
   /// Number of cached measurements currently held in the ring buffer.
   uint16_t cached_count() const;
 

@@ -1323,3 +1323,33 @@ TEST_CASE("Route: session_count and list_sessions", "[StorageService][route]") {
     CHECK(svc.session_count() == 0);
   }
 }
+
+TEST_CASE("Cache: latest raw measurement handles wraparound and empty history",
+          "[StorageService][cache]") {
+  StubPayloadCacheStorage stub_storage;
+  constexpr uint16_t capacity = 4;
+  PayloadCache cache(stub_storage, capacity);
+  MockNandStorage mock_nand;
+  StorageService svc(cache, mock_nand);
+  MeasuresAGo latest{};
+
+  CHECK_FALSE(svc.read_latest_cached_measurement(latest));
+  for (int seed = 1; seed <= capacity * 2; ++seed) {
+    const auto sample = make_valid_entry(seed);
+    svc.cache_measurement(sample);
+    REQUIRE(svc.read_latest_cached_measurement(latest));
+    CHECK(latest.co2.co2 == sample.co2.co2);
+    CHECK(latest.pm_a.pm_25 == sample.pm_a.pm_25);
+    CHECK(latest.temp_hum_a.temperature == sample.temp_hum_a.temperature);
+  }
+
+  svc.cache_measurement(make_invalid_entry());
+  REQUIRE(svc.read_latest_cached_measurement(latest));
+  CHECK_FALSE(latest.co2.is_valid());
+  CHECK_FALSE(latest.temp_hum_a.is_temp_valid());
+  CHECK_FALSE(latest.temp_hum_a.is_hum_valid());
+  CHECK_FALSE(latest.pm_a.is_pm_25_valid());
+
+  svc.clear_cache();
+  CHECK_FALSE(svc.read_latest_cached_measurement(latest));
+}

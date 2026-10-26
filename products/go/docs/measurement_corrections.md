@@ -15,7 +15,7 @@ measurement transports retain raw sensor values.
 | [`go_cloud.cpp`](../main/go_cloud.cpp) | AirGradient cloud wire parsing into `GoConfigUpdate` |
 | [`go_local_api.cpp`](../main/go_local_api.cpp) | Local API mapping, semantic validation, and translation into `GoConfigUpdate` |
 | [`serial_command.cpp`](../main/serial_command/serial_command.cpp) | Manufacturing USB command parser and typed correction requests |
-| [`go_settings.cpp`](../main/go_settings.cpp) | Grouped correction persistence and boot-time loading |
+| [`go_settings.cpp`](../main/go_settings.cpp) | Grouped correction persistence, boot-time loading, and operating-mode policy |
 | [`go_orchestrator.cpp`](../main/go_orchestrator.cpp) | Persist-before-activate updates and raw/corrected consumer routing |
 | [`go_app.cpp`](../main/go_app.cpp) | Offline timer-wake fast-path correction |
 
@@ -40,6 +40,7 @@ measurement transports retain raw sensor values.
 | `are_measurement_corrections_valid()` | Validate the complete correction set before persistence or activation |
 | `measurement_corrections_equal()` | Detect whether the corrected presentation must be recomputed |
 | `apply_measurement_corrections()` | Copy a raw `MeasuresAGo` and replace only corrected PM2.5, temperature, and humidity fields |
+| `effective_measurement_corrections(settings)` | Return a correction copy selected for the Go operating mode without changing saved calibration |
 | `GoConfigUpdate` | Queue-copyable partial update shared by cloud fetch and the local API adapter |
 | `GET /api/v1/config` | Return the active corrections using local API names and canonical shapes |
 | `PUT /api/v1/config` | Submit a partial local correction update for validation and queued application |
@@ -69,6 +70,17 @@ Algorithm and property names are case-sensitive.
 Both linear PM algorithms preserve an exact raw zero and clamp negative results
 to zero. Go ignores `useEpa2021` for both. Temperature conversion to
 Fahrenheit and presentation rounding happen after correction.
+
+### Operating Mode
+
+`effective_measurement_corrections()` bypasses temperature and humidity
+corrections in Energy Saving (`OperatingMode::Offline`). Portable and Stationary
+apply the saved algorithms. PM2.5 correction stays active in every mode.
+
+This policy applies to live readings, charts, and timer-wake rendering.
+Mode changes recalculate available raw readings before the display update;
+charts use the current mode for all cached samples. Unit conversion and
+rounding still apply. Saved calibration and raw history remain unchanged.
 
 ### Wire Names and Shapes
 
@@ -195,8 +207,10 @@ ownership. Raw BLE history export is verified in
 The locked Offline timer-wake path loads persisted `GoSettings` before sensor
 measurement and does not construct the cloud service or orchestrator. It keeps
 the one-shot measurement raw for the RTC measurement cache and route append,
-then `build_fast_path_display()` applies the same shared transform to a copy for
-the e-paper frame.
+then `build_fast_path_display()` applies the shared transform with the effective
+Go corrections to a copy for the e-paper frame. Temperature and humidity stay
+raw in Energy Saving, including chart history; PM2.5 keeps its configured
+correction.
 
 If the fast path promotes to interactive operation, its boot handoff carries
 the raw measurement. The orchestrator derives a fresh corrected view from that
@@ -205,6 +219,13 @@ state and can seed the display after wake, but it never seeds the authoritative
 raw snapshot. See [`go_app.tests.cpp`](../tests/go_app.tests.cpp) for fast-path
 presentation coverage and [`go_orchestrator.tests.cpp`](../tests/go_orchestrator.tests.cpp)
 for raw handoff and RTC snapshot isolation.
+
+### Button-Wake Initialization
+
+Button wake restores the newest raw RTC cache sample, allowing mode changes to
+reapply corrections before a fresh measurement arrives. Fast-path handoff data
+takes priority. An empty cache uses the saved display snapshot for presentation
+only. Normal acquisition still runs and replaces the restored reading.
 
 ## Edge Cases / Errors
 

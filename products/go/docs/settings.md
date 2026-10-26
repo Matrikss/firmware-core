@@ -81,10 +81,16 @@ cannot be shown below 300 seconds. See [Pinned Charts](ui_manager.md#pinned-char
 
 ### Measurement Corrections
 
-`GoSettings::corrections` contains the complete active correction set for PM2.5,
+`GoSettings::corrections` contains the complete configured correction set for PM2.5,
 temperature, and humidity. Algorithms and coefficients are persisted as a
 group per measure. Float coefficients use the shared `ConfigStore` four-byte
 IEEE-754 blob accessors.
+
+`effective_measurement_corrections(settings)` selects a copy for rendering and
+derived readings. Energy Saving bypasses temperature and humidity corrections;
+Portable and Stationary apply the saved algorithms. PM2.5 correction remains
+active in all modes. Mode changes never erase saved coefficients. See
+[Operating Mode](measurement_corrections.md#operating-mode).
 
 | Measure | Supported algorithms | Required custom values |
 |---|---|---|

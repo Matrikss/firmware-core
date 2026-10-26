@@ -1184,28 +1184,46 @@ TEST_CASE("build_fast_path_display: invalid sensors -> sentinels preserved") {
   CHECK(v.pm_use_usaqi == false);
 }
 
-TEST_CASE("build_fast_path_display: applies persisted corrections only to presentation") {
-  MeasuresAGo m{};
-  m.pm_a.pm_25 = 10.0f;
-  m.temp_hum_a.temperature = 20.0f;
-  m.temp_hum_a.humidity = 50.0f;
+TEST_CASE("build_fast_path_display: corrections follow operating mode") {
+  for (auto mode : {OperatingMode::Portable, OperatingMode::Stationary, OperatingMode::Offline}) {
+    CAPTURE(static_cast<int>(mode));
+    MeasuresAGo m{};
+    m.pm_a.pm_25 = 10.0f;
+    m.temp_hum_a = {20.0f, 50.0f};
 
-  GoSettings settings{};
-  settings.corrections.pm25.algorithm = Pm25CorrectionAlgorithm::CustomViaPm25Raw;
-  settings.corrections.pm25.scaling_factor = 2.0f;
-  settings.corrections.pm25.intercept = 1.0f;
-  settings.corrections.temperature.algorithm = LinearCorrectionAlgorithm::Custom;
-  settings.corrections.temperature.scaling_factor = 1.5f;
-  settings.corrections.temperature.intercept = -1.0f;
+    GoSettings settings{};
+    settings.operating_mode = mode;
+    settings.corrections.pm25 = {Pm25CorrectionAlgorithm::CustomViaPm25Raw, 2.0f, 1.0f, false};
+    settings.corrections.temperature = {LinearCorrectionAlgorithm::Custom, 1.5f, -1.0f};
+    settings.corrections.humidity = {LinearCorrectionAlgorithm::Custom, 0.5f, 5.0f};
+    const auto saved = settings.corrections;
 
-  const DisplayValues values =
-      build_fast_path_display(m, GpsData{}, PowerSnapshot{}, settings, TrackingState::Idle);
-
-  CHECK(values.pm25_ugm3 == 21.0f);
-  CHECK(values.temperature_c == 29.0f);
-  CHECK(values.humidity_pct == 50.0f);
-  CHECK(m.pm_a.pm_25 == 10.0f);
-  CHECK(m.temp_hum_a.temperature == 20.0f);
+    SECTION("valid readings") {
+      const auto values =
+          build_fast_path_display(m, GpsData{}, PowerSnapshot{}, settings, TrackingState::Idle);
+      CHECK(values.pm25_ugm3 == 21.0f);
+      CHECK(values.temperature_c == (mode == OperatingMode::Offline ? 20.0f : 29.0f));
+      CHECK(values.humidity_pct == (mode == OperatingMode::Offline ? 50.0f : 30.0f));
+      CHECK(m.pm_a.pm_25 == 10.0f);
+      CHECK(m.temp_hum_a.temperature == 20.0f);
+      CHECK(m.temp_hum_a.humidity == 50.0f);
+    }
+    SECTION("invalid temperature preserves valid humidity") {
+      m.temp_hum_a.temperature = MeasuresInvalid::TEMPERATURE;
+      const auto values =
+          build_fast_path_display(m, GpsData{}, PowerSnapshot{}, settings, TrackingState::Idle);
+      CHECK(values.temperature_c == MeasuresInvalid::TEMPERATURE);
+      CHECK(values.humidity_pct == (mode == OperatingMode::Offline ? 50.0f : 30.0f));
+    }
+    SECTION("invalid humidity preserves valid temperature") {
+      m.temp_hum_a.humidity = MeasuresInvalid::HUMIDITY;
+      const auto values =
+          build_fast_path_display(m, GpsData{}, PowerSnapshot{}, settings, TrackingState::Idle);
+      CHECK(values.temperature_c == (mode == OperatingMode::Offline ? 20.0f : 29.0f));
+      CHECK(values.humidity_pct == MeasuresInvalid::HUMIDITY);
+    }
+    CHECK(measurement_corrections_equal(settings.corrections, saved));
+  }
 }
 
 // ============================================================================
@@ -3051,5 +3069,40 @@ TEST_CASE("wake display retains pinned chart and suppresses hidden thermal readi
       const bool hidden = !show_temp_hum && (metric == Metric::Temp || metric == Metric::Humidity);
       CHECK(v.chart_metric() == (hidden ? Metric::None : metric));
     }
+  }
+}
+
+TEST_CASE("fast path: Energy Saving charts raw temperature and humidity", "[correction][chart]") {
+  for (auto metric : {Metric::Temp, Metric::Humidity}) {
+    CAPTURE(static_cast<int>(metric));
+    test_spy::reset();
+    MockBoard board;
+    board.settings.operating_mode = OperatingMode::Offline;
+    board.settings.measure_interval_seconds = 300;
+    board.settings.pinned_chart = metric;
+    board.settings.corrections.temperature = {LinearCorrectionAlgorithm::Custom, 1.0f, -2.0f};
+    board.settings.corrections.humidity = {LinearCorrectionAlgorithm::Custom, 1.0f, -10.0f};
+    MeasuresAGo previous{};
+    previous.temp_hum_a = {20.0f, 50.0f};
+    test_spy::cached_measurements = {previous, MeasuresAGo{}};
+    test_spy::measures_to_return.temp_hum_a = {25.0f, 60.0f};
+    DisplayService::spy_on_init = [](const DisplayValues &v) {
+      REQUIRE(v.chart_count == 2);
+      REQUIRE(v.chart_samples != nullptr);
+      const bool temperature = v.chart_metric() == Metric::Temp;
+      CHECK(v.chart_samples[0] == (temperature ? 20.0f : 50.0f));
+      CHECK(v.chart_samples[1] == (temperature ? 25.0f : 60.0f));
+      CHECK(v.temperature_c == 25.0f);
+      CHECK(v.humidity_pct == 60.0f);
+    };
+    GoApp app(board);
+    GoAppTestAccess access(app);
+    volatile bool button = false;
+    const auto result = access.execute_fast_path(RtcAppState{}, button);
+    DisplayService::spy_on_init = nullptr;
+    CHECK(DisplayService::spy_init_count == 1);
+    CHECK(result.has_measures);
+    CHECK(test_spy::cached_measurements.front().temp_hum_a.temperature == 20.0f);
+    CHECK(test_spy::cached_measurements.front().temp_hum_a.humidity == 50.0f);
   }
 }
