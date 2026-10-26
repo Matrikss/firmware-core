@@ -92,6 +92,7 @@ bool input_stopped = false;
 // --- StorageService ---
 bool cache_measurement_called = false;
 MeasuresAGo last_cached_measurement{};
+std::vector<MeasuresAGo> cached_measurements;
 bool route_started = false;
 bool create_route_result = true;
 bool route_exists_result = false;
@@ -222,6 +223,7 @@ void reset() {
 
   cache_measurement_called = false;
   last_cached_measurement = MeasuresAGo{};
+  cached_measurements.clear();
   route_started = false;
   create_route_result = true;
   route_exists_result = false;
@@ -307,6 +309,7 @@ void reset() {
   DisplayService::spy_last_init_deferred = false;
   DisplayService::spy_last_update_wait = false;
   DisplayService::spy_worker_busy = false;
+  DisplayService::spy_on_init = nullptr;
 }
 
 } // namespace test_spy
@@ -538,6 +541,7 @@ void StorageService::cache_measurement(const MeasuresAGo &m) {
     test_spy::after_cache();
   }
   test_spy::last_cached_measurement = m;
+  test_spy::cached_measurements.push_back(m);
 }
 
 uint16_t StorageService::read_cached_field(CacheField /*field*/, float * /*out*/,
@@ -545,8 +549,10 @@ uint16_t StorageService::read_cached_field(CacheField /*field*/, float * /*out*/
   return 0;
 }
 
-uint16_t StorageService::read_cache(MeasuresAGo * /*out*/, uint16_t /*max_count*/) const {
-  return 0;
+uint16_t StorageService::read_cache(MeasuresAGo *out, uint16_t max_count) const {
+  const auto count = std::min<size_t>(max_count, test_spy::cached_measurements.size());
+  std::copy_n(test_spy::cached_measurements.begin(), count, out);
+  return static_cast<uint16_t>(count);
 }
 
 uint16_t StorageService::cached_count() const { return 0; }

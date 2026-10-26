@@ -26,6 +26,7 @@ constexpr const char *KEY_OPERATING_MODE = "opm";
 constexpr const char *KEY_USE_FAHRENHEIT = "uf";
 constexpr const char *KEY_USE_FEET = "auf";
 constexpr const char *KEY_PM_USE_USAQI = "pmu";
+constexpr const char *KEY_PINNED_CHART = "pchart";
 constexpr const char *KEY_AUTO_LOCK_SECONDS = "als";
 constexpr const char *KEY_DISABLE_CLOUD = "dc";
 constexpr const char *KEY_WIFI_POWER_SAVE_ENABLED = "wps";
@@ -225,6 +226,12 @@ GoSettings load_go_settings(ConfigStore &store) {
     settings.pm_use_usaqi = pm_use_usaqi;
   }
 
+  int pinned_chart = 0;
+  if (store.get_int(KEY_PINNED_CHART, pinned_chart) == ConfigStoreResult::OK &&
+      is_chart_metric_valid(pinned_chart)) {
+    settings.pinned_chart = static_cast<Metric>(pinned_chart);
+  }
+
   int auto_lock_seconds = 0;
   if (store.get_int(KEY_AUTO_LOCK_SECONDS, auto_lock_seconds) == ConfigStoreResult::OK &&
       is_auto_lock_valid(auto_lock_seconds)) {
@@ -310,8 +317,9 @@ GoSettings load_go_settings(ConfigStore &store) {
 bool GoSettings::equals(const GoSettings &other) const {
   return measure_interval_seconds == other.measure_interval_seconds &&
          use_fahrenheit == other.use_fahrenheit && use_feet == other.use_feet &&
-         pm_use_usaqi == other.pm_use_usaqi && gps_mode == other.gps_mode &&
-         operating_mode == other.operating_mode && auto_lock_seconds == other.auto_lock_seconds &&
+         pm_use_usaqi == other.pm_use_usaqi && pinned_chart == other.pinned_chart &&
+         gps_mode == other.gps_mode && operating_mode == other.operating_mode &&
+         auto_lock_seconds == other.auto_lock_seconds &&
          back_led_brightness == other.back_led_brightness &&
          touch_led_intensity == other.touch_led_intensity &&
          buzzer_enabled == other.buzzer_enabled && disable_cloud == other.disable_cloud &&
@@ -329,6 +337,10 @@ bool GoSettings::equals(const GoSettings &other) const {
 }
 
 bool is_go_settings_valid(const GoSettings &settings) {
+  if (!is_chart_metric_valid(static_cast<int>(settings.pinned_chart))) {
+    return false;
+  }
+
   if (!is_measure_interval_seconds_valid(settings.measure_interval_seconds)) {
     return false;
   }
@@ -403,6 +415,11 @@ bool save_go_settings(ConfigStore &store, const GoSettings &settings) {
   }
 
   if (store.set_bool(KEY_PM_USE_USAQI, settings.pm_use_usaqi) != ConfigStoreResult::OK) {
+    return false;
+  }
+
+  if (store.set_int(KEY_PINNED_CHART, static_cast<int>(settings.pinned_chart)) !=
+      ConfigStoreResult::OK) {
     return false;
   }
 
@@ -560,15 +577,15 @@ bool clear_factory_settings(ConfigStore &store) {
 void print_settings(const GoSettings &settings) {
   AG_LOGI(TAG,
           "** settings | meas_int=%d | gps_mode=%d "
-          "op_mode=%d | auto_lock=%d | fahrenheit=%s feet=%s usaqi=%s | "
+          "op_mode=%d | auto_lock=%d | pinned_chart=%d | fahrenheit=%s feet=%s usaqi=%s | "
           "led: back=%d touch=%d | buzzer=%s | "
           "wifi_power_save=%s disable_cloud=%s config_control=%d co2_abc_days=%d "
           "tvoc_learning_offset=%d nox_learning_offset=%d static_ip=%s "
           "onboarding_done=%s **",
           settings.measure_interval_seconds, settings.gps_mode, settings.operating_mode,
-          settings.auto_lock_seconds, settings.use_fahrenheit ? "true" : "false",
-          settings.use_feet ? "true" : "false", settings.pm_use_usaqi ? "true" : "false",
-          static_cast<int>(settings.back_led_brightness),
+          settings.auto_lock_seconds, static_cast<int>(settings.pinned_chart),
+          settings.use_fahrenheit ? "true" : "false", settings.use_feet ? "true" : "false",
+          settings.pm_use_usaqi ? "true" : "false", static_cast<int>(settings.back_led_brightness),
           static_cast<int>(settings.touch_led_intensity), settings.buzzer_enabled ? "on" : "off",
           settings.wifi_power_save_enabled ? "on" : "off",
           settings.disable_cloud ? "true" : "false",

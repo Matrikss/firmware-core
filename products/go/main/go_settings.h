@@ -16,6 +16,7 @@ struct GoSettings {
   bool use_fahrenheit = false;
   bool use_feet = false;
   bool pm_use_usaqi = false;
+  Metric pinned_chart = Metric::Pm25;
 
   // --- GPS ---
   GpsMode gps_mode = GpsMode::OnWhenTracking;

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "rev": "0840378",
+  "rev": "0ecfc8c",
   "product": {
     "slug": "airgradient-go",
     "name": "AirGradient Go",
@@ -32,7 +32,7 @@
         },
         {
           "action": "Observe Home for up to five minutes from Power press.",
-          "expected_result": "PM2.5, CO2, temperature, humidity, TVOC, NOx, pressure and battery readings become available; warming fields are dashes before they become valid.",
+          "expected_result": "PM2.5, CO2 and battery readings become available; warming fields show dashes. Home follows the selected interval and Pinned Chart layout: temperature/humidity are absent below five minutes, with no stale cells or incomplete frame.",
           "evidence": [
             "Record version and a Home photo; video a stalled or incomplete refresh."
           ]
@@ -452,29 +452,29 @@
       "applicability": [
         "V1"
       ],
-      "setup": [],
+      "setup": [
+        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+      ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and Temperature Unit. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and Temperature Unit and measurement interval. Settings paths start at Main Menu > Settings.",
+          "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
           "action": "Select Main Menu > Operating Mode > Portable.",
           "expected_result": "Portable is selected."
         },
         {
-          "action": "Open Settings > Display & Touch > Temperature Unit. Select C then F, returning Home after each.",
-          "expected_result": "The choice summary and Home labels use the selected presentation; unavailable fields remain dashes."
+          "action": "Set Operations > Measure Int. > 5m and allow six minutes for a valid Home temperature reading. Open Display & Touch > Temperature Unit. Select C then F, returning Home after each and allowing the display refresh to finish.",
+          "expected_result": "The menu selects the chosen unit. Home temperature uses °C then °F with readable bold values and units and no stale digits."
         },
         {
-          "action": "Disconnect USB, hold Power until Powered off is painted, release Power, wait 10 seconds, then press Power to start. Reopen the same choice.",
+          "action": "Disconnect USB, hold Power until Powered off is painted, release, wait 10 seconds and press Power to start. Allow 30 seconds for Home and up to six minutes for a valid temperature, then inspect Home and reopen Temperature Unit.",
           "expected_result": "The last selected value persists on Home and in the choice page."
         }
       ],
       "cleanup": [
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: Temperature Unit, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
+        "Exit menus and restore the recorded Temperature Unit and measurement interval, operating mode, lock state and USB connection, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/settings.md",
@@ -1118,8 +1118,8 @@
     },
     {
       "id": "go.display.chart-navigation",
-      "title": "Home cycles through the four measurement charts",
-      "objective": "Verify chart selection and removal.",
+      "title": "All available charts render clearly during touch browsing",
+      "objective": "Verify physical Up/Down navigation and readable chart headers, statistics and plots; cycle logic and sample filtering are covered by host tests.",
       "category": "Measurements",
       "sub_category": "Charts",
       "applicability": [
@@ -1130,64 +1130,86 @@
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock and interval. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and Auto Lock, measurement interval and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
           "action": "Select Main Menu > Operating Mode > Portable.",
           "expected_result": "Portable is selected."
         },
         {
-          "action": "Set Auto Lock Off and Operations > Measure Int. > 10s. Wait five Home updates, allowing one minute. From Home press Down through a full cycle, then Up through the reverse cycle.",
-          "expected_result": "The order is None, PM2.5, CO2, Temperature, Humidity, None; Up reverses it. Selected charts show Min/Max; None removes the chart."
+          "action": "Set Display & Touch > Auto Lock > Off and Operations > Measure Int. > 10s. Allow five minutes for warmup, then one minute for five scheduled updates. Set Measure Int. > 5m.",
+          "expected_result": "Recent history is available before browsing all metrics."
+        },
+        {
+          "action": "Open Display & Touch > Pinned Chart, scroll to Altitude and select it. Reopen the choice and select None; return Home.",
+          "expected_result": "The last option remains readable and selectable when scrolled. None restores the measurement overview without a chart."
+        },
+        {
+          "action": "Press Down through a complete Home cycle, then Up through the reverse cycle, letting each refresh finish.",
+          "expected_result": "Down visits PM2.5, CO2, Temperature, Humidity, TVOC, NOx, Pressure, Altitude and the overview. Each selected metric has a regular name above a bold value and applicable unit, up/down arrows, Min/Max and a plot when history is valid. TVOC/NOx have no unit suffix. PM2.5/CO2 hero values are not highlighted; labels, arrows and values do not overlap or clip.",
+          "evidence": [
+            "Save representative header photos, including Temperature and Altitude; capture any stale or clipped content."
+          ]
         }
       ],
       "cleanup": [
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: Auto Lock and interval, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
+        "Exit menus and restore the recorded Auto Lock, measurement interval and Pinned Chart, operating mode, lock state and USB connection, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
-        "products/go/docs/display_service.md",
-        "products/go/docs/ui_manager.md"
+        "products/go/docs/ui_manager.md",
+        "products/go/docs/display_service.md"
       ]
     },
     {
       "id": "go.display.chart-reset-lock",
-      "title": "Returning from lock clears chart selection",
-      "objective": "Verify the documented Home selection reset.",
+      "title": "Pinned chart stays clean through lock and restart",
+      "objective": "Verify the physical transition from browsing to the pinned overview and its presentation after cold start.",
       "category": "Measurements",
       "sub_category": "Charts",
       "applicability": [
         "V1"
       ],
-      "setup": [],
+      "setup": [
+        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+      ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and Auto Lock, measurement interval and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
           "action": "Select Main Menu > Operating Mode > Portable.",
           "expected_result": "Portable is selected."
         },
         {
-          "action": "Set Auto Lock Off. Select the Temperature chart on Home, then lock and unlock with short Power presses.",
-          "expected_result": "Home returns with metric selection None; the old chart is removed on the completed refresh."
+          "action": "Set Auto Lock Off, Measure Int. 10s and Pinned Chart CO2. Allow five minutes for warmup, then one minute for five scheduled updates. Browse CO2 on Home and photograph its plot.",
+          "expected_result": "CO2 history is visible with its browsing header and Min/Max."
+        },
+        {
+          "action": "Browse PM2.5, then lock and unlock with short Power presses, letting each refresh finish.",
+          "expected_result": "The overview returns with the CO2 plot. The browsing header, arrows, highlight and Min/Max disappear cleanly on lock and remain absent after unlock.",
+          "evidence": [
+            "Save the locked Home photo for comparison with the CO2 plot."
+          ]
+        },
+        {
+          "action": "Disconnect USB, hold Power until Powered off is painted, release, wait 10 seconds and press Power to start. Allow 30 seconds for Home, then reopen Pinned Chart.",
+          "expected_result": "Home uses the overview without browsing details, and CO2 remains selected in the Pinned Chart menu after cold start."
         }
       ],
       "cleanup": [
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: Auto Lock, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
+        "Exit menus and restore the recorded Auto Lock, measurement interval and Pinned Chart, operating mode, lock state and USB connection, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
-        "products/go/docs/ui_manager.md"
+        "products/go/docs/display_service.md",
+        "products/go/docs/ui_manager.md",
+        "products/go/docs/settings.md"
       ]
     },
     {
       "id": "go.display.chart-reset-menu",
-      "title": "Returning from menu clears chart selection",
+      "title": "Leaving the menu restores the unselected overview",
       "objective": "Verify the documented Home selection reset.",
       "category": "Measurements",
       "sub_category": "Charts",
@@ -1197,22 +1219,20 @@
       "setup": [],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
           "action": "Select Main Menu > Operating Mode > Portable.",
           "expected_result": "Portable is selected."
         },
         {
-          "action": "Set Auto Lock Off. Select the Temperature chart on Home, then open Main Menu and select Exit Menu.",
-          "expected_result": "Home returns with metric selection None; the old chart is removed on the completed refresh."
+          "action": "Set Auto Lock Off and Pinned Chart None. Browse CO2 on Home, then open Main Menu and select Exit Menu. Let each refresh finish.",
+          "expected_result": "Home returns to the measurement overview with no chart, browsing header, arrows or Min/Max. The menu overlay leaves no stale text."
         }
       ],
       "cleanup": [
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: Auto Lock, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
+        "Exit menus and restore the recorded Auto Lock and Pinned Chart, operating mode, lock state and USB connection, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/ui_manager.md"
@@ -1220,8 +1240,8 @@
     },
     {
       "id": "go.display.chart-temperature",
-      "title": "Temperature chart converts its existing samples to Fahrenheit",
-      "objective": "Verify changing the temperature unit redraws existing chart labels and values cleanly.",
+      "title": "Temperature chart units remain readable after changing units",
+      "objective": "Verify degree symbols, bold value/unit text and redraw quality on the physical display; conversion arithmetic belongs to host tests.",
       "category": "Measurements",
       "sub_category": "Charts",
       "applicability": [
@@ -1240,12 +1260,12 @@
           "expected_result": "Portable is selected."
         },
         {
-          "action": "Set interval 60s, Auto Lock Off and Temperature Unit C. Collect five scheduled Home updates, allowing six minutes. Just after an update, select Temperature and record Min/Max.",
-          "expected_result": "The Celsius chart contains recent samples."
+          "action": "Set interval 10s, Auto Lock Off and Temperature Unit C. Allow five minutes for warmup, then one minute for five scheduled updates. Set interval 5m and browse Temperature before the next scheduled reading.",
+          "expected_result": "The chart has recent history; the header and Min/Max use °C beside the values."
         },
         {
           "action": "Before the next scheduled reading, select Temperature Unit F and return to the Temperature chart.",
-          "expected_result": "The existing chart is shown in Fahrenheit, with readable Min/Max values and labels. The history remains present and no Celsius label, overlapping text or stale digits remain after the display refresh.",
+          "expected_result": "The header and Min/Max use °F beside the values. The history remains present, with no missing degree symbol, stale °C, overlapping text or clipped values after refresh.",
           "evidence": [
             "Save the two chart photos and times."
           ]
@@ -1258,6 +1278,59 @@
       ],
       "references": [
         "products/go/docs/display_service.md"
+      ]
+    },
+    {
+      "id": "go.display.interval-layout",
+      "title": "Interval changes redraw the overview and hidden pinned chart",
+      "objective": "Verify physical layout transitions at one and five minutes, including None and a temporarily unavailable pinned chart.",
+      "category": "Measurements",
+      "sub_category": "Charts",
+      "applicability": [
+        "V1"
+      ],
+      "setup": [
+        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+      ],
+      "steps": [
+        {
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and measurement interval, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "expected_result": "Original settings are recorded before changes and the controls are unlocked."
+        },
+        {
+          "action": "Select Main Menu > Operating Mode > Portable.",
+          "expected_result": "Portable is selected."
+        },
+        {
+          "action": "Set Auto Lock Off, Pinned Chart None and Measure Int. 5m. Return Home and let the refresh finish.",
+          "expected_result": "The overview shows temperature/humidity, TVOC/NOx and pressure/altitude below the hero values. No chart appears."
+        },
+        {
+          "action": "Set Measure Int. 60s, return Home, then lock and unlock with short Power presses.",
+          "expected_result": "Temperature/humidity disappear; TVOC/NOx and pressure/altitude move up. The bottom row remains unused. No fallback chart, stale thermal values or overlapping rows appear."
+        },
+        {
+          "action": "While unlocked, browse once through Home with Down, letting each refresh finish.",
+          "expected_result": "Browsing skips Temperature and Humidity; the remaining metric headers and plots render without remnants of hidden cells."
+        },
+        {
+          "action": "Select Pinned Chart Temperature, return Home, then change Measure Int. to 5m and return Home.",
+          "expected_result": "At 60s the thermal chart remains hidden. At 5m the temperature/humidity row and pinned plot area return without a browsing header or Min/Max; no plot line is required until valid history exists."
+        },
+        {
+          "action": "Set Pinned Chart PM2.5. Compare Home at 5m and 60s, letting each refresh finish.",
+          "expected_result": "At 5m, temperature/humidity and TVOC/NOx sit above the chart. At 60s, TVOC/NOx and pressure/altitude sit above it. Both views are readable without stale rows or browsing details.",
+          "evidence": [
+            "Save the 5m and 60s Home photos."
+          ]
+        }
+      ],
+      "cleanup": [
+        "Exit menus and restore the recorded measurement interval, Auto Lock and Pinned Chart, operating mode, lock state and USB connection, including after interruption. Confirm each restored setting; record any remaining change."
+      ],
+      "references": [
+        "products/go/docs/display_service.md",
+        "products/go/docs/ui_manager.md"
       ]
     },
     {
@@ -1302,11 +1375,11 @@
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"measurementInterval\":10,\"temperatureUnit\":\"c\",\"pmStandard\":\"ugm3\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
+          "action": "In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"measurementInterval\":300,\"temperatureUnit\":\"c\",\"pmStandard\":\"ugm3\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send.",
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "Wait up to five minutes for valid raw temperature, humidity and PM2.5 in serial and valid corresponding Home readings. Capture Home before changing corrections.",
+          "action": "Wait up to six minutes for valid raw temperature, humidity and PM2.5 in serial and valid corresponding Home readings. Capture Home before changing corrections.",
           "expected_result": "All three source fields and their current Home presentation are valid, providing the recovery baseline."
         },
         {
@@ -1314,14 +1387,14 @@
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "Watch Home for the next two scheduled measurements, allowing 30 seconds. Capture a photo of the three affected fields.",
+          "action": "Watch Home for the next two scheduled measurements, allowing 11 minutes. Capture a photo of the three affected fields.",
           "expected_result": "Temperature and humidity show dashes; PM2.5 shows zero. Previous digits are removed cleanly and the rest of Home remains readable.",
           "evidence": [
             "Save before, limited-output and restored Home photos."
           ]
         },
         {
-          "action": "Restore the corrections object from the saved original configuration with PUT /api/v1/config, using the API restoration procedure in cleanup. Confirm it through GET Config within 20 seconds, then observe Home for two measurements, allowing 30 seconds.",
+          "action": "Restore the corrections object from the saved original configuration with PUT /api/v1/config, using the API restoration procedure in cleanup. Confirm it through GET Config within 20 seconds, then observe Home for two measurements, allowing 11 minutes.",
           "expected_result": "Valid temperature, humidity and PM2.5 readings return without leftover dashes, overlapping digits or a restart."
         }
       ],
@@ -1733,7 +1806,7 @@
           "expected_result": "The GET response shows the requested values before the behavior check continues."
         },
         {
-          "action": "Allow five minutes for sensor warmup, then collect five valid temperature samples, allowing one minute at the selected 10-second interval. Set interval 60s, select the Temperature chart and photograph it just after a scheduled update.",
+          "action": "Allow five minutes for sensor warmup, then collect five valid temperature samples, allowing one minute at the selected 10-second interval. Set interval 5m, select the Temperature chart and photograph it before the next scheduled update.",
           "expected_result": "The cached chart has valid values."
         },
         {
@@ -1742,7 +1815,7 @@
         },
         {
           "action": "Return to the Temperature chart before the next scheduled measurement.",
-          "expected_result": "Its valid cached values and Min/Max now show 20 C; it does not need five new measurements to replace old history."
+          "expected_result": "Its valid cached values and Min/Max now show 20.0 °C; it does not need five new measurements to replace old history."
         }
       ],
       "cleanup": [
@@ -3238,11 +3311,11 @@
           "expected_result": "Portable is selected."
         },
         {
-          "action": "Set interval 10s and Auto Lock Off. Collect five Home samples, allowing one minute, and inspect Temperature chart.",
+          "action": "Set interval 10s and Auto Lock Off. Allow five minutes for sensor warmup, then collect five scheduled samples over one minute and inspect the CO2 chart.",
           "expected_result": "The chart shows the collected samples."
         },
         {
-          "action": "Set interval 60s. Disconnect USB, hold Power until Powered off is painted, release Power, wait 10 seconds, then press Power to start. After the first Home measurement inspect Temperature before the next sample.",
+          "action": "Set interval 60s. Disconnect USB, hold Power until Powered off is painted, release Power, wait 10 seconds, then press Power to start. After the first Home measurement inspect CO2 before the next sample.",
           "expected_result": "The chart contains only post-boot data; the previous chart history is gone."
         }
       ],
@@ -3271,30 +3344,30 @@
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and measurement interval, Auto Lock and Temperature Unit. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and measurement interval, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
-          "action": "Select Portable mode. Set Auto Lock Off and measurement interval 10s. Allow five minutes for sensor warmup, then collect at least five temperature samples over one minute. Open the Temperature chart and photograph its history.",
+          "action": "Select Portable mode. Set Auto Lock Off and measurement interval 10s. Allow five minutes for sensor warmup, then collect at least five CO2 samples over one minute. Open the CO2 chart and photograph its history.",
           "expected_result": "The chart contains visible history before clearing."
         },
         {
-          "action": "Set Temperature Unit to the opposite of the recorded original value. Record the selected test unit.",
-          "expected_result": "Home and the setting page use the test unit."
+          "action": "Set Display & Touch > Pinned Chart > CO2 and return Home.",
+          "expected_result": "The overview shows the pinned chart without browsing details."
         },
         {
-          "action": "Set measurement interval 60s. Open Settings > Clear Data and choose Yes. Observe the confirmation and immediately inspect the Temperature chart before the next scheduled measurement.",
+          "action": "Set measurement interval 60s. Open Settings > Clear Data and choose Yes. Observe the confirmation and immediately inspect the CO2 chart before the next scheduled measurement.",
           "expected_result": "Data cleared appears and the old chart history is gone. A new sample after the clear does not restore the old history."
         },
         {
-          "action": "Inspect Main Menu, Home and the Temperature Unit and Measure Int. settings.",
-          "expected_result": "Main Menu offers Start Tracking and Home has no recording/pause indicator. The test temperature unit and 60-second interval remain selected."
+          "action": "Inspect Main Menu, Home and the Pinned Chart and Measure Int. settings.",
+          "expected_result": "Main Menu offers Start Tracking and Home has no recording/pause indicator. The CO2 pinned-chart choice and 60-second interval remain selected."
         }
       ],
       "cleanup": [
         "Stop the test session if a failure left it active. Cleared data is intentionally not restored.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore the recorded measurement interval, Auto Lock and Temperature Unit, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
+        "Restore the recorded measurement interval, Auto Lock and Pinned Chart, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/ui_manager.md",
@@ -3317,34 +3390,34 @@
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and measurement interval, Auto Lock and Temperature Unit. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and measurement interval, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
-          "action": "Select Portable mode. Set Auto Lock Off and measurement interval 10s. Allow five minutes for sensor warmup, then collect at least five temperature samples over one minute. Open the Temperature chart and photograph its history.",
+          "action": "Select Portable mode. Set Auto Lock Off and measurement interval 10s. Allow five minutes for sensor warmup, then collect at least five CO2 samples over one minute. Open the CO2 chart and photograph its history.",
           "expected_result": "The chart contains visible history before clearing."
         },
         {
-          "action": "Set Temperature Unit to the opposite of the recorded original value. Record the selected test unit.",
-          "expected_result": "Home and the setting page use the test unit."
+          "action": "Set Display & Touch > Pinned Chart > CO2 and return Home.",
+          "expected_result": "The overview shows the pinned chart without browsing details."
         },
         {
           "action": "Start Tracking, open Tracking > Status and wait for at least three points, allowing 40 seconds.",
           "expected_result": "Status shows Recording with at least three Points."
         },
         {
-          "action": "Set measurement interval 60s. Open Settings > Clear Data and choose Yes. Observe the confirmation and immediately inspect the Temperature chart before the next scheduled measurement.",
+          "action": "Set measurement interval 60s. Open Settings > Clear Data and choose Yes. Observe the confirmation and immediately inspect the CO2 chart before the next scheduled measurement.",
           "expected_result": "Data cleared appears and the old chart history is gone. A new sample after the clear does not restore the old history."
         },
         {
-          "action": "Inspect Main Menu, Home and the Temperature Unit and Measure Int. settings.",
-          "expected_result": "Main Menu offers Start Tracking and Home has no recording/pause indicator. The test temperature unit and 60-second interval remain selected."
+          "action": "Inspect Main Menu, Home and the Pinned Chart and Measure Int. settings.",
+          "expected_result": "Main Menu offers Start Tracking and Home has no recording/pause indicator. The CO2 pinned-chart choice and 60-second interval remain selected."
         }
       ],
       "cleanup": [
         "Stop the test session if a failure left it active. Cleared data is intentionally not restored.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore the recorded measurement interval, Auto Lock and Temperature Unit, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
+        "Restore the recorded measurement interval, Auto Lock and Pinned Chart, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/ui_manager.md",
@@ -3367,16 +3440,16 @@
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and measurement interval, Auto Lock and Temperature Unit. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and measurement interval, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
-          "action": "Select Portable mode. Set Auto Lock Off and measurement interval 10s. Allow five minutes for sensor warmup, then collect at least five temperature samples over one minute. Open the Temperature chart and photograph its history.",
+          "action": "Select Portable mode. Set Auto Lock Off and measurement interval 10s. Allow five minutes for sensor warmup, then collect at least five CO2 samples over one minute. Open the CO2 chart and photograph its history.",
           "expected_result": "The chart contains visible history before clearing."
         },
         {
-          "action": "Set Temperature Unit to the opposite of the recorded original value. Record the selected test unit.",
-          "expected_result": "Home and the setting page use the test unit."
+          "action": "Set Display & Touch > Pinned Chart > CO2 and return Home.",
+          "expected_result": "The overview shows the pinned chart without browsing details."
         },
         {
           "action": "Start Tracking, open Tracking > Status and wait for at least three points, allowing 40 seconds.",
@@ -3387,18 +3460,18 @@
           "expected_result": "The pause indicator appears and Status shows Paused."
         },
         {
-          "action": "Set measurement interval 60s. Open Settings > Clear Data and choose Yes. Observe the confirmation and immediately inspect the Temperature chart before the next scheduled measurement.",
+          "action": "Set measurement interval 60s. Open Settings > Clear Data and choose Yes. Observe the confirmation and immediately inspect the CO2 chart before the next scheduled measurement.",
           "expected_result": "Data cleared appears and the old chart history is gone. A new sample after the clear does not restore the old history."
         },
         {
-          "action": "Inspect Main Menu, Home and the Temperature Unit and Measure Int. settings.",
-          "expected_result": "Main Menu offers Start Tracking and Home has no recording/pause indicator. The test temperature unit and 60-second interval remain selected."
+          "action": "Inspect Main Menu, Home and the Pinned Chart and Measure Int. settings.",
+          "expected_result": "Main Menu offers Start Tracking and Home has no recording/pause indicator. The CO2 pinned-chart choice and 60-second interval remain selected."
         }
       ],
       "cleanup": [
         "Stop the test session if a failure left it active. Cleared data is intentionally not restored.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore the recorded measurement interval, Auto Lock and Temperature Unit, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
+        "Restore the recorded measurement interval, Auto Lock and Pinned Chart, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/ui_manager.md",
@@ -3425,10 +3498,10 @@
         },
         {
           "action": "Select Portable mode, set Auto Lock Off and measurement interval 10s. Allow five minutes for warmup, then collect five chart samples over one minute. Start Tracking and wait for at least three Points, allowing 40 seconds.",
-          "expected_result": "The Temperature chart has visible history and Tracking Status shows Recording."
+          "expected_result": "The CO2 chart has visible history and Tracking Status shows Recording."
         },
         {
-          "action": "Pause Tracking. Record Points and photograph the Temperature chart. Set measurement interval 60s.",
+          "action": "Pause Tracking. Record Points and photograph the CO2 chart. Set measurement interval 60s.",
           "expected_result": "The test session is Paused and its point count and chart baseline are saved."
         },
         {
@@ -3436,7 +3509,7 @@
           "expected_result": "Both actions return to the Clear Data row without a Data cleared message."
         },
         {
-          "action": "Inspect the Temperature chart and Tracking > Status.",
+          "action": "Inspect the CO2 chart and Tracking > Status.",
           "expected_result": "The previous chart history remains visible; Status is still Paused with the recorded point count."
         }
       ],
@@ -3684,7 +3757,7 @@
       ],
       "setup": [
         "The test unit is registered to AirGradient Dashboard.",
-        "Access to change this unit’s device temperature-unit setting in the cloud dashboard.",
+        "Access to change this unit’s temperature-unit and measurement-interval settings in AirGradient Dashboard.",
         "Internet connectivity for the Go and dashboard client.",
         "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
         "Working credentials for the test LAN are saved on the Go."
@@ -3707,8 +3780,8 @@
           "expected_result": "GET Config reports configurationControl=local; cloud settings cannot replace the preparation values."
         },
         {
-          "action": "In the cloud dashboard, open the device matching the About Device serial. Record its current device temperature-unit setting. On Go, open Settings > Display & Touch > Temperature Unit and select that same unit. Return Home and wait up to five minutes for a valid temperature reading.",
-          "expected_result": "The dashboard’s original setting is saved, and Home displays a valid temperature in that unit."
+          "action": "In AirGradient Dashboard, open the device matching the About Device serial. Record its temperature-unit and measurement-interval settings, then set its interval to 300 seconds. On Go, set Operations > Measure Int. > 5m and select the recorded dashboard unit under Display & Touch > Temperature Unit. Return Home and allow six minutes for a valid temperature reading.",
+          "expected_result": "Both original dashboard settings are saved. Home displays a valid temperature, and the prepared interval keeps that field visible when cloud configuration is enabled."
         },
         {
           "action": "In the dashboard, change this device’s temperature unit to the opposite value: Fahrenheit if it was Celsius, otherwise Celsius. Save the change while local authority is still selected on Go.",
@@ -3734,7 +3807,7 @@
           "expected_result": "Cloud delivery is disabled and the selected temperature unit remains visible."
         },
         {
-          "action": "Disconnect USB, hold Power until Powered off is painted, release Power, wait 10 seconds and press Power to start. Inspect Home and Settings > Display & Touch > Temperature Unit before restoring cloud delivery. Allow up to five minutes for the temperature reading to become available.",
+          "action": "Disconnect USB, hold Power until Powered off is painted, release Power, wait 10 seconds and press Power to start. Inspect Home and Settings > Display & Touch > Temperature Unit before restoring cloud delivery. Allow up to six minutes for the temperature reading to become available.",
           "expected_result": "The cloud-selected temperature unit remains selected and is used by Home after cold power, while cloud delivery is disabled.",
           "evidence": [
             "Save the post-restart Home photo."
@@ -3742,10 +3815,10 @@
         }
       ],
       "cleanup": [
-        "If the dashboard setting was changed, restore its recorded original value in the dashboard, including after interruption.",
+        "Restore the recorded dashboard temperature-unit and measurement-interval settings, including after interruption.",
         "If interrupted before the original configuration was saved, restore only the recorded UI/USB state and report the missing baseline.",
         "With the saved original configuration available, return to Stationary. In the API client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and header Content-Type: application/json. Select a raw JSON body and paste:\n{\"configurationControl\":\"local\"}\nThen send GET http://airgradient_<serial>.local/api/v1/config in the API client with No Auth and no body every five seconds for at most 20 seconds after Send. Confirm configurationControl is local before restoring values.",
-        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: temperatureUnit. Send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
+        "In the API client, copy these fields and their original values from the saved configuration into a raw JSON request body: temperatureUnit, measurementInterval. Send PUT http://airgradient_<serial>.local/api/v1/config with No Auth and Content-Type: application/json. Read back with GET at the same URL every five seconds for up to 20 seconds to confirm restoration.",
         "Restore cloudConnection first and configurationControl last from the saved configuration. For each, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, Content-Type: application/json and a raw JSON object containing that field and its saved value. Confirm each through GET at the same URL within 20 seconds.",
         "Restore the recorded operating mode, lock state and USB connection. Record any value that could not be restored."
       ],
@@ -6309,7 +6382,7 @@
           "expected_result": "Connected! and then Home appear, establishing saved Wi-Fi credentials before reset."
         },
         {
-          "action": "Select Portable. Change Temperature Unit to the opposite of the factory value and set interval 10s. Allow five minutes for warmup, then collect five Temperature chart samples over one minute. Set interval 30s, or 60s if the factory interval was 30s. Start Tracking.",
+          "action": "Select Portable. Change Temperature Unit to the opposite of the factory value and set interval 10s. Allow five minutes for warmup, then collect five CO2 chart samples over one minute. Set interval 30s, or 60s if the factory interval was 30s. Start Tracking.",
           "expected_result": "The unit has nondefault settings, chart history, saved Wi-Fi and an active recording indicator."
         },
         {
@@ -6317,7 +6390,7 @@
           "expected_result": "The device restarts into Getting Started instead of returning directly to its previous Home state."
         },
         {
-          "action": "Finish onboarding. Inspect the Temperature chart, Main Menu, Operating Mode, Temperature Unit and Measure Int.",
+          "action": "Finish onboarding. Inspect the CO2 chart, Main Menu, Operating Mode, Temperature Unit and Measure Int.",
           "expected_result": "Previous chart history is absent; new post-reset samples may appear. Main Menu offers Start Tracking, Portable is selected, and both recorded factory settings are restored."
         },
         {

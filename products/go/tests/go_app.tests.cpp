@@ -112,6 +112,7 @@ extern GpsData gps_data_to_return;
 extern bool input_started;
 extern bool cache_measurement_called;
 extern MeasuresAGo last_cached_measurement;
+extern std::vector<MeasuresAGo> cached_measurements;
 extern bool route_started;
 extern bool create_route_result;
 extern bool route_exists_result;
@@ -2921,4 +2922,134 @@ TEST_CASE("inactive GPS final fallback uses ESP sleep duration", "[GoApp][gps]")
   CHECK(test_spy::gps_sleep_duration_ms == 40000);
   CHECK(test_spy::last_saved_state.gps_wake_deadline_ms ==
         (final_success ? clock.retained_ms + 40000 : 0));
+}
+
+TEST_CASE("build_fast_path_display: interval threshold preserves readings and controls layout") {
+  MeasuresAGo m{};
+  m.temp_hum_a = {25.0f, 60.0f};
+  GoSettings settings{};
+  for (int interval : {60, 299, 300, 301}) {
+    CAPTURE(interval);
+    settings.measure_interval_seconds = interval;
+    const auto v = build_fast_path_display(m, {}, {}, settings, TrackingState::Idle);
+    CHECK(v.show_temp_hum == (interval >= 300));
+    CHECK(v.active_metric == Metric::None);
+    CHECK(v.chart_metric() == Metric::Pm25);
+    CHECK(v.temperature_c == 25.0f);
+    CHECK(v.humidity_pct == 60.0f);
+  }
+}
+
+TEST_CASE("build_wake_values: compact layout survives early button-wake paint") {
+  RtcDisplaySnapshot snapshot{};
+  snapshot.show_temp_hum = false;
+  snapshot.temperature_c = 25.0f;
+  snapshot.humidity_pct = 60.0f;
+  const auto v = build_wake_values(snapshot, true);
+  CHECK_FALSE(v.show_temp_hum);
+  CHECK_FALSE(v.locked);
+  CHECK(v.active_metric == Metric::None);
+  CHECK(v.chart_metric() == Metric::Pm25);
+  CHECK(v.temperature_c == 25.0f);
+  CHECK(v.humidity_pct == 60.0f);
+}
+
+TEST_CASE("fast path: compact display charts corrected PM history without changing stored data") {
+  test_spy::reset();
+  MockBoard board;
+  board.settings.measure_interval_seconds = 60;
+  board.settings.corrections.pm25.algorithm = Pm25CorrectionAlgorithm::CustomViaPm25Raw;
+  board.settings.corrections.pm25.scaling_factor = 2.0f;
+  board.settings.corrections.pm25.intercept = 1.0f;
+  MeasuresAGo previous{};
+  previous.pm_a.pm_25 = 5.0f;
+  test_spy::cached_measurements = {previous, MeasuresAGo{}};
+  test_spy::measures_to_return.pm_a.pm_25 = 10.0f;
+  test_spy::measures_to_return.temp_hum_a = {25.0f, 60.0f};
+  DisplayService::spy_on_init = [](const DisplayValues &v) {
+    CHECK_FALSE(v.show_temp_hum);
+    CHECK(v.locked);
+    CHECK(v.active_metric == Metric::None);
+    CHECK(v.chart_metric() == Metric::Pm25);
+    REQUIRE(v.chart_count == 2);
+    REQUIRE(v.chart_samples != nullptr);
+    CHECK(v.chart_samples[0] == 11.0f);
+    CHECK(v.chart_samples[1] == 21.0f);
+    CHECK(v.chart_min == 11.0f);
+    CHECK(v.chart_max == 21.0f);
+    CHECK(v.temperature_c == 25.0f);
+    CHECK(v.humidity_pct == 60.0f);
+  };
+  GoApp app(board);
+  GoAppTestAccess access(app);
+  volatile bool button = false;
+  const auto result = access.execute_fast_path(RtcAppState{}, button);
+  DisplayService::spy_on_init = nullptr;
+  CHECK(DisplayService::spy_init_count == 1);
+  CHECK(result.has_measures);
+  CHECK(result.measures.pm_a.pm_25 == 10.0f);
+  CHECK(result.measures.temp_hum_a.temperature == 25.0f);
+  CHECK(result.measures.temp_hum_a.humidity == 60.0f);
+  REQUIRE(test_spy::cached_measurements.size() == 3);
+  CHECK(test_spy::cached_measurements[0].pm_a.pm_25 == 5.0f);
+  CHECK(test_spy::cached_measurements[2].pm_a.pm_25 == 10.0f);
+  CHECK(test_spy::cached_measurements[2].temp_hum_a.temperature == 25.0f);
+  CHECK(test_spy::cached_measurements[2].temp_hum_a.humidity == 60.0f);
+}
+
+TEST_CASE("fast path: pinned chart is honored at every interval", "[chart]") {
+  static Metric expected_metric = Metric::None;
+  static float expected_value = 0.0f;
+  for (int interval : {60, 300}) {
+    for (auto metric : {Metric::None, Metric::Co2, Metric::Pressure, Metric::Altitude}) {
+      CAPTURE(interval, static_cast<int>(metric));
+      test_spy::reset();
+      MockBoard board;
+      board.settings.measure_interval_seconds = interval;
+      board.settings.pinned_chart = metric;
+      test_spy::measures_to_return.co2.co2 = 650;
+      test_spy::measures_to_return.pressure = {1013.0f, -42.0f};
+      expected_metric = metric;
+      expected_value = metric == Metric::Co2        ? 650.0f
+                       : metric == Metric::Pressure ? 1013.0f
+                                                    : -42.0f;
+      DisplayService::spy_on_init = [](const DisplayValues &v) {
+        CHECK(v.pinned_chart == expected_metric);
+        CHECK(v.chart_metric() == expected_metric);
+        CHECK_FALSE(v.browsing_chart());
+        if (expected_metric == Metric::None) {
+          CHECK(v.chart_count == 0);
+          CHECK(v.chart_samples == nullptr);
+        } else {
+          REQUIRE(v.chart_samples != nullptr);
+          REQUIRE(v.chart_count == 1);
+          CHECK(v.chart_samples[0] == expected_value);
+          CHECK(v.chart_min == expected_value);
+          CHECK(v.chart_max == expected_value);
+        }
+      };
+      GoApp app(board);
+      GoAppTestAccess access(app);
+      volatile bool button = false;
+      access.execute_fast_path(RtcAppState{}, button);
+      DisplayService::spy_on_init = nullptr;
+      CHECK(DisplayService::spy_init_count == 1);
+    }
+  }
+}
+
+TEST_CASE("wake display retains pinned chart and suppresses hidden thermal readings", "[chart]") {
+  for (auto metric :
+       {Metric::None, Metric::Co2, Metric::Temp, Metric::Humidity, Metric::Altitude}) {
+    for (bool show_temp_hum : {false, true}) {
+      RtcDisplaySnapshot snapshot{};
+      snapshot.pinned_chart = metric;
+      snapshot.show_temp_hum = show_temp_hum;
+      const auto v = build_wake_values(snapshot, true);
+      CHECK(v.pinned_chart == metric);
+      CHECK_FALSE(v.browsing_chart());
+      const bool hidden = !show_temp_hum && (metric == Metric::Temp || metric == Metric::Humidity);
+      CHECK(v.chart_metric() == (hidden ? Metric::None : metric));
+    }
+  }
 }

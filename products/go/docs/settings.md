@@ -18,7 +18,7 @@ functions for load/save.
 |---|---|---|
 | `ConfigStore` | `airgradient-config` (`hal/config_store.h`) | Typed key-value persistence interface |
 | `NvsConfigStore` | `airgradient-config` (`backends/nvs_config_store.h`) | ESP-IDF NVS-backed implementation injected at construction |
-| `OperatingMode`, `GpsMode` | product (`go_types.h`) | Enums serialized as int and reconstructed on load |
+| `Metric`, `OperatingMode`, `GpsMode` | product (`go_types.h`) | Enums serialized as int and reconstructed on load |
 | `ConfigurationControl`, `GoConfigSource` | product (`go_config_types.h`) | Persisted remote-writer authority and shared source gate |
 | `WifiStaticIpConfig` | `airgradient-wifi` (`types/wifi_types.h`) | Five-uint32 static-IP record persisted alongside the other settings |
 
@@ -39,6 +39,7 @@ See [`go_settings.h`](../main/go_settings.h) for full signatures.
 | `use_fahrenheit` | `"uf"` | `bool` | `false` | — | Temperature display unit (false=C, true=F) |
 | `use_feet` | `"auf"` | `bool` | `false` | — | Altitude display unit (false=m, true=ft); stored altitude remains meters |
 | `pm_use_usaqi` | `"pmu"` | `bool` | `false` | — | PM display format (false=µg/m³, true=USAQI) |
+| `pinned_chart` | `"pchart"` | `int` (stored) / `Metric` (in struct) | `Pm25` (1) | 0 .. 8 | UI-only Pinned Chart choice; None (0) disables the automatic chart |
 | `gps_mode` | `"gpm"` | `int` (stored) / `GpsMode` (in struct) | `OnWhenTracking` (1) | 0 .. 2 | GPS operating mode: AlwaysOff / OnWhenTracking / AlwaysOn |
 | `operating_mode` | `"opm"` | `int` (stored) / `OperatingMode` (in struct) | `Portable` (0) | 0 .. 2 | Serialized as int; cast to `OperatingMode` on load |
 | `auto_lock_seconds` | `"als"` | `int` | `10` | 0, 10, 30, 60 | Runtime auto-lock timeout; `0` = disabled |
@@ -67,6 +68,16 @@ selected `Custom (<seconds>s)` row.
 
 Changing an unrelated UI setting preserves the custom interval. Selecting one
 of the fixed interval choices explicitly replaces it.
+
+### Pinned Chart
+
+Persisted identifiers are None (0), PM2.5 (1), CO2 (2), Temperature (3), Humidity
+(4), TVOC (5), NOx (6), Pressure (7), and Altitude (8). Missing or invalid values
+load as PM2.5; invalid choices are rejected on save. The UI exposes this setting
+under Display & Touch; remote configuration interfaces do not expose it.
+
+The preference survives interval changes, even when Temperature or Humidity
+cannot be shown below 300 seconds. See [Pinned Charts](ui_manager.md#pinned-charts).
 
 ### Measurement Corrections
 
