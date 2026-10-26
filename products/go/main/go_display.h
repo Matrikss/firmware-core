@@ -65,6 +65,14 @@ enum class Metric : uint8_t {
 
 inline constexpr uint8_t MAX_LIST_ROWS = 10;
 
+// More frequent PM operation heats the enclosure enough to bias ambient T/RH.
+inline constexpr int DISPLAY_TEMP_HUM_MIN_INTERVAL_SECONDS = 300;
+inline constexpr uint8_t DISPLAY_CHART_BUF_SIZE = 16;
+
+inline constexpr bool display_temp_hum_for_interval(int interval_seconds) {
+  return interval_seconds >= DISPLAY_TEMP_HUM_MIN_INTERVAL_SECONDS;
+}
+
 struct ListRow {
   char text[48];
   bool disabled = false;
@@ -141,6 +149,14 @@ struct DisplayValues {
   // --- Screen navigation ---
   Screen screen = Screen::Home;
   Metric active_metric = Metric::None;
+  bool show_temp_hum = true;
+
+  // The compact dashboard has a default PM chart without a selection highlight.
+  Metric chart_metric() const {
+    if (!show_temp_hum && (locked || active_metric == Metric::None))
+      return Metric::Pm25;
+    return active_metric;
+  }
 
   // --- List/menu content ---
   ListRow rows[MAX_LIST_ROWS] = {};
@@ -240,6 +256,7 @@ struct RtcDisplaySnapshot {
   bool use_fahrenheit;
   bool use_feet;
   bool pm_use_usaqi;
+  bool show_temp_hum = true;
 };
 
 // ---------------------------------------------------------------------------
@@ -402,6 +419,8 @@ public:
     ++spy_init_count;
     spy_last_screen = values.screen;
     spy_last_init_deferred = defer_refresh;
+    if (spy_on_init != nullptr)
+      spy_on_init(values);
     RTOS::delay_ms(spy_init_delay_ms);
     return true;
   }
@@ -437,6 +456,7 @@ public:
   inline static bool spy_last_init_deferred = false;
   inline static bool spy_last_update_wait = false;
   inline static bool spy_worker_busy = false;
+  inline static void (*spy_on_init)(const DisplayValues &) = nullptr;
 };
 
 // Stub implementations for host builds.

@@ -1,4 +1,5 @@
 #include "go_ui.h"
+#include "go_display_chart.h"
 
 #include <cstdio>
 #include <cstring>
@@ -340,6 +341,9 @@ DisplayValues UIManager::build_values(const BuildContext &ctx) const {
   // --- Screen navigation ---
   v.screen = _screen;
   v.active_metric = _active_metric;
+  v.show_temp_hum = display_temp_hum_for_interval(_setting_measure_interval_seconds);
+  if (!v.show_temp_hum && ctx.locked)
+    v.active_metric = Metric::None;
 
   // --- Populate rows based on current screen ---
   switch (_screen) {
@@ -546,6 +550,10 @@ void UIManager::sync_settings(const GoSettings &s) {
   _setting_pm_display = s.pm_use_usaqi ? 1 : 0;
 
   _setting_measure_interval_seconds = s.measure_interval_seconds;
+  if (!display_temp_hum_for_interval(_setting_measure_interval_seconds) &&
+      (_active_metric == Metric::Temp || _active_metric == Metric::Humidity)) {
+    _active_metric = Metric::None;
+  }
 
   if (_screen == Screen::SettingsChoice && _editing_setting_id == SettingId::MeasureInterval) {
     _settings_choice_index = (uint8_t)(2 + setting_current_option(SettingId::MeasureInterval));
@@ -967,17 +975,23 @@ void UIManager::browse_metric(int delta) {
   // when unlocked.  When unlocked the dashboard is always visible
   // (display_off is suppressed by the orchestrator), so browsing is valid.
   //
-  // Cycle through 5 selectable entries: None, Pm25, Co2, Temp, Humidity.
+  // Omit T/RH from the compact dashboard's navigation.
   // TVOC and NOx remain in the enum but are not selectable.
+  static constexpr Metric COMPACT_METRIC_CYCLE[] = {Metric::None, Metric::Pm25, Metric::Co2};
+  const bool show_temp_hum = display_temp_hum_for_interval(_setting_measure_interval_seconds);
+  const Metric *cycle = show_temp_hum ? METRIC_CYCLE : COMPACT_METRIC_CYCLE;
+  const int cycle_len = show_temp_hum
+                            ? METRIC_CYCLE_LEN
+                            : sizeof(COMPACT_METRIC_CYCLE) / sizeof(COMPACT_METRIC_CYCLE[0]);
   int idx = 0;
-  for (int i = 0; i < METRIC_CYCLE_LEN; ++i) {
-    if (METRIC_CYCLE[i] == _active_metric) {
+  for (int i = 0; i < cycle_len; ++i) {
+    if (cycle[i] == _active_metric) {
       idx = i;
       break;
     }
   }
-  idx = wrap(idx + delta, METRIC_CYCLE_LEN);
-  _active_metric = METRIC_CYCLE[idx];
+  idx = wrap(idx + delta, cycle_len);
+  _active_metric = cycle[idx];
 }
 
 // ---------------------------------------------------------------------------
@@ -2237,81 +2251,5 @@ void UIManager::populate_accel_test_rows(DisplayValues &v, const BuildContext &c
 
 void UIManager::populate_chart(DisplayValues &v, const MeasuresAGo *cache,
                                uint8_t cache_count) const {
-  if (_active_metric == Metric::None || cache == nullptr || cache_count == 0) {
-    v.chart_samples = nullptr;
-    v.chart_count = 0;
-    return;
-  }
-
-  uint8_t valid_count = 0;
-  float min_val = 0.0f;
-  float max_val = 0.0f;
-  bool first = true;
-
-  for (uint8_t i = 0; i < cache_count && i < UI_CHART_BUF_SIZE; ++i) {
-    float sample = 0.0f;
-    bool valid = false;
-
-    switch (_active_metric) {
-    case Metric::Pm25:
-      if (cache[i].pm_a.pm_25 != MeasuresInvalid::PM) {
-        sample = cache[i].pm_a.pm_25;
-        valid = true;
-      }
-      break;
-    case Metric::Co2:
-      if (cache[i].co2.co2 != MeasuresInvalid::CO2) {
-        sample = static_cast<float>(cache[i].co2.co2);
-        valid = true;
-      }
-      break;
-    case Metric::Temp:
-      if (cache[i].temp_hum_a.temperature != MeasuresInvalid::TEMPERATURE) {
-        sample = cache[i].temp_hum_a.temperature;
-        valid = true;
-      }
-      break;
-    case Metric::Humidity:
-      if (cache[i].temp_hum_a.humidity != MeasuresInvalid::HUMIDITY) {
-        sample = cache[i].temp_hum_a.humidity;
-        valid = true;
-      }
-      break;
-    case Metric::Tvoc:
-      if (cache[i].tvoc_nox.tvoc_index != MeasuresInvalid::TVOC) {
-        sample = static_cast<float>(cache[i].tvoc_nox.tvoc_index);
-        valid = true;
-      }
-      break;
-    case Metric::Nox:
-      if (cache[i].tvoc_nox.nox_index != MeasuresInvalid::NOX) {
-        sample = static_cast<float>(cache[i].tvoc_nox.nox_index);
-        valid = true;
-      }
-      break;
-    case Metric::None:
-    default:
-      break;
-    }
-
-    if (valid) {
-      _chart_buf[valid_count] = sample;
-      if (first) {
-        min_val = sample;
-        max_val = sample;
-        first = false;
-      } else {
-        if (sample < min_val)
-          min_val = sample;
-        if (sample > max_val)
-          max_val = sample;
-      }
-      ++valid_count;
-    }
-  }
-
-  v.chart_samples = (valid_count > 0) ? _chart_buf : nullptr;
-  v.chart_count = valid_count;
-  v.chart_min = (valid_count > 0) ? min_val : 0.0f;
-  v.chart_max = (valid_count > 0) ? max_val : 0.0f;
+  populate_display_chart(v, cache, cache_count, _chart_buf);
 }

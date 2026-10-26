@@ -480,6 +480,9 @@ TEST_CASE("UIManager: TagList wrap-around navigation", "[UIManager][nav][taglist
 
 TEST_CASE("UIManager: metric cycling on Home", "[UIManager][metric]") {
   UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings{};
+  settings.measure_interval_seconds = 300;
+  ui.sync_settings(settings);
 
   SECTION("starts with Metric::None") {
     auto ctx = make_default_ctx();
@@ -1470,6 +1473,9 @@ TEST_CASE("UIManager: build_values passes altitude unit through", "[UIManager][s
 
 TEST_CASE("UIManager: chart extraction from MeasuresAGo cache", "[UIManager][chart]") {
   UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings{};
+  settings.measure_interval_seconds = 300;
+  ui.sync_settings(settings);
 
   SECTION("no metric selected — no chart data") {
     MeasuresAGo cache[2]{};
@@ -2372,4 +2378,133 @@ TEST_CASE("UIManager: provisioning_ap_ssid is built from serial number",
   DisplayValues v = ui.build_values(make_default_ctx());
   REQUIRE(v.provisioning_ap_ssid != nullptr);
   CHECK(std::string(v.provisioning_ap_ssid) == "airgradient-AABBCCDDEEFF");
+}
+
+TEST_CASE("UIManager: interval boundary controls the compact home layout", "[UIManager][chart]") {
+  Measures sensors{};
+  sensors.temp_hum_a.temperature = 26.0f;
+  sensors.temp_hum_a.humidity = 45.0f;
+  MeasuresAGo cache[2]{};
+  cache[0].pm_a.pm_25 = 10.0f;
+  cache[1].pm_a.pm_25 = 20.0f;
+  BuildContext ctx{.sensor_data = sensors};
+  ctx.cache = cache;
+  ctx.cache_count = 2;
+  ctx.locked = true;
+
+  for (int interval : {1, 60, 299, 300, 301}) {
+    CAPTURE(interval);
+    UIManager ui(DEFAULT_UI_CONFIG);
+    GoSettings settings{};
+    settings.measure_interval_seconds = interval;
+    ui.sync_settings(settings);
+    const auto v = ui.build_values(ctx);
+    CHECK(v.show_temp_hum == (interval >= 300));
+    CHECK(v.active_metric == Metric::None);
+    CHECK(v.chart_metric() == (interval < 300 ? Metric::Pm25 : Metric::None));
+    CHECK(v.chart_count == (interval < 300 ? 2 : 0));
+    // Visibility never invalidates readings or mutates the source data.
+    CHECK(v.temperature_c == 26.0f);
+    CHECK(v.humidity_pct == 45.0f);
+    CHECK(sensors.temp_hum_a.temperature == 26.0f);
+    CHECK(sensors.temp_hum_a.humidity == 45.0f);
+  }
+}
+
+TEST_CASE("UIManager: compact browsing and locking reset to the default PM chart",
+          "[UIManager][metric]") {
+  UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings{};
+  settings.measure_interval_seconds = 60;
+  ui.sync_settings(settings);
+  MeasuresAGo cache[2]{};
+  cache[0].pm_a.pm_25 = 10.0f;
+  cache[1].pm_a.pm_25 = 30.0f;
+  cache[0].co2.co2 = 500;
+  cache[1].co2.co2 = 800;
+  auto ctx = make_default_ctx();
+  ctx.cache = cache;
+  ctx.cache_count = 2;
+
+  auto v = ui.build_values(ctx);
+  CHECK(v.active_metric == Metric::None);
+  CHECK(v.chart_metric() == Metric::Pm25);
+  CHECK(v.chart_min == 10.0f);
+  CHECK(v.chart_max == 30.0f);
+  press(ui, InputSource::TouchDown);
+  CHECK(ui.build_values(ctx).active_metric == Metric::Pm25);
+  press(ui, InputSource::TouchDown);
+  v = ui.build_values(ctx);
+  CHECK(v.active_metric == Metric::Co2);
+  CHECK(v.chart_metric() == Metric::Co2);
+  CHECK(v.chart_min == 500.0f);
+  CHECK(v.chart_max == 800.0f);
+  press(ui, InputSource::TouchDown);
+  CHECK(ui.build_values(ctx).active_metric == Metric::None);
+  press(ui, InputSource::TouchUp);
+  CHECK(ui.build_values(ctx).active_metric == Metric::Co2);
+
+  // Even before navigation reset, a locked view cannot retain a CO2 chart.
+  ctx.locked = true;
+  v = ui.build_values(ctx);
+  CHECK(v.active_metric == Metric::None);
+  CHECK(v.chart_metric() == Metric::Pm25);
+  CHECK(v.chart_min == 10.0f);
+  CHECK(v.chart_max == 30.0f);
+  ui.reset_to_home(); // Existing orchestrator lock behavior.
+  ctx.locked = false;
+  CHECK(ui.build_values(ctx).active_metric == Metric::None);
+  CHECK(ui.build_values(ctx).chart_metric() == Metric::Pm25);
+}
+
+TEST_CASE("UIManager: interval changes remove hidden metric focus", "[UIManager][metric]") {
+  for (int selected_steps : {3, 4}) {
+    UIManager ui(DEFAULT_UI_CONFIG);
+    GoSettings settings{};
+    settings.measure_interval_seconds = 300;
+    ui.sync_settings(settings);
+    auto ctx = make_default_ctx();
+    for (int i = 0; i < selected_steps; ++i)
+      press(ui, InputSource::TouchDown);
+    REQUIRE(ui.build_values(ctx).active_metric ==
+            (selected_steps == 3 ? Metric::Temp : Metric::Humidity));
+    settings.measure_interval_seconds = 299;
+    ui.sync_settings(settings);
+    CHECK_FALSE(ui.build_values(ctx).show_temp_hum);
+    CHECK(ui.build_values(ctx).active_metric == Metric::None);
+    CHECK(ui.build_values(ctx).chart_metric() == Metric::Pm25);
+    settings.measure_interval_seconds = 300;
+    ui.sync_settings(settings);
+    CHECK(ui.build_values(ctx).show_temp_hum);
+    CHECK(ui.build_values(ctx).chart_metric() == Metric::None);
+    press(ui, InputSource::TouchUp);
+    CHECK(ui.build_values(ctx).active_metric == Metric::Humidity);
+  }
+}
+
+TEST_CASE("UIManager: default PM chart handles empty and invalid history", "[UIManager][chart]") {
+  UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings{};
+  settings.measure_interval_seconds = 60;
+  ui.sync_settings(settings);
+  auto ctx = make_default_ctx();
+  auto v = ui.build_values(ctx);
+  CHECK(v.chart_samples == nullptr);
+  CHECK(v.chart_count == 0);
+
+  MeasuresAGo cache[4]{};
+  cache[1].pm_a.pm_25 = std::numeric_limits<float>::quiet_NaN();
+  cache[2].pm_a.pm_25 = std::numeric_limits<float>::infinity();
+  ctx.cache = cache;
+  ctx.cache_count = 4;
+  v = ui.build_values(ctx);
+  CHECK(v.chart_samples == nullptr);
+  CHECK(v.chart_count == 0);
+  cache[3].pm_a.pm_25 = 12.0f;
+  v = ui.build_values(ctx);
+  REQUIRE(v.chart_samples != nullptr);
+  CHECK(v.chart_count == 1);
+  CHECK(v.chart_samples[0] == 12.0f);
+  CHECK(v.chart_min == 12.0f);
+  CHECK(v.chart_max == 12.0f);
 }

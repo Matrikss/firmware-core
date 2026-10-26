@@ -54,6 +54,7 @@ void save_rtc_display_snapshot(const DisplayValues &values) {
   s_rtc_display_snapshot.use_fahrenheit = values.use_fahrenheit;
   s_rtc_display_snapshot.use_feet = values.use_feet;
   s_rtc_display_snapshot.pm_use_usaqi = values.pm_use_usaqi;
+  s_rtc_display_snapshot.show_temp_hum = values.show_temp_hum;
   s_rtc_display_snapshot_valid = true;
 }
 
@@ -1625,7 +1626,8 @@ void DisplayService::_draw_home(const DisplayValues &v) {
     return;
   }
 
-  const bool chart_visible = metric_has_chart(v.active_metric);
+  const bool chart_visible = metric_has_chart(v.chart_metric());
+  const bool metric_selected = metric_has_chart(v.active_metric);
   const bool pm_selected = (v.active_metric == Metric::Pm25);
   const bool co2_selected = (v.active_metric == Metric::Co2);
   const bool temp_selected = (v.active_metric == Metric::Temp);
@@ -1728,62 +1730,65 @@ void DisplayService::_draw_home(const DisplayValues &v) {
     u8g2_SetDrawColor(&_u8g2, 0);
 
   // --- Grid cells ---
-  char temp_buf[24];
-  char hum_buf[24];
+  char tvoc_buf[24];
+  char nox_buf[24];
+  char pressure_buf[24];
+  char altitude_buf[24];
+  format_int_index_value(tvoc_buf, sizeof(tvoc_buf), v.tvoc_index);
+  format_int_index_value(nox_buf, sizeof(nox_buf), v.nox_index);
+  format_pressure_value(pressure_buf, sizeof(pressure_buf), v.pressure_hpa);
+  format_altitude_value(altitude_buf, sizeof(altitude_buf), v.altitude_m, v.use_feet);
 
-  // Temperature grid cell uses DrawUTF8 for the degree symbol.
-  // format_temperature_value is preserved for chart stats; here we format
-  // with the UTF-8 degree sign for display.
-  if (!is_temperature_valid(v.temperature_c)) {
-    snprintf(temp_buf, sizeof(temp_buf), "-");
+  if (v.show_temp_hum) {
+    char temp_buf[24];
+    char hum_buf[24];
+    // Temperature uses DrawUTF8 for the degree symbol.
+    if (!is_temperature_valid(v.temperature_c)) {
+      snprintf(temp_buf, sizeof(temp_buf), "-");
+    } else {
+      const float shown = temp_for_display(v.temperature_c, v.use_fahrenheit);
+      format_one_decimal(temp_buf, sizeof(temp_buf), shown);
+      const size_t len = strlen(temp_buf);
+      snprintf(temp_buf + len, sizeof(temp_buf) - len, " \xC2\xB0%c", v.use_fahrenheit ? 'F' : 'C');
+    }
+    format_humidity_value(hum_buf, sizeof(hum_buf), v.humidity_pct);
+    if (temp_selected)
+      u8g2_SetDrawColor(&_u8g2, 1);
+    draw_cell(&_u8g2, 0, "Temperature", temp_buf, true);
+    if (temp_selected)
+      u8g2_SetDrawColor(&_u8g2, 0);
+    if (hum_selected)
+      u8g2_SetDrawColor(&_u8g2, 1);
+    draw_cell(&_u8g2, 1, "Humidity", hum_buf, false);
+    if (hum_selected)
+      u8g2_SetDrawColor(&_u8g2, 0);
   } else {
-    const float shown = temp_for_display(v.temperature_c, v.use_fahrenheit);
-    format_one_decimal(temp_buf, sizeof(temp_buf), shown);
-    const size_t len = strlen(temp_buf);
-    snprintf(temp_buf + len, sizeof(temp_buf) - len, " \xC2\xB0%c", v.use_fahrenheit ? 'F' : 'C');
+    draw_cell(&_u8g2, 0, "TVOC", tvoc_buf, false);
+    draw_cell(&_u8g2, 1, "NOx", nox_buf, false);
   }
-  format_humidity_value(hum_buf, sizeof(hum_buf), v.humidity_pct);
 
-  // Row 1: Temp / Humidity (always visible)
-  if (temp_selected)
-    u8g2_SetDrawColor(&_u8g2, 1);
-  draw_cell(&_u8g2, 0, "Temperature", temp_buf, true);
-  if (temp_selected)
-    u8g2_SetDrawColor(&_u8g2, 0);
-
-  if (hum_selected)
-    u8g2_SetDrawColor(&_u8g2, 1);
-  draw_cell(&_u8g2, 1, "Humidity", hum_buf, false);
-  if (hum_selected)
-    u8g2_SetDrawColor(&_u8g2, 0);
-
-  // Row 2: TVOC/NOx or Min/Max (conditional)
-  if (chart_visible) {
+  // Browsing keeps the existing min/max row. With no selection, the compact
+  // dashboard shows pressure/altitude above its default PM chart.
+  if (metric_selected) {
     char min_buf[24];
     char max_buf[24];
-    format_chart_stat(min_buf, sizeof(min_buf), v.active_metric, v.chart_min, v.use_fahrenheit,
+    format_chart_stat(min_buf, sizeof(min_buf), v.chart_metric(), v.chart_min, v.use_fahrenheit,
                       v.pm_use_usaqi);
-    format_chart_stat(max_buf, sizeof(max_buf), v.active_metric, v.chart_max, v.use_fahrenheit,
+    format_chart_stat(max_buf, sizeof(max_buf), v.chart_metric(), v.chart_max, v.use_fahrenheit,
                       v.pm_use_usaqi);
     draw_cell(&_u8g2, 2, "Min", min_buf, false);
     draw_cell(&_u8g2, 3, "Max", max_buf, false);
-  } else {
-    char tvoc_buf[24];
-    char nox_buf[24];
-    format_int_index_value(tvoc_buf, sizeof(tvoc_buf), v.tvoc_index);
-    format_int_index_value(nox_buf, sizeof(nox_buf), v.nox_index);
+  } else if (v.show_temp_hum) {
     draw_cell(&_u8g2, 2, "TVOC", tvoc_buf, false);
     draw_cell(&_u8g2, 3, "NOx", nox_buf, false);
+  } else {
+    draw_cell(&_u8g2, 2, "Pressure", pressure_buf, false);
+    draw_cell(&_u8g2, 3, "Altitude", altitude_buf, false);
   }
 
-  // Row 3: Pressure/Altitude or Chart (conditional)
   if (chart_visible) {
     _draw_chart(v);
   } else {
-    char pressure_buf[24];
-    char altitude_buf[24];
-    format_pressure_value(pressure_buf, sizeof(pressure_buf), v.pressure_hpa);
-    format_altitude_value(altitude_buf, sizeof(altitude_buf), v.altitude_m, v.use_feet);
     draw_cell(&_u8g2, 4, "Pressure", pressure_buf, false);
     draw_cell(&_u8g2, 5, "Altitude", altitude_buf, false);
   }

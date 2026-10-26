@@ -13,7 +13,7 @@
 #include "types/wifi_types.h"
 
 /// Chart buffer size — matches the payload cache capacity (Kconfig default 16).
-inline constexpr uint8_t UI_CHART_BUF_SIZE = 16;
+inline constexpr uint8_t UI_CHART_BUF_SIZE = DISPLAY_CHART_BUF_SIZE;
 
 /// Snackbar display duration in milliseconds.
 inline constexpr uint32_t SNACKBAR_DURATION_MS = 3000;
