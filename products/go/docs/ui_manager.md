@@ -15,8 +15,8 @@ and chart data extraction.
 
 | Dependency | Source | Usage |
 |---|---|---|
-| `Screen`, `Metric`, `DisplayValues`, `ListRow`, `MAX_LIST_ROWS` | product (`go_display.h`) | Display data types and row structs returned by `build_values()` |
-| `InputSource`, `InputType`, `OperatingMode` | product (`go_types.h`) | Input classification and mode enum |
+| `Screen`, `DisplayValues`, `ListRow`, `MAX_LIST_ROWS` | product (`go_display.h`) | Display data types and row structs returned by `build_values()` |
+| `Metric`, `InputSource`, `InputType`, `OperatingMode` | product (`go_types.h`) | Chart identifiers, input classification, and operating mode |
 | `MeasuresAGo`, `MeasuresInvalid` | `airgradient-common` (`measures_types.h`) | Measurement struct + sentinels read from `BuildContext` |
 | `GoSettings` | product (`go_settings.h`) | Initial settings-state sync via `sync_settings()` and reverse mapping via `apply_to_settings()` |
 | `ProvisioningTransport` | `airgradient-provisioning` (`types/provisioning_types.h`) | Selected provisioning transport on `Screen::Provisioning` |
@@ -109,8 +109,8 @@ orchestrator what happened:
 | `ConfirmCancelProvisioning` | ProvisioningConfirm: "Yes" on a cancel-setup overlay | Orchestrator routes to `leave_session_to_portable()` |
 | `AckOnboarding` | GettingStarted (boot gate): Enter long press on `Hold Enter to start` | Orchestrator calls `mark_onboarding_done()` then `leave_session_to_home()` if the save succeeds |
 
-Opening the main menu resets the active metric to `None`, clearing any
-hero/grid selection highlight behind the overlay.
+Opening the main menu resets the active metric to `None`, clearing the browsing
+header and statistics behind the overlay. It does not change the pinned chart.
 
 The UI Manager does **not** show snackbars for action-producing dispatches.
 The orchestrator owns all user feedback because it executes the actual
@@ -186,7 +186,7 @@ rows follow this order:
 | Tracking | Status, Pause Tracking or Resume Tracking, Stop Tracking |
 | Settings | Operations, Display & Touch, Power Saving, Hardware Test, Clear Data, Setup Guide, About Device |
 | Operations | Measurement Interval, CO2 Calibration, GPS Mode, Buzzer |
-| Display & Touch | Temperature Unit, Altitude Unit, PM Display, Auto Lock, AQI LED, Touch LED |
+| Display & Touch | Temperature Unit, Altitude Unit, PM Display, Pinned Chart, Auto Lock, AQI LED, Touch LED |
 | Power Saving | Wi-Fi Power Saving |
 | Hardware Test | Peripheral Test, GPS Test, Accelerometer Test, Battery Calibration, Play Melody |
 
@@ -304,7 +304,7 @@ factory-state write and reboot path.
 
 | Screen | Style | Wrapping | Scroll |
 |---|---|---|---|
-| Home (metrics) | Circular cycle (5 entries: None, Pm25, Co2, Temp, Humidity) | Yes | N/A |
+| Home (metrics) | None, PM2.5, CO2, Temperature, Humidity, TVOC, NOx, Pressure, Altitude; skip Temperature/Humidity below 300 s | Yes | N/A |
 | MainMenu | Circular (4 rows, all always enabled) | Yes | N/A |
 | TrackingMenu | Circular (5 rows) | Yes | None |
 | TrackingStatus | Circular (3 selectable rows, 6 informational rows) | Yes | None; Session/GPS view switch |
@@ -478,7 +478,24 @@ clear.
 
 ## Chart Data
 
-`build_values()` extracts per-metric float values from the `MeasuresAGo` cache
-array (passed via `BuildContext`). Invalid sentinel values are skipped.
-Integer fields (CO2, TVOC, NOx) are cast to float. The chart buffer is
-sized to `UI_CHART_BUF_SIZE` (16, matching `PAYLOAD_CACHE_MAX_SIZE`).
+`build_values()` uses `populate_display_chart()` to extract the visible metric
+from corrected cache copies in `BuildContext`. The shared helper also serves
+timer wake, validates each field, skips nonfinite samples, and supports pressure
+and negative altitude. The caller owns the 16-sample buffer. Empty history has
+no sample pointer and no plotted line.
+
+### Pinned Charts
+
+Settings > Display & Touch > Pinned Chart selects None or any of the eight
+metrics. PM2.5 is the initial default. The saved choice applies while locked
+and whenever no metric is selected; browsing never changes it. Locking or
+entering the menu clears only the transient selection.
+
+Unlocked Up/Down browsing shows a metric header, Min/Max, and chart. Returning
+to None restores the overview and the pinned chart, if enabled. Pinned Chart
+None disables the automatic chart at every interval; browsing remains available.
+
+Below 300 seconds, Temperature and Humidity are skipped during browsing. A
+pinned Temperature or Humidity chart is temporarily hidden, without substituting
+another chart or changing the saved choice. It returns at 300 seconds or longer.
+See [Home Charts](display_service.md#home-charts) for the visible layout.

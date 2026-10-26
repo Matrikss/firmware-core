@@ -9,8 +9,9 @@ which returns immediately; the slow EPD refresh runs in a dedicated task.
 
 | File | Purpose |
 |---|---|
-| `products/go/main/go_display.h` | `DisplayService` class, `DisplayValues` struct, `RtcDisplaySnapshot` struct, `Screen`/`Metric` enums, free functions |
+| `products/go/main/go_display.h` | `DisplayService` class, `DisplayValues` struct, `RtcDisplaySnapshot` struct, `Screen` enum, free functions |
 | `products/go/main/go_display.cpp` | Rendering pipeline, refresh logic, worker task, display driver, RTC snapshot storage, session-screen draw routines |
+| `products/go/main/go_display_chart.h` | Shared history extraction for interactive and timer-wake rendering |
 | `products/go/main/go_text_wrap.h` | Pure host-testable word-wrap helper (`compute_wrapped_lines`) used by `_draw_info()` and the auto-wrapped Provisioning status line |
 | `products/go/main/go_text_wrap.cpp` | Implementation of the word-wrap helper |
 
@@ -19,7 +20,7 @@ which returns immediately; the slow EPD refresh runs in a dedicated task.
 | Dependency | Source | Usage |
 |---|---|---|
 | `u8g2` | `components/u8g2/` | Software rendering (fonts, primitives, framebuffer) |
-| `go_types.h` | product | `OperatingMode`, `LockState` enums |
+| `go_types.h` | product | `Metric`, `OperatingMode`, `LockState` enums |
 | `measures_types.h` | `airgradient-common` | `MeasuresInvalid` sentinel values |
 | ESP-IDF SPI driver | ESP-IDF | `spi_device_*` API for EPD communication |
 | ESP-IDF GPIO driver | ESP-IDF | CS, DC, RST, BUSY pin control |
@@ -467,12 +468,9 @@ Screen dispatch:
   `QMAX_UP` / `RES_UP` / `OCVTAKEN` flags — or `FG: NO DATA` when invalid. Built
   directly by `FgLearningRunner` (no `UIManager`). See
   [`fg_learning.md`](fg_learning.md).
-- **Home:** Hero blocks (PM2.5, CO2 with dual-font labels centered via
-  `u8g2_GetStrWidth()`) + 3-row grid (Temp/Humidity, TVOC/NOx or
-  Min/Max, Pressure/Altitude or chart). Grid dividers span full 128 px;
-  1st divider is always 2 px thick, 3rd is 2 px thick when chart is
-  visible. Selection rects for PM2.5, CO2, Temp, and Humidity use full
-  128 px width. Logo removed from home page (kept for display-off only).
+- **Home:** PM2.5 and CO2 hero blocks above the measurement grid or active
+  chart details. Only the chart header is highlighted while browsing;
+  hero values remain unhighlighted. See [Home Charts](#home-charts).
 - **MainMenu:** Home screen (metric cleared to None) + overlay at y=162.
   The 2 px-thick 1st grid divider is preserved as the menu top border.
   Menu rows use full 128 px-wide selection rects. The four rows are Exit Menu,
@@ -509,6 +507,33 @@ Screen dispatch:
   when charging completes or resumes. On unplug, the charging-only
   runner wakes the display for a full `ShutdownUser` refresh before shutdown.
 
+### Home Charts
+
+Intervals below 300 seconds hide temperature and humidity cells and charts
+because frequent PM operation heats the enclosure. This is a display policy:
+collection, storage, and cloud, BLE, and local-server payloads retain those fields.
+
+With no active browsing selection, the lower rows are:
+
+| Interval | Visible Pinned Chart | Rows Below PM2.5 And CO2 |
+|---|---|---|
+| Below 300 s | Yes | TVOC/NOx; pressure/altitude; chart |
+| Below 300 s | No | TVOC/NOx; pressure/altitude; unused bottom row |
+| 300 s or longer | Yes | Temperature/humidity; TVOC/NOx; chart |
+| 300 s or longer | No | Temperature/humidity; TVOC/NOx; pressure/altitude |
+
+While unlocked and browsing, these rows become the highlighted metric header,
+Min/Max, and chart. The header has a regular metric name above a bold value and
+unit; TVOC/NOx have no unit suffix. Up/down icons flank the centered header.
+Temperature uses °C/°F in the grid, header, and Min/Max. Empty history shows
+dashes for Min/Max and no plotted line.
+
+Locked and unselected views show the pinned chart without a title, highlight,
+navigation arrows, or Min/Max. See [Pinned Charts](ui_manager.md#pinned-charts)
+for selection and interval rules. Timer wake uses the same history extraction;
+the early button-wake snapshot retains the preference but has no chart samples
+until the normal update supplies them.
+
 ### Fonts
 
 | Font | Usage |
@@ -517,11 +542,11 @@ Screen dispatch:
 | `u8g2_font_logisoso16_tr` | Hero section metric name labels |
 | `u8g2_font_helvB14_tf` | Shutdown brand header / title lines, Pairing title |
 | `u8g2_font_helvR12_tr` | Hero section unit labels, Shutdown action line, Pairing hint |
-| `u8g2_font_helvR08_tr` | Grid cell labels, About page info text, Shutdown detail line |
-| `u8g2_font_helvB08_tf` | Grid cell values, About page title |
+| `u8g2_font_helvR08_tr` | Grid and chart-header labels, About page info text, Shutdown detail line |
+| `u8g2_font_helvB08_tf` | Grid and chart-header values and units, About page title |
 | `u8g2_font_6x10_tr` | Menu/list row text, logo text |
 | `u8g2_font_siji_t_6x10` | Battery glyph, plug glyph (57410), Wi-Fi glyphs (connected 57419 / disconnected 57879), GPS glyph |
-| `u8g2_font_open_iconic_all_1x_t` | Lock icon (glyph 0xCA) |
+| `u8g2_font_open_iconic_all_1x_t` | Lock icon (glyph 0xCA), chart navigation arrows |
 | `u8g2_font_open_iconic_thing_1x_t` | Unlock icon (glyph 0x44) |
 
 ### Status Bar — Wi-Fi Icon
@@ -562,9 +587,9 @@ transitions trigger a status bar redraw.
 |---|---|
 | PM2.5 | <100: one decimal; >=100: integer; >999: "999+"; USAQI: EPA breakpoints |
 | CO2 | Integer ppm; >9999: "9999+" |
-| Temperature | One decimal, C or F; conversion: `F = C * 9/5 + 32` |
+| Temperature | One decimal, °C or °F; conversion: `F = C * 9/5 + 32` |
 | Humidity | Integer percent |
-| TVOC/NOx | Integer (index values) |
+| TVOC/NOx | No unit suffix; index values while continuously measuring, raw values on the energy-saving fast path |
 | Pressure | Integer hPa; >9999: "9999+ hPa" |
 | Altitude | Integer meters by default; `use_feet` converts with `m × 3.28084` and renders the full rounded value with `ft`; meters >9999 render `9999+ m` |
 | Invalid | "-" for any metric |
