@@ -73,29 +73,14 @@ Fahrenheit and presentation rounding happen after correction.
 
 ### Operating Mode
 
-`effective_measurement_corrections()` copies the saved correction set. In
-Energy Saving (`OperatingMode::Offline`), it selects `none` for temperature
-and humidity in that copy. Portable and Stationary use the configured
-algorithms. PM2.5 correction remains active in every mode.
+`effective_measurement_corrections()` bypasses temperature and humidity
+corrections in Energy Saving (`OperatingMode::Offline`). Portable and Stationary
+apply the saved algorithms. PM2.5 correction stays active in every mode.
 
-The rule applies to current display readings, chart samples, and the derived
-measurement snapshot, including timer-wake rendering and promotion to the
-orchestrator. Temperature and humidity show valid raw values in Energy Saving;
-normal display rounding and Celsius/Fahrenheit conversion still apply. Invalid
-raw fields retain their invalid sentinels.
-
-A mode change recomputes the current view from the latest raw snapshot before
-the existing mode-transition display update. The next measurement screen uses
-the new policy without waiting for another sensor reading. Charts apply the
-current mode to all cached samples at render time; stored history is unchanged.
-
-Saved algorithms and coefficients remain intact. Returning to Portable or
-Stationary reapplies them. Config reads describe the configured corrections,
-not the temporary copy used to bypass temperature and humidity correction.
-Host coverage in [`go_app.tests.cpp`](../tests/go_app.tests.cpp) and
-[`go_orchestrator.tests.cpp`](../tests/go_orchestrator.tests.cpp) checks mode
-transitions, boot handoff, timer-wake charts, invalid fields, and preserved
-PM2.5 correction.
+This policy applies to live readings, charts, and timer-wake rendering.
+Mode changes recalculate available raw readings before the display update;
+charts use the current mode for all cached samples. Unit conversion and
+rounding still apply. Saved calibration and raw history remain unchanged.
 
 ### Wire Names and Shapes
 
@@ -234,6 +219,13 @@ state and can seed the display after wake, but it never seeds the authoritative
 raw snapshot. See [`go_app.tests.cpp`](../tests/go_app.tests.cpp) for fast-path
 presentation coverage and [`go_orchestrator.tests.cpp`](../tests/go_orchestrator.tests.cpp)
 for raw handoff and RTC snapshot isolation.
+
+### Button-Wake Initialization
+
+Button wake restores the newest raw RTC cache sample, allowing mode changes to
+reapply corrections before a fresh measurement arrives. Fast-path handoff data
+takes priority. An empty cache uses the saved display snapshot for presentation
+only. Normal acquisition still runs and replaces the restored reading.
 
 ## Edge Cases / Errors
 

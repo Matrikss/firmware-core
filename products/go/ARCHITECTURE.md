@@ -462,6 +462,10 @@ Stationary use the saved algorithms. PM2.5 correction remains active in all
 modes. Switching modes recomputes the view before the transition display
 update, preserving saved calibration and raw history.
 
+Button wake seeds `_raw_measures` from the newest RTC cache sample so mode
+changes work before fresh acquisition completes. Fresh fast-path data takes
+priority; see [wake initialization](docs/measurement_corrections.md#button-wake-initialization).
+
 | Consumer or Use | View | Behavior |
 |---|---|---|
 | AirGradient cloud POST | Raw | The cloud owns its correction policy |

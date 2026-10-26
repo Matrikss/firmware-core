@@ -229,9 +229,14 @@ void Orchestrator::init(WakeCause cause, const BootHandoff &handoff) {
   }
 
   // --- Seed cached measures from boot ---
-  // Fresh measurements take priority over stale RTC snapshot.
+  // Fresh fast-path measurements take priority over retained history.
+  bool has_raw_measures = handoff.fast_path_measures != nullptr;
   if (handoff.fast_path_measures != nullptr) {
     _raw_measures = *handoff.fast_path_measures;
+  } else if (cause == WakeCause::Button) {
+    has_raw_measures = _svc.storage_service.read_latest_cached_measurement(_raw_measures);
+  }
+  if (has_raw_measures) {
     _corrected_measures =
         apply_measurement_corrections(_raw_measures, effective_measurement_corrections(_settings));
   } else if (handoff.display_snapshot != nullptr) {

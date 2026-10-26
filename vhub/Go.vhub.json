@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "rev": "2debb59",
+  "rev": "0c7e469",
   "product": {
     "slug": "airgradient-go",
     "name": "AirGradient Go",
@@ -1896,8 +1896,11 @@
           ]
         },
         {
-          "action": "Unlock with Power and select Main Menu > Operating Mode > Portable. Inspect the first completed Home redraw before the next five-minute scheduled measurement, then browse Temperature and Humidity.",
-          "expected_result": "Home and both charts return to the prepared 40.0 °C and 10% presentation without re-entering the correction settings. Labels and digits redraw cleanly."
+          "action": "After the second timer wake, confirm deep sleep in the logging tool within the current five-minute cycle. Wake with Power and select Main Menu > Operating Mode > Portable before the first new measurement. Watch Home without further touch input until that measurement arrives, allowing five minutes, then browse Temperature and Humidity. If logs cannot confirm the mode change preceded the measurement, mark this timing check incomplete.",
+          "expected_result": "The first Portable Home frame shows 40.0 °C and 10%; other previously valid readings remain visible. No extra touch is needed to restore readings. A fresh measurement arrives, and Home and both charts remain readable with the configured corrections.",
+          "evidence": [
+            "Save video of the first Portable frame and logs showing wake, mode change, and the first new measurement."
+          ]
         },
         {
           "action": "Select Main Menu > Operating Mode > Stationary and allow up to 30 seconds for saved Wi-Fi to reconnect. Inspect Home and both charts after the connection page closes, then send GET http://airgradient_<serial>.local/api/v1/config with No Auth and no body.",

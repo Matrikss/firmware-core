@@ -642,6 +642,14 @@ uint16_t StorageService::read_cache(MeasuresAGo *out, uint16_t max_count) const 
 
 uint16_t StorageService::cached_count() const { return 0; }
 
+bool StorageService::read_latest_cached_measurement(MeasuresAGo &out) const {
+  if (test_spy::cached_measurements.empty()) {
+    return false;
+  }
+  out = test_spy::cached_measurements.back();
+  return true;
+}
+
 void StorageService::backup_cache() const { test_spy::cache_backed_up = true; }
 
 void StorageService::restore_cache() { test_spy::cache_restored = true; }

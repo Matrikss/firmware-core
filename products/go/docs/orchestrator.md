@@ -148,10 +148,11 @@ The orchestrator keeps two `MeasuresAGo` snapshots:
 - `_corrected_measures` is derived for the display, charts, and PM AQI LED. BLE
   Measures and History use the raw values so clients can choose their own policy.
 
-`init()` seeds `_raw_measures` from `fast_path_measures` when available and
-derives `_corrected_measures`. A `display_snapshot` contains corrected display
-state, so it can seed only `_corrected_measures`; raw cloud and storage state
-remains at invalid sentinels until a fresh measurement arrives.
+`init()` uses fresh `fast_path_measures` first, or the newest raw RTC cache
+entry on button wake, then derives `_corrected_measures` for the current mode.
+Cached samples retain invalid fields and do not mark the wake measurement
+complete; normal acquisition still runs. If the cache is empty, the saved
+display snapshot seeds presentation only, never `_raw_measures`.
 
 Current readings and chart samples use
 `effective_measurement_corrections(_settings)`: Energy Saving bypasses
