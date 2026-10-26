@@ -1735,7 +1735,6 @@ void DisplayService::_draw_home(const DisplayValues &v) {
   format_pm_value(buf, sizeof(buf), v.pm25_ugm3, v.pm_use_usaqi);
   draw_centered_text(&_u8g2, SCREEN_W / 2, PM_VALUE_BASELINE_Y, buf);
 
-
   // --- CO2 hero section ---
 
   // Dual-font label: "CO2" in Logisoso16 + "(ppm)" in HelvR12
