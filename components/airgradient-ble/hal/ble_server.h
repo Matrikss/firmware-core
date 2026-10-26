@@ -128,15 +128,16 @@ public:
   // start_advertising(). Returns false if the data could not be set.
   virtual bool set_manufacturer_data(const uint8_t *data, size_t len) = 0;
 
-  // Replaces advertising data with one 128-bit Service Data element and
-  // configures a non-connectable, non-discoverable broadcast. Omits Flags,
-  // local name, separate service UUID list, and scan response. uuid must be
-  // canonical hexadecimal UUID text; data must contain 1..13 bytes. Copies
-  // data. Call after init(), while advertising is stopped and no peer is
-  // connected, then set the interval and start advertising. Deinit/reinit
-  // before returning to connectable advertising. On failure, do not start;
-  // retry configuration or deinit. Default unsupported for other backends.
-  virtual bool set_service_broadcast(const char *uuid, const uint8_t *data, size_t len) {
+  // Replaces advertising data with a Complete List of 128-bit Service UUIDs
+  // containing uuid, followed by Manufacturer Specific Data. Configures a
+  // non-connectable, non-discoverable broadcast with no Flags, local name or
+  // scan response. uuid must be canonical hexadecimal UUID text; data contains
+  // 3..11 bytes including a 2-byte little-endian company ID. Copies data.
+  // Call after init(), while advertising is stopped and no peer is connected,
+  // then set the interval and start advertising. Deinit/reinit before returning
+  // to connectable advertising. On failure, retry configuration or deinit;
+  // do not start advertising. Default unsupported for other backends.
+  virtual bool set_service_list_broadcast(const char *uuid, const uint8_t *data, size_t len) {
     (void)uuid;
     (void)data;
     (void)len;

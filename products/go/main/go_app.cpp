@@ -81,7 +81,7 @@ static constexpr uint32_t FAST_PATH_GAS_SAMPLE_INTERVAL_MS = 500;
 static constexpr uint32_t FAST_PATH_LIGHT_SLEEP_MIN_MS = 1000;
 // Leave room for waking and issuing the raw command before conditioning expires.
 static constexpr uint32_t FAST_PATH_GAS_WAKE_MARGIN_MS = 100;
-static constexpr uint32_t FAST_PATH_BLE_ADVERTISING_INTERVAL_US = 300000;
+static constexpr uint32_t FAST_PATH_BLE_ADVERTISING_INTERVAL_US = 50000;
 
 /// A transient BMS communication failure gets one same-boot retry.
 static constexpr uint8_t BMS_INIT_MAX_ATTEMPTS = 2;
@@ -672,11 +672,12 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
         power_snapshot.ship_mode_request == ShipModeRequest::None) {
       MeasuresAGo advertised = ago;
       advertised.power.battery_percentage = power_snapshot.battery_percentage;
-      const auto payload = GoBleAdvertisement::encode(advertised);
+      const auto payload =
+          GoBleAdvertisement::manufacturer_data(GoBleAdvertisement::encode(advertised));
       broadcast = &_board.ble_server();
       if (!broadcast->init("") ||
-          !broadcast->set_service_broadcast(GoBleAdvertisement::SERVICE_UUID, payload.data(),
-                                            payload.size()) ||
+          !broadcast->set_service_list_broadcast(GoBleAdvertisement::SERVICE_UUID, payload.data(),
+                                                 payload.size()) ||
           !broadcast->set_advertising_interval(FAST_PATH_BLE_ADVERTISING_INTERVAL_US) ||
           !broadcast->start_advertising()) {
         AG_LOGW(TAG, "fast-path: BLE broadcast setup failed");
