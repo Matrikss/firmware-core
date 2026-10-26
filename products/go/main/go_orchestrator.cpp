@@ -232,7 +232,8 @@ void Orchestrator::init(WakeCause cause, const BootHandoff &handoff) {
   // Fresh measurements take priority over stale RTC snapshot.
   if (handoff.fast_path_measures != nullptr) {
     _raw_measures = *handoff.fast_path_measures;
-    _corrected_measures = apply_measurement_corrections(_raw_measures, _settings.corrections);
+    _corrected_measures =
+        apply_measurement_corrections(_raw_measures, effective_measurement_corrections(_settings));
   } else if (handoff.display_snapshot != nullptr) {
     // The RTC snapshot contains presentation values, so it can seed the
     // corrected display view but must never become authoritative raw data.
@@ -1047,7 +1048,8 @@ void Orchestrator::on_sensor_data(const MeasuresAGo &data, MeasurementOrigin ori
   _raw_measures.power.battery_voltage = _latest_power.battery_voltage;
   _raw_measures.power.charging_voltage = _latest_power.charging_voltage;
   _raw_measures.power.battery_percentage = _latest_power.battery_percentage;
-  _corrected_measures = apply_measurement_corrections(_raw_measures, _settings.corrections);
+  _corrected_measures =
+      apply_measurement_corrections(_raw_measures, effective_measurement_corrections(_settings));
   _svc.local_api.publish_measurement_snapshot(_corrected_measures);
   AG_LOGI(TAG,
           "Measurement corrections: temp %.2f -> %.2f, humidity %.2f -> %.2f, "
@@ -2234,8 +2236,11 @@ void Orchestrator::apply_settings_runtime_delta(const GoSettings &previous_setti
   }
   _gps_enabled = (_settings.gps_mode != GpsMode::AlwaysOff);
 
-  if (!measurement_corrections_equal(previous_settings.corrections, _settings.corrections)) {
-    _corrected_measures = apply_measurement_corrections(_raw_measures, _settings.corrections);
+  // Recompute before the mode transition renders, even without a new sensor sample.
+  if (mode_changing ||
+      !measurement_corrections_equal(previous_settings.corrections, _settings.corrections)) {
+    _corrected_measures =
+        apply_measurement_corrections(_raw_measures, effective_measurement_corrections(_settings));
     if (!_periph.active && _svc.ui_manager.current_screen() != Screen::AccelTest) {
       if (_corrected_measures.pm_a.is_pm_25_valid()) {
         _svc.led_service.back_update_aqi(_corrected_measures.pm_a.pm_25);
@@ -3380,8 +3385,9 @@ BuildContext Orchestrator::build_context() const {
 
   // Read chart data cache
   uint16_t cache_count = _svc.storage_service.read_cache(_cache_buf, UI_CHART_BUF_SIZE);
+  const auto corrections = effective_measurement_corrections(_settings);
   for (uint16_t i = 0; i < cache_count; ++i) {
-    _cache_buf[i] = apply_measurement_corrections(_cache_buf[i], _settings.corrections);
+    _cache_buf[i] = apply_measurement_corrections(_cache_buf[i], corrections);
   }
 
   // Extract battery data

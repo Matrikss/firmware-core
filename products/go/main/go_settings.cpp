@@ -8,6 +8,15 @@ static constexpr const char *TAG = "Settings";
 
 static constexpr const char *KEY_PENDING_TRACKING_START = "trk_start";
 
+MeasurementCorrections effective_measurement_corrections(const GoSettings &settings) {
+  MeasurementCorrections corrections = settings.corrections;
+  if (settings.operating_mode == OperatingMode::Offline) {
+    corrections.temperature.algorithm = LinearCorrectionAlgorithm::None;
+    corrections.humidity.algorithm = LinearCorrectionAlgorithm::None;
+  }
+  return corrections;
+}
+
 bool pending_tracking_start(ConfigStore &store) {
   bool pending = false;
   return store.get_bool(KEY_PENDING_TRACKING_START, pending) == ConfigStoreResult::OK && pending;
