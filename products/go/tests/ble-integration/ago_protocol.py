@@ -168,7 +168,7 @@ CORRECTION_MAP_KEYS = {"pm25_corr", "temp_corr", "hum_corr"}
 CORRECTION_SCHEMA_VERSION = 1
 PM25_CORRECTION_ALGORITHMS = {
     "none": 0,
-    "epa_2021": 1,
+    # ID 1 remains reserved for EPA 2021; Go rejects it.
     "custom_via_pm25_raw": 2,
 }
 LINEAR_CORRECTION_ALGORITHMS = {"none": 0, "custom": 1}

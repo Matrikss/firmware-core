@@ -135,9 +135,11 @@ delay.
 
 ### Service Broadcasts
 
-`set_service_broadcast(uuid, data, len)` replaces the advertising payload with
-one 128-bit Service Data field containing 1–13 data bytes. It copies the data,
-disables connections and scan responses, and omits Flags and local name.
+`set_service_list_broadcast(uuid, data, len)` advertises one 128-bit UUID in a
+Complete Service UUID List, followed by Manufacturer Specific Data. The data
+contains 3–11 bytes, including a 2-byte little-endian company ID. The UUID list
+supports service-filtered discovery. The method copies the data, disables
+connections and scan responses, and omits Flags and local name.
 Call after `init()` while advertising is stopped and no peer is connected,
 then set the interval and call `start_advertising()`.
 

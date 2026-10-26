@@ -1,4 +1,5 @@
 #include "go_ui.h"
+#include "go_display_chart.h"
 
 #include <cstdio>
 #include <cstring>
@@ -126,10 +127,11 @@ static constexpr uint8_t PAGE_SIZE = 8;
 /// Sentinel deadline: snackbar was just shown, not yet armed.
 static constexpr uint32_t SNACKBAR_PENDING = UINT32_MAX;
 
-/// Selectable metrics in browse order: None, Pm25, Co2, Temp, Humidity.
-static constexpr Metric METRIC_CYCLE[] = {Metric::None, Metric::Pm25, Metric::Co2, Metric::Temp,
-                                          Metric::Humidity};
-static constexpr uint8_t METRIC_CYCLE_LEN = 5;
+// Indexed by the persisted Metric enum, including the no-selection dashboard.
+static const char *const CHART_OPTIONS[] = {"None", "PM2.5", "CO2",      "Temperature", "Humidity",
+                                            "TVOC", "NOx",   "Pressure", "Altitude"};
+static constexpr uint8_t CHART_OPTION_COUNT = sizeof(CHART_OPTIONS) / sizeof(CHART_OPTIONS[0]);
+static_assert(CHART_OPTION_COUNT == static_cast<int>(Metric::Altitude) + 1);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -340,6 +342,10 @@ DisplayValues UIManager::build_values(const BuildContext &ctx) const {
   // --- Screen navigation ---
   v.screen = _screen;
   v.active_metric = _active_metric;
+  v.show_temp_hum = display_temp_hum_for_interval(_setting_measure_interval_seconds);
+  v.pinned_chart = _setting_pinned_chart;
+  if (ctx.locked)
+    v.active_metric = Metric::None;
 
   // --- Populate rows based on current screen ---
   switch (_screen) {
@@ -544,8 +550,13 @@ void UIManager::sync_settings(const GoSettings &s) {
   _setting_units = s.use_fahrenheit ? 1 : 0;
   _setting_altitude_unit = s.use_feet ? 1 : 0;
   _setting_pm_display = s.pm_use_usaqi ? 1 : 0;
+  _setting_pinned_chart = s.pinned_chart;
 
   _setting_measure_interval_seconds = s.measure_interval_seconds;
+  if (!display_temp_hum_for_interval(_setting_measure_interval_seconds) &&
+      (_active_metric == Metric::Temp || _active_metric == Metric::Humidity)) {
+    _active_metric = Metric::None;
+  }
 
   if (_screen == Screen::SettingsChoice && _editing_setting_id == SettingId::MeasureInterval) {
     _settings_choice_index = (uint8_t)(2 + setting_current_option(SettingId::MeasureInterval));
@@ -589,6 +600,7 @@ void UIManager::apply_to_settings(GoSettings &settings) const {
   settings.use_fahrenheit = (_setting_units == 1);
   settings.use_feet = (_setting_altitude_unit == 1);
   settings.pm_use_usaqi = (_setting_pm_display == 1);
+  settings.pinned_chart = _setting_pinned_chart;
 
   settings.measure_interval_seconds = _setting_measure_interval_seconds;
 
@@ -967,17 +979,13 @@ void UIManager::browse_metric(int delta) {
   // when unlocked.  When unlocked the dashboard is always visible
   // (display_off is suppressed by the orchestrator), so browsing is valid.
   //
-  // Cycle through 5 selectable entries: None, Pm25, Co2, Temp, Humidity.
-  // TVOC and NOx remain in the enum but are not selectable.
-  int idx = 0;
-  for (int i = 0; i < METRIC_CYCLE_LEN; ++i) {
-    if (METRIC_CYCLE[i] == _active_metric) {
-      idx = i;
-      break;
-    }
-  }
-  idx = wrap(idx + delta, METRIC_CYCLE_LEN);
-  _active_metric = METRIC_CYCLE[idx];
+  const bool show_temp_hum = display_temp_hum_for_interval(_setting_measure_interval_seconds);
+  int index = static_cast<int>(_active_metric);
+  do {
+    index = wrap(index + delta, CHART_OPTION_COUNT);
+    _active_metric = static_cast<Metric>(index);
+  } while (!show_temp_hum &&
+           (_active_metric == Metric::Temp || _active_metric == Metric::Humidity));
 }
 
 // ---------------------------------------------------------------------------
@@ -987,9 +995,9 @@ void UIManager::browse_metric(int delta) {
 const UIManager::SettingId *UIManager::group_items(Screen screen, uint8_t &count) {
   static constexpr SettingId OPERATIONS[] = {SettingId::MeasureInterval, SettingId::Co2Calibration,
                                              SettingId::GpsMode, SettingId::Buzzer};
-  static constexpr SettingId DISPLAY_TOUCH[] = {SettingId::Units,     SettingId::AltitudeUnit,
-                                                SettingId::PmDisplay, SettingId::AutoLock,
-                                                SettingId::AqiLed,    SettingId::TouchLed};
+  static constexpr SettingId DISPLAY_TOUCH[] = {
+      SettingId::Units,    SettingId::AltitudeUnit, SettingId::PmDisplay, SettingId::PinnedChart,
+      SettingId::AutoLock, SettingId::AqiLed,       SettingId::TouchLed};
   static constexpr SettingId POWER_SAVING[] = {SettingId::WifiPowerSaving};
   static_assert(sizeof(OPERATIONS) / sizeof(OPERATIONS[0]) + 2 <= MAX_LIST_ROWS);
   static_assert(sizeof(DISPLAY_TOUCH) / sizeof(DISPLAY_TOUCH[0]) + 2 <= MAX_LIST_ROWS);
@@ -1019,6 +1027,8 @@ uint8_t UIManager::setting_option_count(SettingId setting_id) const {
     return ALTITUDE_UNIT_COUNT;
   case SettingId::PmDisplay:
     return PM_DISPLAY_COUNT;
+  case SettingId::PinnedChart:
+    return CHART_OPTION_COUNT;
   case SettingId::MeasureInterval: {
     uint8_t option_count = MEASURE_INTERVAL_COUNT;
     if (is_custom_measure_interval(_setting_measure_interval_seconds))
@@ -1054,6 +1064,8 @@ uint8_t UIManager::setting_current_option(SettingId setting_id) const {
     return _setting_altitude_unit;
   case SettingId::PmDisplay:
     return _setting_pm_display;
+  case SettingId::PinnedChart:
+    return static_cast<uint8_t>(_setting_pinned_chart);
   case SettingId::MeasureInterval:
     if (is_custom_measure_interval(_setting_measure_interval_seconds))
       return 0;
@@ -1097,6 +1109,10 @@ void UIManager::apply_setting_choice(uint8_t option_index) {
     break;
   case SettingId::PmDisplay:
     _setting_pm_display = option_index;
+    break;
+  case SettingId::PinnedChart:
+    if (option_index < CHART_OPTION_COUNT)
+      _setting_pinned_chart = static_cast<Metric>(option_index);
     break;
   case SettingId::MeasureInterval:
     if (is_custom_measure_interval(_setting_measure_interval_seconds)) {
@@ -1852,6 +1868,9 @@ void UIManager::populate_settings_group_rows(DisplayValues &v) const {
       (void)snprintf(label, sizeof(label), "PM Display: %s",
                      PM_DISPLAY_OPTIONS[_setting_pm_display]);
       break;
+    case SettingId::PinnedChart:
+      (void)snprintf(label, sizeof(label), "Pinned Chart");
+      break;
     case SettingId::MeasureInterval: {
       const int option_index = measure_interval_option_index(_setting_measure_interval_seconds);
       if (option_index >= 0) {
@@ -1917,6 +1936,9 @@ void UIManager::populate_settings_choice_rows(DisplayValues &v) const {
     break;
   case SettingId::PmDisplay:
     options = PM_DISPLAY_OPTIONS;
+    break;
+  case SettingId::PinnedChart:
+    options = CHART_OPTIONS;
     break;
   case SettingId::GpsMode:
     options = GPS_MODE_OPTIONS;
@@ -2237,81 +2259,5 @@ void UIManager::populate_accel_test_rows(DisplayValues &v, const BuildContext &c
 
 void UIManager::populate_chart(DisplayValues &v, const MeasuresAGo *cache,
                                uint8_t cache_count) const {
-  if (_active_metric == Metric::None || cache == nullptr || cache_count == 0) {
-    v.chart_samples = nullptr;
-    v.chart_count = 0;
-    return;
-  }
-
-  uint8_t valid_count = 0;
-  float min_val = 0.0f;
-  float max_val = 0.0f;
-  bool first = true;
-
-  for (uint8_t i = 0; i < cache_count && i < UI_CHART_BUF_SIZE; ++i) {
-    float sample = 0.0f;
-    bool valid = false;
-
-    switch (_active_metric) {
-    case Metric::Pm25:
-      if (cache[i].pm_a.pm_25 != MeasuresInvalid::PM) {
-        sample = cache[i].pm_a.pm_25;
-        valid = true;
-      }
-      break;
-    case Metric::Co2:
-      if (cache[i].co2.co2 != MeasuresInvalid::CO2) {
-        sample = static_cast<float>(cache[i].co2.co2);
-        valid = true;
-      }
-      break;
-    case Metric::Temp:
-      if (cache[i].temp_hum_a.temperature != MeasuresInvalid::TEMPERATURE) {
-        sample = cache[i].temp_hum_a.temperature;
-        valid = true;
-      }
-      break;
-    case Metric::Humidity:
-      if (cache[i].temp_hum_a.humidity != MeasuresInvalid::HUMIDITY) {
-        sample = cache[i].temp_hum_a.humidity;
-        valid = true;
-      }
-      break;
-    case Metric::Tvoc:
-      if (cache[i].tvoc_nox.tvoc_index != MeasuresInvalid::TVOC) {
-        sample = static_cast<float>(cache[i].tvoc_nox.tvoc_index);
-        valid = true;
-      }
-      break;
-    case Metric::Nox:
-      if (cache[i].tvoc_nox.nox_index != MeasuresInvalid::NOX) {
-        sample = static_cast<float>(cache[i].tvoc_nox.nox_index);
-        valid = true;
-      }
-      break;
-    case Metric::None:
-    default:
-      break;
-    }
-
-    if (valid) {
-      _chart_buf[valid_count] = sample;
-      if (first) {
-        min_val = sample;
-        max_val = sample;
-        first = false;
-      } else {
-        if (sample < min_val)
-          min_val = sample;
-        if (sample > max_val)
-          max_val = sample;
-      }
-      ++valid_count;
-    }
-  }
-
-  v.chart_samples = (valid_count > 0) ? _chart_buf : nullptr;
-  v.chart_count = valid_count;
-  v.chart_min = (valid_count > 0) ? min_val : 0.0f;
-  v.chart_max = (valid_count > 0) ? max_val : 0.0f;
+  populate_display_chart(v, cache, cache_count, _chart_buf);
 }

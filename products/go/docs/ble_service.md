@@ -15,7 +15,7 @@ Offline broadcasts bypass `BleService`; see
 | `products/go/main/go_ble.h` | `BleService` class declaration |
 | `products/go/main/go_ble.cpp` | GATT setup, CBOR encoding, NimBLE callbacks, binary history streaming |
 | `products/go/main/go_ble_protocol.h` | BLE CBOR protocol string constants (`BLE_KEY_*`, `BLE_VAL_*`) shared across BLE and orchestrator |
-| `products/go/main/go_ble_advertisement.h`, `.cpp` | Offline 13-byte measurement encoder and wire constants |
+| `products/go/main/go_ble_advertisement.h`, `.cpp` | Offline 9-byte measurement encoder and wire constants |
 | `products/go/main/go_app.cpp` | Offline broadcast lifecycle around display refresh |
 
 ## Dependencies
@@ -104,16 +104,16 @@ uses the stack defaults.
 ### Offline Broadcast Lifecycle
 
 `GoApp::execute_fast_path()` encodes raw measurements and the latest battery
-percentage, then starts a non-connectable broadcast before synchronous display
-refresh. The interval is 300 ms; the window follows refresh duration (typically
-about 3 seconds), with no additional wait. The display's 10 ms BUSY-poll delays
-allow NimBLE to run. BLE stops and deinitializes before the final sleep decision,
+percentage in the 9-byte v1 payload. It advertises the Offline service UUID
+list and manufacturer data at a **50 ms** interval during synchronous display
+refresh, with no additional wait. The display's 10 ms BUSY-poll delays allow
+NimBLE to run. BLE stops and deinitializes before the final sleep decision,
 which includes BLE setup and teardown time.
 
-Broadcasting is skipped when promotion is already required, a button press is
-latched, or a shutdown request is pending. Setup failures release BLE and allow
-display and sleep handling to continue. These public advertisements require no
-bond and contain no GPS data. See the
+Broadcasting is skipped when deep sleep is not expected, promotion is already
+required, a button press is latched, or a shutdown request is pending. Setup
+failures release BLE and allow display and sleep handling to continue. These
+public advertisements require no bond and contain no GPS data. See the
 [client guide](../go_ble_client.md#offline-measurement-broadcasts) for the payload
 format, deduplication guidance, and listener command.
 
@@ -459,7 +459,6 @@ and notifications, with unchanged coefficients and clear flags. Schema version
 | Algorithm | PM2.5 | Temperature / Humidity |
 |---|---|---|
 | `none` | Yes | Yes |
-| `epa_2021` | Yes | No |
 | `custom_via_pm25_raw` | Yes | No |
 | `custom` | No | Yes |
 

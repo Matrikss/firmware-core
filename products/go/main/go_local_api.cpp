@@ -33,7 +33,6 @@ constexpr const char *GPS_MODE_ALWAYS = "always";
 constexpr int LOCAL_SERVER_CO2_ABC_DAYS_DISABLED = 0;
 
 constexpr const char *CORRECTION_NONE = "none";
-constexpr const char *CORRECTION_EPA_2021 = "epa_2021";
 constexpr const char *CORRECTION_CUSTOM_PM25 = "custom_via_pm25_raw";
 constexpr const char *CORRECTION_CUSTOM_LINEAR = "custom";
 
@@ -62,12 +61,6 @@ bool take_finite_float(const std::optional<float> &source, float &destination) {
 CorrectionEntry make_pm25_correction(const Pm25Correction &correction) {
   CorrectionEntry entry{};
   switch (correction.algorithm) {
-  case Pm25CorrectionAlgorithm::None:
-    entry.algorithm = CORRECTION_NONE;
-    break;
-  case Pm25CorrectionAlgorithm::Epa2021:
-    entry.algorithm = CORRECTION_EPA_2021;
-    break;
   case Pm25CorrectionAlgorithm::CustomViaPm25Raw:
   case Pm25CorrectionAlgorithm::FactoryCalibration: {
     entry.algorithm = CORRECTION_CUSTOM_PM25;
@@ -77,6 +70,10 @@ CorrectionEntry make_pm25_correction(const Pm25Correction &correction) {
     entry.slr = slr;
     break;
   }
+  case Pm25CorrectionAlgorithm::None:
+  default:
+    entry.algorithm = CORRECTION_NONE;
+    break;
   }
   return entry;
 }
@@ -682,15 +679,6 @@ bool GoLocalApiService::translate_pm25_correction(const CorrectionEntry &entry,
       return false;
     }
     correction = Pm25Correction{};
-    return true;
-  }
-
-  if (entry.algorithm == CORRECTION_EPA_2021) {
-    if (entry.slr.has_value()) {
-      return false;
-    }
-    correction = Pm25Correction{};
-    correction.algorithm = Pm25CorrectionAlgorithm::Epa2021;
     return true;
   }
 

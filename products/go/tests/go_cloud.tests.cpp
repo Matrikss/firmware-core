@@ -403,6 +403,29 @@ TEST_CASE("FETCH parses supported corrections independently", "[CloudService][fe
   REQUIRE(payload.update.corrections.humidity.algorithm == LinearCorrectionAlgorithm::None);
 }
 
+TEST_CASE("FETCH ignores EPA while retaining valid configuration fields",
+          "[CloudService][fetch][correction]") {
+  CloudFixture f;
+  const char body[] =
+      R"({"measurementInterval":17,"corrections":{"pm02":{"correctionAlgorithm":"epa_2021"},"atmp":{"correctionAlgorithm":"custom","slr":{"intercept":2,"scalingFactor":1}}}})";
+  cloud_spy::fetch_body_to_write = body;
+  cloud_spy::fetch_bytes_to_write = std::strlen(body);
+
+  A::set_armed(f.cloud, true);
+  A::set_was_armed(f.cloud, true);
+  A::set_post_due(f.cloud, 999'999'999);
+  A::set_fetch_due(f.cloud, 0);
+  A::run_once(f.cloud, 1000);
+
+  const FetchConfigEventPayload &payload = f.mock_rtos.last_event.fetch_config;
+  REQUIRE(payload.result == static_cast<uint8_t>(AgClientResult::Ok));
+  CHECK_FALSE(has_go_config_field(payload.update.update_mask, GoConfigField::Pm25Correction));
+  CHECK(has_go_config_field(payload.update.update_mask, GoConfigField::MeasurementInterval));
+  CHECK(has_go_config_field(payload.update.update_mask, GoConfigField::TemperatureCorrection));
+  CHECK(payload.update.measure_interval_seconds == 17);
+  CHECK(payload.update.corrections.temperature.intercept == 2.0f);
+}
+
 TEST_CASE("FETCH ignores the retired Go custom PM EPA flag", "[CloudService][fetch][correction]") {
   CloudFixture f;
   const char body[] =

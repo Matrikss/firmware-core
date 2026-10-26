@@ -18,7 +18,7 @@ functions for load/save.
 |---|---|---|
 | `ConfigStore` | `airgradient-config` (`hal/config_store.h`) | Typed key-value persistence interface |
 | `NvsConfigStore` | `airgradient-config` (`backends/nvs_config_store.h`) | ESP-IDF NVS-backed implementation injected at construction |
-| `OperatingMode`, `GpsMode` | product (`go_types.h`) | Enums serialized as int and reconstructed on load |
+| `Metric`, `OperatingMode`, `GpsMode` | product (`go_types.h`) | Enums serialized as int and reconstructed on load |
 | `ConfigurationControl`, `GoConfigSource` | product (`go_config_types.h`) | Persisted remote-writer authority and shared source gate |
 | `WifiStaticIpConfig` | `airgradient-wifi` (`types/wifi_types.h`) | Five-uint32 static-IP record persisted alongside the other settings |
 
@@ -39,6 +39,7 @@ See [`go_settings.h`](../main/go_settings.h) for full signatures.
 | `use_fahrenheit` | `"uf"` | `bool` | `false` | — | Temperature display unit (false=C, true=F) |
 | `use_feet` | `"auf"` | `bool` | `false` | — | Altitude display unit (false=m, true=ft); stored altitude remains meters |
 | `pm_use_usaqi` | `"pmu"` | `bool` | `false` | — | PM display format (false=µg/m³, true=USAQI) |
+| `pinned_chart` | `"pchart"` | `int` (stored) / `Metric` (in struct) | `Pm25` (1) | 0 .. 8 | UI-only Pinned Chart choice; None (0) disables the automatic chart |
 | `gps_mode` | `"gpm"` | `int` (stored) / `GpsMode` (in struct) | `OnWhenTracking` (1) | 0 .. 2 | GPS operating mode: AlwaysOff / OnWhenTracking / AlwaysOn |
 | `operating_mode` | `"opm"` | `int` (stored) / `OperatingMode` (in struct) | `Portable` (0) | 0 .. 2 | Serialized as int; cast to `OperatingMode` on load |
 | `auto_lock_seconds` | `"als"` | `int` | `10` | 0, 10, 30, 60 | Runtime auto-lock timeout; `0` = disabled |
@@ -68,22 +69,38 @@ selected `Custom (<seconds>s)` row.
 Changing an unrelated UI setting preserves the custom interval. Selecting one
 of the fixed interval choices explicitly replaces it.
 
+### Pinned Chart
+
+Persisted identifiers are None (0), PM2.5 (1), CO2 (2), Temperature (3), Humidity
+(4), TVOC (5), NOx (6), Pressure (7), and Altitude (8). Missing or invalid values
+load as PM2.5; invalid choices are rejected on save. The UI exposes this setting
+under Display & Touch; remote configuration interfaces do not expose it.
+
+The preference survives interval changes, even when Temperature or Humidity
+cannot be shown below 300 seconds. See [Pinned Charts](ui_manager.md#pinned-charts).
+
 ### Measurement Corrections
 
-`GoSettings::corrections` contains the complete active correction set for PM2.5,
+`GoSettings::corrections` contains the complete configured correction set for PM2.5,
 temperature, and humidity. Algorithms and coefficients are persisted as a
 group per measure. Float coefficients use the shared `ConfigStore` four-byte
 IEEE-754 blob accessors.
 
+`effective_measurement_corrections(settings)` selects a copy for rendering and
+derived readings. Energy Saving bypasses temperature and humidity corrections;
+Portable and Stationary apply the saved algorithms. PM2.5 correction remains
+active in all modes. Mode changes never erase saved coefficients. See
+[Operating Mode](measurement_corrections.md#operating-mode).
+
 | Measure | Supported algorithms | Required custom values |
 |---|---|---|
-| PM2.5 | `none`, `epa_2021`, `custom_via_pm25_raw` | `intercept`, `scalingFactorViaPm25` |
+| PM2.5 | `none`, `custom_via_pm25_raw` | `intercept`, `scalingFactorViaPm25` |
 | Temperature | `none`, `custom` | `intercept`, `scalingFactor` |
 | Humidity | `none`, `custom` | `intercept`, `scalingFactor` |
 
 Missing or invalid algorithms fall back to `none`. A custom correction is
 active only when every required coefficient is present and finite. PM2.5
-`none` and `epa_2021` do not require persisted coefficients and load with
+`none` does not require persisted coefficients and loads with
 identity parameters. Factory reset writes the default all-`none` correction
 set. Go ignores the retired `useEpa2021` custom-PM option and does not read or
 write its former `mc_pe` NVS key.

@@ -7,7 +7,7 @@
  *                   Back/Exit transitions, cursor positions after return.
  *
  * Metric cycling  — browse_metric via TouchUp/Down on Home screen, wrapping
- *                   through None → Pm25 → Co2 → Temp → Humidity.
+ *                   through all eligible metrics and the no-selection dashboard.
  *
  * Settings choice — open choice screen, apply selection, verify
  *                   UIAction::SettingsChanged returned.
@@ -154,7 +154,7 @@ TEST_CASE("UIManager: agreed menu hierarchy", "[UIManager][nav][redesign]") {
   double_press(ui);
   open_row(ui, "Display & Touch");
   check_rows(ui, {"Exit", "Back", "Temperature Unit: C", "Altitude Unit: m", "PM Display: ug/m3",
-                  "Auto Lock: Off", "AQI LED: Off", "Touch LED: Off"});
+                  "Pinned Chart", "Auto Lock: Off", "AQI LED: Off", "Touch LED: Off"});
   double_press(ui);
   open_row(ui, "Power Saving");
   check_rows(ui, {"Exit", "Back", "Wi-Fi Power Saving"});
@@ -404,7 +404,7 @@ TEST_CASE("UIManager: grouped menus wrap and return to their parent",
   const MenuCase cases[] = {
       {nullptr, Screen::Settings, "Operations", "About Device", 9},
       {"Operations", Screen::Operations, "Measure Int.", "Buzzer: Off", 6},
-      {"Display & Touch", Screen::DisplayTouch, "Temperature Unit: C", "Touch LED: Off", 8},
+      {"Display & Touch", Screen::DisplayTouch, "Temperature Unit: C", "Touch LED: Off", 9},
       {"Power Saving", Screen::PowerSaving, "Wi-Fi Power Saving", "Wi-Fi Power Saving", 3},
       {"Hardware Test", Screen::HardwareTest, "Peripheral Test", "Play Melody", 7},
   };
@@ -480,6 +480,9 @@ TEST_CASE("UIManager: TagList wrap-around navigation", "[UIManager][nav][taglist
 
 TEST_CASE("UIManager: metric cycling on Home", "[UIManager][metric]") {
   UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings{};
+  settings.measure_interval_seconds = 300;
+  ui.sync_settings(settings);
 
   SECTION("starts with Metric::None") {
     auto ctx = make_default_ctx();
@@ -496,15 +499,15 @@ TEST_CASE("UIManager: metric cycling on Home", "[UIManager][metric]") {
     CHECK(v.active_metric == Metric::Pm25);
   }
 
-  SECTION("TouchUp from None wraps to Humidity") {
-    press(ui, InputSource::TouchUp); // None → Humidity (wraps backward)
+  SECTION("TouchUp from None wraps to Altitude") {
+    press(ui, InputSource::TouchUp); // None → Altitude (wraps backward)
 
     auto ctx = make_default_ctx();
     DisplayValues v = ui.build_values(ctx);
-    CHECK(v.active_metric == Metric::Humidity);
+    CHECK(v.active_metric == Metric::Altitude);
   }
 
-  SECTION("full forward cycle: None → Pm25 → Co2 → Temp → Humidity → None") {
+  SECTION("full forward cycle includes all eight measurements") {
     auto check_metric = [&](Metric expected) {
       auto ctx = make_default_ctx();
       DisplayValues v = ui.build_values(ctx);
@@ -520,6 +523,10 @@ TEST_CASE("UIManager: metric cycling on Home", "[UIManager][metric]") {
     check_metric(Metric::Temp);
     press(ui, InputSource::TouchDown);
     check_metric(Metric::Humidity);
+    for (auto metric : {Metric::Tvoc, Metric::Nox, Metric::Pressure, Metric::Altitude}) {
+      press(ui, InputSource::TouchDown);
+      check_metric(metric);
+    }
     press(ui, InputSource::TouchDown);
     check_metric(Metric::None); // wraps
   }
@@ -1470,6 +1477,10 @@ TEST_CASE("UIManager: build_values passes altitude unit through", "[UIManager][s
 
 TEST_CASE("UIManager: chart extraction from MeasuresAGo cache", "[UIManager][chart]") {
   UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings{};
+  settings.measure_interval_seconds = 300;
+  settings.pinned_chart = Metric::None;
+  ui.sync_settings(settings);
 
   SECTION("no metric selected — no chart data") {
     MeasuresAGo cache[2]{};
@@ -2372,4 +2383,265 @@ TEST_CASE("UIManager: provisioning_ap_ssid is built from serial number",
   DisplayValues v = ui.build_values(make_default_ctx());
   REQUIRE(v.provisioning_ap_ssid != nullptr);
   CHECK(std::string(v.provisioning_ap_ssid) == "airgradient-AABBCCDDEEFF");
+}
+
+TEST_CASE("UIManager: interval boundary controls the compact home layout", "[UIManager][chart]") {
+  Measures sensors{};
+  sensors.temp_hum_a.temperature = 26.0f;
+  sensors.temp_hum_a.humidity = 45.0f;
+  MeasuresAGo cache[2]{};
+  cache[0].pm_a.pm_25 = 10.0f;
+  cache[1].pm_a.pm_25 = 20.0f;
+  BuildContext ctx{.sensor_data = sensors};
+  ctx.cache = cache;
+  ctx.cache_count = 2;
+  ctx.locked = true;
+
+  for (int interval : {1, 60, 299, 300, 301}) {
+    CAPTURE(interval);
+    UIManager ui(DEFAULT_UI_CONFIG);
+    GoSettings settings{};
+    settings.measure_interval_seconds = interval;
+    ui.sync_settings(settings);
+    const auto v = ui.build_values(ctx);
+    CHECK(v.show_temp_hum == (interval >= 300));
+    CHECK(v.active_metric == Metric::None);
+    CHECK(v.chart_metric() == Metric::Pm25);
+    CHECK(v.chart_count == 2);
+    // Visibility never invalidates readings or mutates the source data.
+    CHECK(v.temperature_c == 26.0f);
+    CHECK(v.humidity_pct == 45.0f);
+    CHECK(sensors.temp_hum_a.temperature == 26.0f);
+    CHECK(sensors.temp_hum_a.humidity == 45.0f);
+  }
+}
+
+TEST_CASE("UIManager: compact browsing and locking reset to the default PM chart",
+          "[UIManager][metric]") {
+  UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings{};
+  settings.measure_interval_seconds = 60;
+  ui.sync_settings(settings);
+  MeasuresAGo cache[2]{};
+  cache[0].pm_a.pm_25 = 10.0f;
+  cache[1].pm_a.pm_25 = 30.0f;
+  cache[0].co2.co2 = 500;
+  cache[1].co2.co2 = 800;
+  auto ctx = make_default_ctx();
+  ctx.cache = cache;
+  ctx.cache_count = 2;
+
+  auto v = ui.build_values(ctx);
+  CHECK(v.active_metric == Metric::None);
+  CHECK(v.chart_metric() == Metric::Pm25);
+  CHECK(v.chart_min == 10.0f);
+  CHECK(v.chart_max == 30.0f);
+  press(ui, InputSource::TouchDown);
+  CHECK(ui.build_values(ctx).active_metric == Metric::Pm25);
+  press(ui, InputSource::TouchDown);
+  v = ui.build_values(ctx);
+  CHECK(v.active_metric == Metric::Co2);
+  CHECK(v.chart_metric() == Metric::Co2);
+  CHECK(v.chart_min == 500.0f);
+  CHECK(v.chart_max == 800.0f);
+  for (auto metric : {Metric::Tvoc, Metric::Nox, Metric::Pressure, Metric::Altitude}) {
+    press(ui, InputSource::TouchDown);
+    CHECK(ui.build_values(ctx).active_metric == metric);
+  }
+  press(ui, InputSource::TouchDown);
+  CHECK(ui.build_values(ctx).active_metric == Metric::None);
+  press(ui, InputSource::TouchUp);
+  CHECK(ui.build_values(ctx).active_metric == Metric::Altitude);
+
+  // Even before navigation reset, a locked view cannot retain another metric chart.
+  ctx.locked = true;
+  v = ui.build_values(ctx);
+  CHECK(v.active_metric == Metric::None);
+  CHECK(v.chart_metric() == Metric::Pm25);
+  CHECK(v.chart_min == 10.0f);
+  CHECK(v.chart_max == 30.0f);
+  ui.reset_to_home(); // Existing orchestrator lock behavior.
+  ctx.locked = false;
+  CHECK(ui.build_values(ctx).active_metric == Metric::None);
+  CHECK(ui.build_values(ctx).chart_metric() == Metric::Pm25);
+}
+
+TEST_CASE("UIManager: interval changes remove hidden metric focus", "[UIManager][metric]") {
+  for (int selected_steps : {3, 4}) {
+    UIManager ui(DEFAULT_UI_CONFIG);
+    GoSettings settings{};
+    settings.measure_interval_seconds = 300;
+    ui.sync_settings(settings);
+    auto ctx = make_default_ctx();
+    for (int i = 0; i < selected_steps; ++i)
+      press(ui, InputSource::TouchDown);
+    REQUIRE(ui.build_values(ctx).active_metric ==
+            (selected_steps == 3 ? Metric::Temp : Metric::Humidity));
+    settings.measure_interval_seconds = 299;
+    ui.sync_settings(settings);
+    CHECK_FALSE(ui.build_values(ctx).show_temp_hum);
+    CHECK(ui.build_values(ctx).active_metric == Metric::None);
+    CHECK(ui.build_values(ctx).chart_metric() == Metric::Pm25);
+    settings.measure_interval_seconds = 300;
+    ui.sync_settings(settings);
+    CHECK(ui.build_values(ctx).show_temp_hum);
+    CHECK(ui.build_values(ctx).chart_metric() == Metric::Pm25);
+    press(ui, InputSource::TouchUp);
+    CHECK(ui.build_values(ctx).active_metric == Metric::Altitude);
+  }
+}
+
+TEST_CASE("UIManager: default PM chart handles empty and invalid history", "[UIManager][chart]") {
+  UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings{};
+  settings.measure_interval_seconds = 60;
+  ui.sync_settings(settings);
+  auto ctx = make_default_ctx();
+  auto v = ui.build_values(ctx);
+  CHECK(v.chart_samples == nullptr);
+  CHECK(v.chart_count == 0);
+
+  MeasuresAGo cache[4]{};
+  cache[1].pm_a.pm_25 = std::numeric_limits<float>::quiet_NaN();
+  cache[2].pm_a.pm_25 = std::numeric_limits<float>::infinity();
+  ctx.cache = cache;
+  ctx.cache_count = 4;
+  v = ui.build_values(ctx);
+  CHECK(v.chart_samples == nullptr);
+  CHECK(v.chart_count == 0);
+  cache[3].pm_a.pm_25 = 12.0f;
+  v = ui.build_values(ctx);
+  REQUIRE(v.chart_samples != nullptr);
+  CHECK(v.chart_count == 1);
+  CHECK(v.chart_samples[0] == 12.0f);
+  CHECK(v.chart_min == 12.0f);
+  CHECK(v.chart_max == 12.0f);
+}
+
+TEST_CASE("UIManager: pinned chart is independent of browsing and lock state",
+          "[UIManager][chart]") {
+  for (int interval : {60, 300}) {
+    UIManager ui(DEFAULT_UI_CONFIG);
+    GoSettings settings{};
+    settings.measure_interval_seconds = interval;
+    settings.pinned_chart = Metric::Co2;
+    ui.sync_settings(settings);
+    auto ctx = make_default_ctx();
+    auto v = ui.build_values(ctx);
+    CHECK(v.chart_metric() == Metric::Co2);
+    CHECK_FALSE(v.browsing_chart());
+    press(ui, InputSource::TouchDown);
+    v = ui.build_values(ctx);
+    CHECK(v.chart_metric() == Metric::Pm25);
+    CHECK(v.browsing_chart());
+    GoSettings saved{};
+    ui.apply_to_settings(saved);
+    CHECK(saved.pinned_chart == Metric::Co2);
+    ctx.locked = true;
+    v = ui.build_values(ctx);
+    CHECK(v.chart_metric() == Metric::Co2);
+    CHECK_FALSE(v.browsing_chart());
+    ui.reset_to_home();
+    ctx.locked = false;
+    CHECK(ui.build_values(ctx).chart_metric() == Metric::Co2);
+    CHECK_FALSE(ui.build_values(ctx).browsing_chart());
+
+    settings.pinned_chart = Metric::None;
+    ui.sync_settings(settings);
+    CHECK(ui.build_values(ctx).chart_metric() == Metric::None);
+    ctx.locked = true;
+    CHECK(ui.build_values(ctx).chart_metric() == Metric::None);
+    ctx.locked = false;
+    press(ui, InputSource::TouchDown);
+    CHECK(ui.build_values(ctx).chart_metric() == Metric::Pm25);
+  }
+}
+
+TEST_CASE("UIManager: hidden pinned chart returns when the interval permits it",
+          "[UIManager][chart]") {
+  for (auto metric : {Metric::Temp, Metric::Humidity}) {
+    UIManager ui(DEFAULT_UI_CONFIG);
+    GoSettings settings{};
+    settings.pinned_chart = metric;
+    for (int interval : {300, 299, 301}) {
+      settings.measure_interval_seconds = interval;
+      ui.sync_settings(settings);
+      for (bool locked : {true, false}) {
+        auto ctx = make_default_ctx();
+        ctx.locked = locked;
+        const auto v = ui.build_values(ctx);
+        CHECK(v.chart_metric() == (interval < 300 ? Metric::None : metric));
+        CHECK_FALSE(v.browsing_chart());
+      }
+      GoSettings saved{};
+      ui.apply_to_settings(saved);
+      CHECK(saved.pinned_chart == metric);
+    }
+  }
+}
+
+TEST_CASE("UIManager: Pinned Chart menu scrolls to every choice and applies None",
+          "[UIManager][settings]") {
+  UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings{};
+  settings.pinned_chart = Metric::Altitude;
+  ui.sync_settings(settings);
+  go_to_group(ui, "Display & Touch");
+  open_row(ui, "Pinned Chart");
+  auto ctx = make_default_ctx();
+  auto v = ui.build_values(ctx);
+  REQUIRE(v.selected_row < v.row_count);
+  CHECK(std::string(v.rows[v.selected_row].text) == "Altitude");
+  CHECK(v.row_count <= MAX_LIST_ROWS);
+  // The last option is beyond the first page, and must still be selectable.
+  CHECK(press(ui, InputSource::TouchEnter).action == UIAction::SettingsChanged);
+  open_row(ui, "Pinned Chart");
+  select_row(ui, "None");
+  CHECK(press(ui, InputSource::TouchEnter).action == UIAction::SettingsChanged);
+  GoSettings saved{};
+  ui.apply_to_settings(saved);
+  CHECK(saved.pinned_chart == Metric::None);
+  CHECK(ui.current_screen() == Screen::DisplayTouch);
+}
+
+TEST_CASE("UIManager: every chart extracts its own valid history", "[UIManager][chart]") {
+  MeasuresAGo cache[3]{};
+  cache[0].pm_a.pm_25 = 12.0f;
+  cache[0].co2.co2 = 650;
+  cache[0].temp_hum_a = {21.0f, 45.0f};
+  cache[0].tvoc_nox.tvoc_index = 110;
+  cache[0].tvoc_nox.nox_index = 8;
+  cache[0].pressure = {1013.0f, -42.0f};
+  cache[2] = cache[0];
+  cache[2].pressure.altitude = 100.0f;
+  const float expected[] = {12.0f, 650.0f, 21.0f, 45.0f, 110.0f, 8.0f, 1013.0f, -42.0f};
+  UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings{};
+  settings.measure_interval_seconds = 300;
+  ui.sync_settings(settings);
+  auto ctx = make_default_ctx();
+  ctx.cache = cache;
+  ctx.cache_count = 3;
+  for (int i = 0; i < 8; ++i) {
+    press(ui, InputSource::TouchDown);
+    auto v = ui.build_values(ctx);
+    CAPTURE(i);
+    CHECK(v.chart_metric() == static_cast<Metric>(i + 1));
+    REQUIRE(v.chart_samples != nullptr);
+    REQUIRE(v.chart_count == 2);
+    CHECK(v.chart_samples[0] == expected[i]);
+    CHECK(v.chart_min == expected[i]);
+    CHECK(v.chart_max == (i == 7 ? 100.0f : expected[i]));
+  }
+  // Pressure remains chartable when altitude alone fails validation.
+  cache[0].pressure.altitude = MeasuresInvalid::ALTITUDE;
+  cache[2].pressure.altitude = std::numeric_limits<float>::quiet_NaN();
+  auto v = ui.build_values(ctx);
+  CHECK(v.chart_count == 0);
+  CHECK(v.chart_samples == nullptr);
+  press(ui, InputSource::TouchUp);
+  v = ui.build_values(ctx);
+  CHECK(v.chart_metric() == Metric::Pressure);
+  CHECK(v.chart_count == 2);
+  CHECK(v.chart_min == 1013.0f);
 }

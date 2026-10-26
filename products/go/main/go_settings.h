@@ -16,6 +16,7 @@ struct GoSettings {
   bool use_fahrenheit = false;
   bool use_feet = false;
   bool pm_use_usaqi = false;
+  Metric pinned_chart = Metric::Pm25;
 
   // --- GPS ---
   GpsMode gps_mode = GpsMode::OnWhenTracking;
@@ -51,6 +52,8 @@ struct GoSettings {
 };
 
 GoSettings load_go_settings(ConfigStore &store);
+// Select corrections for the current mode without changing saved calibration.
+MeasurementCorrections effective_measurement_corrections(const GoSettings &settings);
 bool is_go_settings_valid(const GoSettings &settings);
 bool save_go_settings(ConfigStore &store, const GoSettings &settings);
 void print_settings(const GoSettings &settings);

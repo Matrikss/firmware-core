@@ -33,6 +33,7 @@
 #include <cstring>
 #include <map>
 #include <set>
+#include <vector>
 
 // ============================================================================
 // test_spy — observable state written by stubs, read by test assertions
@@ -99,6 +100,7 @@ bool led_touch_bright_seen = false;
 // --- StorageService ---
 bool cache_measurement_called = false;
 MeasuresAGo last_cached_measurement{};
+std::vector<MeasuresAGo> cached_measurements;
 bool route_started = false; ///< set when create_route() runs successfully
 bool route_resumed = false; ///< set when resume_route() runs successfully
 uint32_t route_session_id = 0;
@@ -325,6 +327,7 @@ void reset() {
   led_touch_bright_seen = false;
 
   cache_measurement_called = false;
+  cached_measurements.clear();
   last_cached_measurement = MeasuresAGo{};
   route_started = false;
   route_resumed = false;
@@ -631,11 +634,21 @@ uint16_t StorageService::read_cached_field(CacheField /*field*/, float * /*out*/
   return 0;
 }
 
-uint16_t StorageService::read_cache(MeasuresAGo * /*out*/, uint16_t /*max_count*/) const {
-  return 0;
+uint16_t StorageService::read_cache(MeasuresAGo *out, uint16_t max_count) const {
+  const auto count = std::min<size_t>(max_count, test_spy::cached_measurements.size());
+  std::copy_n(test_spy::cached_measurements.begin(), count, out);
+  return static_cast<uint16_t>(count);
 }
 
 uint16_t StorageService::cached_count() const { return 0; }
+
+bool StorageService::read_latest_cached_measurement(MeasuresAGo &out) const {
+  if (test_spy::cached_measurements.empty()) {
+    return false;
+  }
+  out = test_spy::cached_measurements.back();
+  return true;
+}
 
 void StorageService::backup_cache() const { test_spy::cache_backed_up = true; }
 

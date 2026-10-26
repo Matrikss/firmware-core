@@ -15,7 +15,7 @@ measurement transports retain raw sensor values.
 | [`go_cloud.cpp`](../main/go_cloud.cpp) | AirGradient cloud wire parsing into `GoConfigUpdate` |
 | [`go_local_api.cpp`](../main/go_local_api.cpp) | Local API mapping, semantic validation, and translation into `GoConfigUpdate` |
 | [`serial_command.cpp`](../main/serial_command/serial_command.cpp) | Manufacturing USB command parser and typed correction requests |
-| [`go_settings.cpp`](../main/go_settings.cpp) | Grouped correction persistence and boot-time loading |
+| [`go_settings.cpp`](../main/go_settings.cpp) | Grouped correction persistence, boot-time loading, and operating-mode policy |
 | [`go_orchestrator.cpp`](../main/go_orchestrator.cpp) | Persist-before-activate updates and raw/corrected consumer routing |
 | [`go_app.cpp`](../main/go_app.cpp) | Offline timer-wake fast-path correction |
 
@@ -40,6 +40,7 @@ measurement transports retain raw sensor values.
 | `are_measurement_corrections_valid()` | Validate the complete correction set before persistence or activation |
 | `measurement_corrections_equal()` | Detect whether the corrected presentation must be recomputed |
 | `apply_measurement_corrections()` | Copy a raw `MeasuresAGo` and replace only corrected PM2.5, temperature, and humidity fields |
+| `effective_measurement_corrections(settings)` | Return a correction copy selected for the Go operating mode without changing saved calibration |
 | `GoConfigUpdate` | Queue-copyable partial update shared by cloud fetch and the local API adapter |
 | `GET /api/v1/config` | Return the active corrections using local API names and canonical shapes |
 | `PUT /api/v1/config` | Submit a partial local correction update for validation and queued application |
@@ -59,7 +60,6 @@ Algorithm and property names are case-sensitive.
 | Measure | Algorithm | Behavior |
 |---|---|---|
 | PM2.5 | `none` | Preserve valid raw PM2.5 |
-| PM2.5 | `epa_2021` | Apply the EPA 2021 piecewise correction using raw averaged PM2.5 and raw averaged humidity |
 | PM2.5 | `custom_via_pm25_raw` | Apply a linear scale and intercept to raw PM2.5 |
 | PM2.5 | `factory_calibration` | Same linear transform; selected through Cloud or USB Serial |
 | Temperature | `none` | Preserve valid raw temperature |
@@ -68,38 +68,19 @@ Algorithm and property names are case-sensitive.
 | Humidity | `custom` | Apply `scaling factor * raw + intercept` |
 
 Both linear PM algorithms preserve an exact raw zero and clamp negative results
-to zero. Go ignores `useEpa2021` for both. The shared component still supports
-an optional EPA stage after either linear algorithm. Temperature conversion to
+to zero. Go ignores `useEpa2021` for both. Temperature conversion to
 Fahrenheit and presentation rounding happen after correction.
 
-For the EPA transform, let `p` be PM2.5 and `h` be raw relative humidity clamped
-to its valid range. The implemented piecewise equations are:
+### Operating Mode
 
-```text
-p == 0:
-  0
+`effective_measurement_corrections()` bypasses temperature and humidity
+corrections in Energy Saving (`OperatingMode::Offline`). Portable and Stationary
+apply the saved algorithms. PM2.5 correction stays active in every mode.
 
-p < 30:
-  0.524p - 0.0862h + 5.75
-
-30 <= p < 50, x = 0.05p - 1.5:
-  (0.786x + 0.524(1 - x))p - 0.0862h + 5.75
-
-50 <= p < 210:
-  0.786p - 0.0862h + 5.75
-
-210 <= p < 260, y = 0.02p - 4.2:
-  (0.69y + 0.786(1 - y))p - 0.0862h(1 - y)
-  + 2.966y + 5.75(1 - y) + 8.84e-4p²y
-
-p >= 260:
-  2.966 + 0.69p + 8.84e-4p²
-```
-
-The final result is floored at zero. The source of truth remains
-[`measurement_corrections.cpp`](../../../components/airgradient-common/measurement_corrections.cpp).
-Tests exercise the boundary inputs and PM custom zero behavior; exact expected
-EPA values are not asserted at every boundary.
+This policy applies to live readings, charts, and timer-wake rendering.
+Mode changes recalculate available raw readings before the display update;
+charts use the current mode for all cached samples. Unit conversion and
+rounding still apply. Saved calibration and raw history remain unchanged.
 
 ### Wire Names and Shapes
 
@@ -124,7 +105,6 @@ Local API algorithm shapes are:
 
 - `none` requires no SLR parameters. `slr` is absent or null, and GET emits it
   as null.
-- PM2.5 `epa_2021` has the same no-SLR shape.
 - PM2.5 `custom_via_pm25_raw` requires finite, float-representable
   `intercept` and `scalingFactor` numbers. The shared Local API schema accepts
   `useEpa2021`, but Go ignores it and omits it from GET responses.
@@ -134,8 +114,8 @@ Local API algorithm shapes are:
 The cloud parser tolerates unrelated root, correction-entry, and SLR fields,
 but the supported values retain strict types and required names. Cloud PM2.5
 custom and factory inputs require `scalingFactorViaPm25`; `scalingFactor` is not
-an alias. Linear inputs require both coefficients, while `none` and `epa_2021`
-ignore `slr`. Go ignores `useEpa2021` when it is present. A malformed cloud measure
+an alias. Linear inputs require both coefficients, while `none`
+ignores `slr`. Go ignores `useEpa2021` when it is present. A malformed cloud measure
 leaves only that measure's update bit clear, so valid siblings remain
 applicable.
 
@@ -196,8 +176,6 @@ that field's existing invalid sentinel in the corrected copy.
 Temperature and humidity results outside their valid ranges become invalid
 sentinels. PM2.5 results are floored at zero without a separate finite or
 overflow check. Interfaces and persisted loading validate finite coefficients.
-EPA correction with invalid raw humidity falls back to the original valid
-raw PM2.5.
 
 ### Consumer Ownership
 
@@ -229,8 +207,10 @@ ownership. Raw BLE history export is verified in
 The locked Offline timer-wake path loads persisted `GoSettings` before sensor
 measurement and does not construct the cloud service or orchestrator. It keeps
 the one-shot measurement raw for the RTC measurement cache and route append,
-then `build_fast_path_display()` applies the same shared transform to a copy for
-the e-paper frame.
+then `build_fast_path_display()` applies the shared transform with the effective
+Go corrections to a copy for the e-paper frame. Temperature and humidity stay
+raw in Energy Saving, including chart history; PM2.5 keeps its configured
+correction.
 
 If the fast path promotes to interactive operation, its boot handoff carries
 the raw measurement. The orchestrator derives a fresh corrected view from that
@@ -239,6 +219,13 @@ state and can seed the display after wake, but it never seeds the authoritative
 raw snapshot. See [`go_app.tests.cpp`](../tests/go_app.tests.cpp) for fast-path
 presentation coverage and [`go_orchestrator.tests.cpp`](../tests/go_orchestrator.tests.cpp)
 for raw handoff and RTC snapshot isolation.
+
+### Button-Wake Initialization
+
+Button wake restores the newest raw RTC cache sample, allowing mode changes to
+reapply corrections before a fresh measurement arrives. Fast-path handoff data
+takes priority. An empty cache uses the saved display snapshot for presentation
+only. Normal acquisition still runs and replaces the restored reading.
 
 ## Edge Cases / Errors
 
@@ -255,6 +242,5 @@ for raw handoff and RTC snapshot isolation.
 - Invalid or incomplete persisted custom or factory groups fall back to `none` per
   measure, without disabling valid sibling groups.
 - Temperature and humidity are not clamped into range.
-- EPA correction with invalid raw humidity retains valid raw PM2.5.
 - A settings write or commit failure retains the previous in-memory settings
   and corrected presentation.

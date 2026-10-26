@@ -112,6 +112,7 @@ extern GpsData gps_data_to_return;
 extern bool input_started;
 extern bool cache_measurement_called;
 extern MeasuresAGo last_cached_measurement;
+extern std::vector<MeasuresAGo> cached_measurements;
 extern bool route_started;
 extern bool create_route_result;
 extern bool route_exists_result;
@@ -325,7 +326,7 @@ public:
     RTOS::delay_ms(deinit_delay_ms);
     active = initialized = false;
   }
-  bool set_service_broadcast(const char *value, const uint8_t *data, size_t len) override {
+  bool set_service_list_broadcast(const char *value, const uint8_t *data, size_t len) override {
     calls.push_back("payload");
     uuid = value;
     payload.assign(data, data + len);
@@ -1183,28 +1184,46 @@ TEST_CASE("build_fast_path_display: invalid sensors -> sentinels preserved") {
   CHECK(v.pm_use_usaqi == false);
 }
 
-TEST_CASE("build_fast_path_display: applies persisted corrections only to presentation") {
-  MeasuresAGo m{};
-  m.pm_a.pm_25 = 10.0f;
-  m.temp_hum_a.temperature = 20.0f;
-  m.temp_hum_a.humidity = 50.0f;
+TEST_CASE("build_fast_path_display: corrections follow operating mode") {
+  for (auto mode : {OperatingMode::Portable, OperatingMode::Stationary, OperatingMode::Offline}) {
+    CAPTURE(static_cast<int>(mode));
+    MeasuresAGo m{};
+    m.pm_a.pm_25 = 10.0f;
+    m.temp_hum_a = {20.0f, 50.0f};
 
-  GoSettings settings{};
-  settings.corrections.pm25.algorithm = Pm25CorrectionAlgorithm::CustomViaPm25Raw;
-  settings.corrections.pm25.scaling_factor = 2.0f;
-  settings.corrections.pm25.intercept = 1.0f;
-  settings.corrections.temperature.algorithm = LinearCorrectionAlgorithm::Custom;
-  settings.corrections.temperature.scaling_factor = 1.5f;
-  settings.corrections.temperature.intercept = -1.0f;
+    GoSettings settings{};
+    settings.operating_mode = mode;
+    settings.corrections.pm25 = {Pm25CorrectionAlgorithm::CustomViaPm25Raw, 2.0f, 1.0f, false};
+    settings.corrections.temperature = {LinearCorrectionAlgorithm::Custom, 1.5f, -1.0f};
+    settings.corrections.humidity = {LinearCorrectionAlgorithm::Custom, 0.5f, 5.0f};
+    const auto saved = settings.corrections;
 
-  const DisplayValues values =
-      build_fast_path_display(m, GpsData{}, PowerSnapshot{}, settings, TrackingState::Idle);
-
-  CHECK(values.pm25_ugm3 == 21.0f);
-  CHECK(values.temperature_c == 29.0f);
-  CHECK(values.humidity_pct == 50.0f);
-  CHECK(m.pm_a.pm_25 == 10.0f);
-  CHECK(m.temp_hum_a.temperature == 20.0f);
+    SECTION("valid readings") {
+      const auto values =
+          build_fast_path_display(m, GpsData{}, PowerSnapshot{}, settings, TrackingState::Idle);
+      CHECK(values.pm25_ugm3 == 21.0f);
+      CHECK(values.temperature_c == (mode == OperatingMode::Offline ? 20.0f : 29.0f));
+      CHECK(values.humidity_pct == (mode == OperatingMode::Offline ? 50.0f : 30.0f));
+      CHECK(m.pm_a.pm_25 == 10.0f);
+      CHECK(m.temp_hum_a.temperature == 20.0f);
+      CHECK(m.temp_hum_a.humidity == 50.0f);
+    }
+    SECTION("invalid temperature preserves valid humidity") {
+      m.temp_hum_a.temperature = MeasuresInvalid::TEMPERATURE;
+      const auto values =
+          build_fast_path_display(m, GpsData{}, PowerSnapshot{}, settings, TrackingState::Idle);
+      CHECK(values.temperature_c == MeasuresInvalid::TEMPERATURE);
+      CHECK(values.humidity_pct == (mode == OperatingMode::Offline ? 50.0f : 30.0f));
+    }
+    SECTION("invalid humidity preserves valid temperature") {
+      m.temp_hum_a.humidity = MeasuresInvalid::HUMIDITY;
+      const auto values =
+          build_fast_path_display(m, GpsData{}, PowerSnapshot{}, settings, TrackingState::Idle);
+      CHECK(values.temperature_c == (mode == OperatingMode::Offline ? 20.0f : 29.0f));
+      CHECK(values.humidity_pct == MeasuresInvalid::HUMIDITY);
+    }
+    CHECK(measurement_corrections_equal(settings.corrections, saved));
+  }
 }
 
 // ============================================================================
@@ -1334,9 +1353,9 @@ TEST_CASE("fast path BLE: advertises raw measurements despite configured correct
   CHECK(result.outcome == GoAppTestAccess::Outcome::Sleep);
   CHECK(board.ble.name.empty());
   CHECK(board.ble.uuid == GoBleAdvertisement::SERVICE_UUID);
-  CHECK(board.ble.interval_us == 300000);
-  CHECK(board.ble.payload == std::vector<uint8_t>{0x01, 0xD0, 0x07, 0x33, 0x64, 0x00, 0x90, 0x01,
-                                                  0x95, 0x27, 0xD5, 0xFF, 0x4B});
+  CHECK(board.ble.interval_us == 50000);
+  CHECK(board.ble.payload ==
+        std::vector<uint8_t>{0xFF, 0xFF, 0xC1, 0xD2, 0x8C, 0x0C, 0x80, 0x0C, 0xBA, 0xF7, 0x12});
   CHECK(board.ble.calls ==
         std::vector<std::string>{"init", "payload", "interval", "start", "stop", "deinit"});
   CHECK_FALSE(board.ble.initialized);
@@ -1481,8 +1500,8 @@ TEST_CASE("fast path BLE: unavailable measurements and battery retain wire senti
   const auto result = access.execute_fast_path(RtcAppState{}, button);
 
   CHECK(result.outcome == GoAppTestAccess::Outcome::Sleep);
-  CHECK(board.ble.payload == std::vector<uint8_t>{0x01, 0x00, 0x80, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-                                                  0xFF, 0xFF, 0x00, 0x80, 0xFF});
+  CHECK(board.ble.payload ==
+        std::vector<uint8_t>{0xFF, 0xFF, 0xF9, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x1F});
   CHECK_FALSE(board.ble.initialized);
 }
 
@@ -2921,4 +2940,169 @@ TEST_CASE("inactive GPS final fallback uses ESP sleep duration", "[GoApp][gps]")
   CHECK(test_spy::gps_sleep_duration_ms == 40000);
   CHECK(test_spy::last_saved_state.gps_wake_deadline_ms ==
         (final_success ? clock.retained_ms + 40000 : 0));
+}
+
+TEST_CASE("build_fast_path_display: interval threshold preserves readings and controls layout") {
+  MeasuresAGo m{};
+  m.temp_hum_a = {25.0f, 60.0f};
+  GoSettings settings{};
+  for (int interval : {60, 299, 300, 301}) {
+    CAPTURE(interval);
+    settings.measure_interval_seconds = interval;
+    const auto v = build_fast_path_display(m, {}, {}, settings, TrackingState::Idle);
+    CHECK(v.show_temp_hum == (interval >= 300));
+    CHECK(v.active_metric == Metric::None);
+    CHECK(v.chart_metric() == Metric::Pm25);
+    CHECK(v.temperature_c == 25.0f);
+    CHECK(v.humidity_pct == 60.0f);
+  }
+}
+
+TEST_CASE("build_wake_values: compact layout survives early button-wake paint") {
+  RtcDisplaySnapshot snapshot{};
+  snapshot.show_temp_hum = false;
+  snapshot.temperature_c = 25.0f;
+  snapshot.humidity_pct = 60.0f;
+  const auto v = build_wake_values(snapshot, true);
+  CHECK_FALSE(v.show_temp_hum);
+  CHECK_FALSE(v.locked);
+  CHECK(v.active_metric == Metric::None);
+  CHECK(v.chart_metric() == Metric::Pm25);
+  CHECK(v.temperature_c == 25.0f);
+  CHECK(v.humidity_pct == 60.0f);
+}
+
+TEST_CASE("fast path: compact display charts corrected PM history without changing stored data") {
+  test_spy::reset();
+  MockBoard board;
+  board.settings.measure_interval_seconds = 60;
+  board.settings.corrections.pm25.algorithm = Pm25CorrectionAlgorithm::CustomViaPm25Raw;
+  board.settings.corrections.pm25.scaling_factor = 2.0f;
+  board.settings.corrections.pm25.intercept = 1.0f;
+  MeasuresAGo previous{};
+  previous.pm_a.pm_25 = 5.0f;
+  test_spy::cached_measurements = {previous, MeasuresAGo{}};
+  test_spy::measures_to_return.pm_a.pm_25 = 10.0f;
+  test_spy::measures_to_return.temp_hum_a = {25.0f, 60.0f};
+  DisplayService::spy_on_init = [](const DisplayValues &v) {
+    CHECK_FALSE(v.show_temp_hum);
+    CHECK(v.locked);
+    CHECK(v.active_metric == Metric::None);
+    CHECK(v.chart_metric() == Metric::Pm25);
+    REQUIRE(v.chart_count == 2);
+    REQUIRE(v.chart_samples != nullptr);
+    CHECK(v.chart_samples[0] == 11.0f);
+    CHECK(v.chart_samples[1] == 21.0f);
+    CHECK(v.chart_min == 11.0f);
+    CHECK(v.chart_max == 21.0f);
+    CHECK(v.temperature_c == 25.0f);
+    CHECK(v.humidity_pct == 60.0f);
+  };
+  GoApp app(board);
+  GoAppTestAccess access(app);
+  volatile bool button = false;
+  const auto result = access.execute_fast_path(RtcAppState{}, button);
+  DisplayService::spy_on_init = nullptr;
+  CHECK(DisplayService::spy_init_count == 1);
+  CHECK(result.has_measures);
+  CHECK(result.measures.pm_a.pm_25 == 10.0f);
+  CHECK(result.measures.temp_hum_a.temperature == 25.0f);
+  CHECK(result.measures.temp_hum_a.humidity == 60.0f);
+  REQUIRE(test_spy::cached_measurements.size() == 3);
+  CHECK(test_spy::cached_measurements[0].pm_a.pm_25 == 5.0f);
+  CHECK(test_spy::cached_measurements[2].pm_a.pm_25 == 10.0f);
+  CHECK(test_spy::cached_measurements[2].temp_hum_a.temperature == 25.0f);
+  CHECK(test_spy::cached_measurements[2].temp_hum_a.humidity == 60.0f);
+}
+
+TEST_CASE("fast path: pinned chart is honored at every interval", "[chart]") {
+  static Metric expected_metric = Metric::None;
+  static float expected_value = 0.0f;
+  for (int interval : {60, 300}) {
+    for (auto metric : {Metric::None, Metric::Co2, Metric::Pressure, Metric::Altitude}) {
+      CAPTURE(interval, static_cast<int>(metric));
+      test_spy::reset();
+      MockBoard board;
+      board.settings.measure_interval_seconds = interval;
+      board.settings.pinned_chart = metric;
+      test_spy::measures_to_return.co2.co2 = 650;
+      test_spy::measures_to_return.pressure = {1013.0f, -42.0f};
+      expected_metric = metric;
+      expected_value = metric == Metric::Co2        ? 650.0f
+                       : metric == Metric::Pressure ? 1013.0f
+                                                    : -42.0f;
+      DisplayService::spy_on_init = [](const DisplayValues &v) {
+        CHECK(v.pinned_chart == expected_metric);
+        CHECK(v.chart_metric() == expected_metric);
+        CHECK_FALSE(v.browsing_chart());
+        if (expected_metric == Metric::None) {
+          CHECK(v.chart_count == 0);
+          CHECK(v.chart_samples == nullptr);
+        } else {
+          REQUIRE(v.chart_samples != nullptr);
+          REQUIRE(v.chart_count == 1);
+          CHECK(v.chart_samples[0] == expected_value);
+          CHECK(v.chart_min == expected_value);
+          CHECK(v.chart_max == expected_value);
+        }
+      };
+      GoApp app(board);
+      GoAppTestAccess access(app);
+      volatile bool button = false;
+      access.execute_fast_path(RtcAppState{}, button);
+      DisplayService::spy_on_init = nullptr;
+      CHECK(DisplayService::spy_init_count == 1);
+    }
+  }
+}
+
+TEST_CASE("wake display retains pinned chart and suppresses hidden thermal readings", "[chart]") {
+  for (auto metric :
+       {Metric::None, Metric::Co2, Metric::Temp, Metric::Humidity, Metric::Altitude}) {
+    for (bool show_temp_hum : {false, true}) {
+      RtcDisplaySnapshot snapshot{};
+      snapshot.pinned_chart = metric;
+      snapshot.show_temp_hum = show_temp_hum;
+      const auto v = build_wake_values(snapshot, true);
+      CHECK(v.pinned_chart == metric);
+      CHECK_FALSE(v.browsing_chart());
+      const bool hidden = !show_temp_hum && (metric == Metric::Temp || metric == Metric::Humidity);
+      CHECK(v.chart_metric() == (hidden ? Metric::None : metric));
+    }
+  }
+}
+
+TEST_CASE("fast path: Energy Saving charts raw temperature and humidity", "[correction][chart]") {
+  for (auto metric : {Metric::Temp, Metric::Humidity}) {
+    CAPTURE(static_cast<int>(metric));
+    test_spy::reset();
+    MockBoard board;
+    board.settings.operating_mode = OperatingMode::Offline;
+    board.settings.measure_interval_seconds = 300;
+    board.settings.pinned_chart = metric;
+    board.settings.corrections.temperature = {LinearCorrectionAlgorithm::Custom, 1.0f, -2.0f};
+    board.settings.corrections.humidity = {LinearCorrectionAlgorithm::Custom, 1.0f, -10.0f};
+    MeasuresAGo previous{};
+    previous.temp_hum_a = {20.0f, 50.0f};
+    test_spy::cached_measurements = {previous, MeasuresAGo{}};
+    test_spy::measures_to_return.temp_hum_a = {25.0f, 60.0f};
+    DisplayService::spy_on_init = [](const DisplayValues &v) {
+      REQUIRE(v.chart_count == 2);
+      REQUIRE(v.chart_samples != nullptr);
+      const bool temperature = v.chart_metric() == Metric::Temp;
+      CHECK(v.chart_samples[0] == (temperature ? 20.0f : 50.0f));
+      CHECK(v.chart_samples[1] == (temperature ? 25.0f : 60.0f));
+      CHECK(v.temperature_c == 25.0f);
+      CHECK(v.humidity_pct == 60.0f);
+    };
+    GoApp app(board);
+    GoAppTestAccess access(app);
+    volatile bool button = false;
+    const auto result = access.execute_fast_path(RtcAppState{}, button);
+    DisplayService::spy_on_init = nullptr;
+    CHECK(DisplayService::spy_init_count == 1);
+    CHECK(result.has_measures);
+    CHECK(test_spy::cached_measurements.front().temp_hum_a.temperature == 20.0f);
+    CHECK(test_spy::cached_measurements.front().temp_hum_a.humidity == 50.0f);
+  }
 }

@@ -54,6 +54,8 @@ void save_rtc_display_snapshot(const DisplayValues &values) {
   s_rtc_display_snapshot.use_fahrenheit = values.use_fahrenheit;
   s_rtc_display_snapshot.use_feet = values.use_feet;
   s_rtc_display_snapshot.pm_use_usaqi = values.pm_use_usaqi;
+  s_rtc_display_snapshot.show_temp_hum = values.show_temp_hum;
+  s_rtc_display_snapshot.pinned_chart = values.pinned_chart;
   s_rtc_display_snapshot_valid = true;
 }
 
@@ -605,16 +607,6 @@ constexpr int GRID_LABEL_Y[6] = {175, 175, 205, 205, 235, 235};
 constexpr int GRID_VALUE_X[6] = {7, 68, 7, 68, 7, 68};
 constexpr int GRID_VALUE_Y[6] = {187, 187, 217, 217, 247, 247};
 
-// Selection rectangles — shifted 1px down for 2px-thick 1st grid divider
-constexpr int SEL_TEMP_X = 0;
-constexpr int SEL_TEMP_Y = 164;
-constexpr int SEL_TEMP_W = 64;
-constexpr int SEL_TEMP_H = 28;
-constexpr int SEL_HUM_X = 64;
-constexpr int SEL_HUM_Y = 164;
-constexpr int SEL_HUM_W = 64;
-constexpr int SEL_HUM_H = 28;
-
 // ---------------------------------------------------------------------------
 // u8g2 virtual display callback — provides geometry info only
 // ---------------------------------------------------------------------------
@@ -780,7 +772,7 @@ void format_temperature_value(char *out, size_t out_size, float celsius, bool us
     return;
   }
   const float shown = temp_for_display(celsius, use_fahrenheit);
-  snprintf(out, out_size, "%.1f %c", shown, use_fahrenheit ? 'F' : 'C');
+  snprintf(out, out_size, "%.1f \xC2\xB0%c", shown, use_fahrenheit ? 'F' : 'C');
 }
 
 void format_humidity_value(char *out, size_t out_size, float humidity) {
@@ -850,7 +842,7 @@ void format_altitude_value(char *out, size_t out_size, float altitude_m, bool us
 }
 
 void format_chart_stat(char *out, size_t out_size, Metric metric, float value, bool use_fahrenheit,
-                       bool pm_use_usaqi) {
+                       bool pm_use_usaqi, bool use_feet) {
   switch (metric) {
   case Metric::Pm25:
     format_pm_value(out, out_size, value, pm_use_usaqi);
@@ -868,10 +860,82 @@ void format_chart_stat(char *out, size_t out_size, Metric metric, float value, b
   case Metric::Nox:
     format_float_index_value(out, out_size, value);
     break;
+  case Metric::Pressure:
+    format_pressure_value(out, out_size, value);
+    break;
+  case Metric::Altitude:
+    format_altitude_value(out, out_size, value, use_feet);
+    break;
   case Metric::None:
   default:
     snprintf(out, out_size, "-");
     break;
+  }
+}
+
+const char *chart_metric_label(const DisplayValues &v) {
+  switch (v.chart_metric()) {
+  case Metric::Pm25:
+    return "PM2.5";
+  case Metric::Co2:
+    return "CO2";
+  case Metric::Temp:
+    return "Temperature";
+  case Metric::Humidity:
+    return "Humidity";
+  case Metric::Tvoc:
+    return "TVOC";
+  case Metric::Nox:
+    return "NOx";
+  case Metric::Pressure:
+    return "Pressure";
+  case Metric::Altitude:
+    return "Altitude";
+  case Metric::None:
+    return "";
+  }
+  return "";
+}
+
+void format_chart_current(char *out, size_t out_size, const DisplayValues &v) {
+  const Metric metric = v.chart_metric();
+  const char *unit = "";
+  float value = 0.0f;
+  switch (metric) {
+  case Metric::Pm25:
+    value = v.pm25_ugm3;
+    unit = v.pm_use_usaqi ? " USAQI" : " ug/m3";
+    break;
+  case Metric::Co2:
+    value = static_cast<float>(v.co2_ppm);
+    unit = " ppm";
+    break;
+  case Metric::Temp:
+    value = v.temperature_c;
+    break;
+  case Metric::Humidity:
+    value = v.humidity_pct;
+    break;
+  case Metric::Tvoc:
+    value = static_cast<float>(v.tvoc_index);
+    break;
+  case Metric::Nox:
+    value = static_cast<float>(v.nox_index);
+    break;
+  case Metric::Pressure:
+    value = v.pressure_hpa;
+    break;
+  case Metric::Altitude:
+    value = v.altitude_m;
+    break;
+  case Metric::None:
+    snprintf(out, out_size, "-");
+    return;
+  }
+  format_chart_stat(out, out_size, metric, value, v.use_fahrenheit, v.pm_use_usaqi, v.use_feet);
+  if (out_size > 0 && strcmp(out, "-") != 0) {
+    const size_t len = strlen(out);
+    snprintf(out + len, out_size - len, "%s", unit);
   }
 }
 
@@ -929,7 +993,7 @@ uint16_t battery_glyph(bool is_charging, uint8_t pct) {
 }
 
 // Draw a single grid cell (label in helvR08, value in helvB08).
-// For temperature, caller should use DrawUTF8 directly for the degree symbol.
+// Enable use_utf8 for temperature values containing the degree symbol.
 void draw_cell(u8g2_t *u, int index, const char *label, const char *value, bool use_utf8) {
   u8g2_SetFont(u, u8g2_font_helvR08_tr);
   draw_text(u, GRID_LABEL_X[index], GRID_LABEL_Y[index], label);
@@ -1625,51 +1689,28 @@ void DisplayService::_draw_home(const DisplayValues &v) {
     return;
   }
 
-  const bool chart_visible = metric_has_chart(v.active_metric);
-  const bool pm_selected = (v.active_metric == Metric::Pm25);
-  const bool co2_selected = (v.active_metric == Metric::Co2);
-  const bool temp_selected = (v.active_metric == Metric::Temp);
-  const bool hum_selected = (v.active_metric == Metric::Humidity);
+  const bool chart_visible = metric_has_chart(v.chart_metric());
+  const bool browsing = v.browsing_chart();
 
-  // --- Grid dividers (full 128px width) ---
-  // 1st divider: always 2px thick
   u8g2_DrawHLine(&_u8g2, 0, GRID_DIVIDER_0_Y, SCREEN_W);
   u8g2_DrawHLine(&_u8g2, 0, GRID_DIVIDER_0_Y + 1, SCREEN_W);
   u8g2_DrawHLine(&_u8g2, 0, GRID_DIVIDER_1_Y, SCREEN_W);
-  // 3rd divider: 2px thick when chart visible, 1px otherwise
   u8g2_DrawHLine(&_u8g2, 0, GRID_DIVIDER_2_Y, SCREEN_W);
   if (chart_visible) {
     u8g2_DrawHLine(&_u8g2, 0, GRID_DIVIDER_2_Y + 1, SCREEN_W);
   }
-
-  // Vertical divider
-  if (chart_visible) {
-    // Only rows 1–2 when chart active
-    u8g2_DrawVLine(&_u8g2, GRID_DIVIDER_X, GRID_DIVIDER_0_Y, GRID_DIVIDER_2_Y - GRID_DIVIDER_0_Y);
+  if (browsing) {
+    // The chart header and plot span the full width; only Min/Max is split.
+    u8g2_DrawVLine(&_u8g2, GRID_DIVIDER_X, GRID_DIVIDER_1_Y, GRID_DIVIDER_2_Y - GRID_DIVIDER_1_Y);
   } else {
-    // All 3 rows
-    u8g2_DrawVLine(&_u8g2, GRID_DIVIDER_X, GRID_DIVIDER_0_Y, 249 - GRID_DIVIDER_0_Y);
-  }
-
-  // --- Selection rectangles (filled black with white text) ---
-  if (pm_selected) {
-    u8g2_DrawBox(&_u8g2, 0, PM_BLOCK_Y, SCREEN_W, PM_BLOCK_H);
-  }
-  if (co2_selected) {
-    u8g2_DrawBox(&_u8g2, 0, CO2_BLOCK_Y, SCREEN_W, CO2_BLOCK_H);
-  }
-  if (temp_selected) {
-    u8g2_DrawBox(&_u8g2, SEL_TEMP_X, SEL_TEMP_Y, SEL_TEMP_W, SEL_TEMP_H);
-  }
-  if (hum_selected) {
-    u8g2_DrawBox(&_u8g2, SEL_HUM_X, SEL_HUM_Y, SEL_HUM_W, SEL_HUM_H);
+    const int grid_bottom =
+        !chart_visible && v.show_temp_hum ? PLOT_Y + PLOT_H - 1 : GRID_DIVIDER_2_Y;
+    u8g2_DrawVLine(&_u8g2, GRID_DIVIDER_X, GRID_DIVIDER_0_Y, grid_bottom - GRID_DIVIDER_0_Y);
   }
 
   char buf[24];
 
   // --- PM2.5 hero section ---
-  if (pm_selected)
-    u8g2_SetDrawColor(&_u8g2, 1);
 
   // Dual-font label: "PM2.5" in Logisoso16 + "(ug/m3)" or "(USAQI)" in HelvR12
   {
@@ -1694,12 +1735,7 @@ void DisplayService::_draw_home(const DisplayValues &v) {
   format_pm_value(buf, sizeof(buf), v.pm25_ugm3, v.pm_use_usaqi);
   draw_centered_text(&_u8g2, SCREEN_W / 2, PM_VALUE_BASELINE_Y, buf);
 
-  if (pm_selected)
-    u8g2_SetDrawColor(&_u8g2, 0);
-
   // --- CO2 hero section ---
-  if (co2_selected)
-    u8g2_SetDrawColor(&_u8g2, 1);
 
   // Dual-font label: "CO2" in Logisoso16 + "(ppm)" in HelvR12
   {
@@ -1724,69 +1760,86 @@ void DisplayService::_draw_home(const DisplayValues &v) {
   format_co2_value(buf, sizeof(buf), v.co2_ppm);
   draw_centered_text(&_u8g2, SCREEN_W / 2, CO2_VALUE_BASELINE_Y, buf);
 
-  if (co2_selected)
-    u8g2_SetDrawColor(&_u8g2, 0);
-
-  // --- Grid cells ---
-  char temp_buf[24];
-  char hum_buf[24];
-
-  // Temperature grid cell uses DrawUTF8 for the degree symbol.
-  // format_temperature_value is preserved for chart stats; here we format
-  // with the UTF-8 degree sign for display.
-  if (!is_temperature_valid(v.temperature_c)) {
-    snprintf(temp_buf, sizeof(temp_buf), "-");
-  } else {
-    const float shown = temp_for_display(v.temperature_c, v.use_fahrenheit);
-    format_one_decimal(temp_buf, sizeof(temp_buf), shown);
-    const size_t len = strlen(temp_buf);
-    snprintf(temp_buf + len, sizeof(temp_buf) - len, " \xC2\xB0%c", v.use_fahrenheit ? 'F' : 'C');
-  }
-  format_humidity_value(hum_buf, sizeof(hum_buf), v.humidity_pct);
-
-  // Row 1: Temp / Humidity (always visible)
-  if (temp_selected)
-    u8g2_SetDrawColor(&_u8g2, 1);
-  draw_cell(&_u8g2, 0, "Temperature", temp_buf, true);
-  if (temp_selected)
-    u8g2_SetDrawColor(&_u8g2, 0);
-
-  if (hum_selected)
-    u8g2_SetDrawColor(&_u8g2, 1);
-  draw_cell(&_u8g2, 1, "Humidity", hum_buf, false);
-  if (hum_selected)
-    u8g2_SetDrawColor(&_u8g2, 0);
-
-  // Row 2: TVOC/NOx or Min/Max (conditional)
-  if (chart_visible) {
-    char min_buf[24];
-    char max_buf[24];
-    format_chart_stat(min_buf, sizeof(min_buf), v.active_metric, v.chart_min, v.use_fahrenheit,
-                      v.pm_use_usaqi);
-    format_chart_stat(max_buf, sizeof(max_buf), v.active_metric, v.chart_max, v.use_fahrenheit,
-                      v.pm_use_usaqi);
-    draw_cell(&_u8g2, 2, "Min", min_buf, false);
-    draw_cell(&_u8g2, 3, "Max", max_buf, false);
-  } else {
-    char tvoc_buf[24];
-    char nox_buf[24];
-    format_int_index_value(tvoc_buf, sizeof(tvoc_buf), v.tvoc_index);
-    format_int_index_value(nox_buf, sizeof(nox_buf), v.nox_index);
-    draw_cell(&_u8g2, 2, "TVOC", tvoc_buf, false);
-    draw_cell(&_u8g2, 3, "NOx", nox_buf, false);
+  if (browsing) {
+    _draw_chart_details(v);
+    return;
   }
 
-  // Row 3: Pressure/Altitude or Chart (conditional)
-  if (chart_visible) {
+  // A pinned chart keeps the overview above it. Only active browsing replaces
+  // these rows with a chart title and statistics.
+  if (v.show_temp_hum) {
+    char temp_buf[24];
+    char hum_buf[24];
+    format_temperature_value(temp_buf, sizeof(temp_buf), v.temperature_c, v.use_fahrenheit);
+    format_humidity_value(hum_buf, sizeof(hum_buf), v.humidity_pct);
+    draw_cell(&_u8g2, 0, "Temperature", temp_buf, true);
+    draw_cell(&_u8g2, 1, "Humidity", hum_buf, false);
+  }
+
+  const int gas_cell = v.show_temp_hum ? 2 : 0;
+  char value[24];
+  format_int_index_value(value, sizeof(value), v.tvoc_index);
+  draw_cell(&_u8g2, gas_cell, "TVOC", value, false);
+  format_int_index_value(value, sizeof(value), v.nox_index);
+  draw_cell(&_u8g2, gas_cell + 1, "NOx", value, false);
+  if (!v.show_temp_hum || !chart_visible) {
+    format_pressure_value(value, sizeof(value), v.pressure_hpa);
+    draw_cell(&_u8g2, gas_cell + 2, "Pressure", value, false);
+    format_altitude_value(value, sizeof(value), v.altitude_m, v.use_feet);
+    draw_cell(&_u8g2, gas_cell + 3, "Altitude", value, false);
+  }
+  if (chart_visible)
     _draw_chart(v);
-  } else {
-    char pressure_buf[24];
-    char altitude_buf[24];
-    format_pressure_value(pressure_buf, sizeof(pressure_buf), v.pressure_hpa);
-    format_altitude_value(altitude_buf, sizeof(altitude_buf), v.altitude_m, v.use_feet);
-    draw_cell(&_u8g2, 4, "Pressure", pressure_buf, false);
-    draw_cell(&_u8g2, 5, "Altitude", altitude_buf, false);
+}
+
+void DisplayService::_draw_chart_details(const DisplayValues &v) {
+  constexpr int HEADER_OFFSET_X = 3;
+  constexpr int HEADER_CENTER_X = SCREEN_W / 2 + HEADER_OFFSET_X;
+  const bool browsing = v.browsing_chart();
+  if (browsing) {
+    u8g2_DrawBox(&_u8g2, 0, GRID_DIVIDER_0_Y + 2, SCREEN_W,
+                 GRID_DIVIDER_1_Y - GRID_DIVIDER_0_Y - 2);
+    u8g2_SetDrawColor(&_u8g2, 1);
   }
+  u8g2_SetFont(&_u8g2, u8g2_font_helvR08_tr);
+  draw_centered_text(&_u8g2, HEADER_CENTER_X, GRID_LABEL_Y[0], chart_metric_label(v));
+  char value[32];
+  format_chart_current(value, sizeof(value), v);
+  u8g2_SetFont(&_u8g2, u8g2_font_helvB08_tf);
+  const int value_width = static_cast<int>(u8g2_GetUTF8Width(&_u8g2, value));
+  u8g2_DrawUTF8(&_u8g2, HEADER_CENTER_X - value_width / 2, GRID_VALUE_Y[0], value);
+  if (browsing) {
+    constexpr int ARROW_INSET = 10;
+    constexpr int ARROW_WIDTH = 3; // Visible width of the Open Iconic 1x carets.
+    constexpr int ARROW_BASELINE_Y = (GRID_LABEL_Y[0] + GRID_VALUE_Y[0]) / 2;
+    constexpr uint16_t LEFT_ARROW_GLYPH = 112;
+    constexpr uint16_t RIGHT_ARROW_GLYPH = 109;
+    u8g2_SetFont(&_u8g2, u8g2_font_open_iconic_all_1x_t);
+    // Align visible pixels rather than the glyph advance, which includes unequal bearings.
+    u8g2_DrawGlyph(&_u8g2,
+                   HEADER_OFFSET_X + ARROW_INSET - u8g2_GetXOffsetGlyph(&_u8g2, LEFT_ARROW_GLYPH),
+                   ARROW_BASELINE_Y, LEFT_ARROW_GLYPH);
+    u8g2_DrawGlyph(&_u8g2,
+                   HEADER_OFFSET_X + SCREEN_W - ARROW_INSET - ARROW_WIDTH -
+                       u8g2_GetXOffsetGlyph(&_u8g2, RIGHT_ARROW_GLYPH),
+                   ARROW_BASELINE_Y, RIGHT_ARROW_GLYPH);
+    u8g2_SetDrawColor(&_u8g2, 0);
+  }
+
+  char min_buf[24];
+  char max_buf[24];
+  if (v.chart_count > 0 && v.chart_samples != nullptr) {
+    format_chart_stat(min_buf, sizeof(min_buf), v.chart_metric(), v.chart_min, v.use_fahrenheit,
+                      v.pm_use_usaqi, v.use_feet);
+    format_chart_stat(max_buf, sizeof(max_buf), v.chart_metric(), v.chart_max, v.use_fahrenheit,
+                      v.pm_use_usaqi, v.use_feet);
+  } else {
+    snprintf(min_buf, sizeof(min_buf), "-");
+    snprintf(max_buf, sizeof(max_buf), "-");
+  }
+  draw_cell(&_u8g2, 2, "Min", min_buf, true);
+  draw_cell(&_u8g2, 3, "Max", max_buf, true);
+  _draw_chart(v);
 }
 
 void DisplayService::_draw_menu_overlay(const DisplayValues &v) {

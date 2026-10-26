@@ -13,7 +13,7 @@
 #include "types/wifi_types.h"
 
 /// Chart buffer size — matches the payload cache capacity (Kconfig default 16).
-inline constexpr uint8_t UI_CHART_BUF_SIZE = 16;
+inline constexpr uint8_t UI_CHART_BUF_SIZE = DISPLAY_CHART_BUF_SIZE;
 
 /// Snackbar display duration in milliseconds.
 inline constexpr uint32_t SNACKBAR_DURATION_MS = 3000;
@@ -316,6 +316,7 @@ private:
     Units,
     AltitudeUnit,
     PmDisplay,
+    PinnedChart,
     MeasureInterval,
     GpsMode,
     Mode,
@@ -376,6 +377,7 @@ private:
   uint8_t _setting_units = 0;         // 0=C, 1=F
   uint8_t _setting_altitude_unit = 0; // 0=m, 1=ft
   uint8_t _setting_pm_display = 0;    // 0=ug/m3, 1=USAQI
+  Metric _setting_pinned_chart = Metric::Pm25;
   int _setting_measure_interval_seconds = MEASURE_INTERVAL_SECONDS_DEFAULT;
   uint8_t _setting_gps_mode = 1; // 1="On When Tracking"
   OperatingMode _setting_mode = OperatingMode::Portable;

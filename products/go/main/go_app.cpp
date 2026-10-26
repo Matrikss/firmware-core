@@ -11,6 +11,7 @@
  */
 
 #include "go_app.h"
+#include "go_display_chart.h"
 
 #include <cstdio>
 
@@ -81,7 +82,7 @@ static constexpr uint32_t FAST_PATH_GAS_SAMPLE_INTERVAL_MS = 500;
 static constexpr uint32_t FAST_PATH_LIGHT_SLEEP_MIN_MS = 1000;
 // Leave room for waking and issuing the raw command before conditioning expires.
 static constexpr uint32_t FAST_PATH_GAS_WAKE_MARGIN_MS = 100;
-static constexpr uint32_t FAST_PATH_BLE_ADVERTISING_INTERVAL_US = 300000;
+static constexpr uint32_t FAST_PATH_BLE_ADVERTISING_INTERVAL_US = 50000;
 
 /// A transient BMS communication failure gets one same-boot retry.
 static constexpr uint8_t BMS_INIT_MAX_ATTEMPTS = 2;
@@ -648,6 +649,18 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
     DisplayService &disp = _board.display();
     DisplayValues values =
         build_fast_path_display(ago, gps, power_snapshot, settings, state.tracking_state);
+    // Rendering is synchronous even when panel refresh is deferred. Keep the
+    // sample buffer alive through init() and the saved display snapshot.
+    float chart_samples[DISPLAY_CHART_BUF_SIZE]{};
+    if (values.chart_metric() != Metric::None) {
+      MeasuresAGo cache[DISPLAY_CHART_BUF_SIZE];
+      const uint16_t count = stor.read_cache(cache, DISPLAY_CHART_BUF_SIZE);
+      const auto corrections = effective_measurement_corrections(settings);
+      for (uint16_t i = 0; i < count; ++i) {
+        cache[i] = apply_measurement_corrections(cache[i], corrections);
+      }
+      populate_display_chart(values, cache, static_cast<uint8_t>(count), chart_samples);
+    }
     if (power_snapshot.ship_mode_request == ShipModeRequest::OverTemperature ||
         power_snapshot.ship_mode_request == ShipModeRequest::UnderTemperature) {
       values.screen = power_snapshot.ship_mode_request == ShipModeRequest::UnderTemperature
@@ -672,11 +685,12 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
         power_snapshot.ship_mode_request == ShipModeRequest::None) {
       MeasuresAGo advertised = ago;
       advertised.power.battery_percentage = power_snapshot.battery_percentage;
-      const auto payload = GoBleAdvertisement::encode(advertised);
+      const auto payload =
+          GoBleAdvertisement::manufacturer_data(GoBleAdvertisement::encode(advertised));
       broadcast = &_board.ble_server();
       if (!broadcast->init("") ||
-          !broadcast->set_service_broadcast(GoBleAdvertisement::SERVICE_UUID, payload.data(),
-                                            payload.size()) ||
+          !broadcast->set_service_list_broadcast(GoBleAdvertisement::SERVICE_UUID, payload.data(),
+                                                 payload.size()) ||
           !broadcast->set_advertising_interval(FAST_PATH_BLE_ADVERTISING_INTERVAL_US) ||
           !broadcast->start_advertising()) {
         AG_LOGW(TAG, "fast-path: BLE broadcast setup failed");
@@ -1227,7 +1241,8 @@ MeasuresAGo measures_to_ago(const Measures &m) {
 DisplayValues build_fast_path_display(const MeasuresAGo &measures, const GpsData &gps,
                                       const PowerSnapshot &bms, const GoSettings &settings,
                                       TrackingState tracking_state) {
-  const MeasuresAGo corrected = apply_measurement_corrections(measures, settings.corrections);
+  const MeasuresAGo corrected =
+      apply_measurement_corrections(measures, effective_measurement_corrections(settings));
   DisplayValues v{};
 
   if (corrected.co2.is_valid()) {
@@ -1270,6 +1285,8 @@ DisplayValues build_fast_path_display(const MeasuresAGo &measures, const GpsData
   v.use_fahrenheit = settings.use_fahrenheit;
   v.use_feet = settings.use_feet;
   v.pm_use_usaqi = settings.pm_use_usaqi;
+  v.pinned_chart = settings.pinned_chart;
+  v.show_temp_hum = display_temp_hum_for_interval(settings.measure_interval_seconds);
   v.display_off = false;
 
   return v;
@@ -1305,6 +1322,8 @@ DisplayValues build_wake_values(const RtcDisplaySnapshot &snapshot, bool snapsho
     v.use_fahrenheit = snapshot.use_fahrenheit;
     v.use_feet = snapshot.use_feet;
     v.pm_use_usaqi = snapshot.pm_use_usaqi;
+    v.show_temp_hum = snapshot.show_temp_hum;
+    v.pinned_chart = snapshot.pinned_chart;
   }
 
   v.screen = Screen::Home;

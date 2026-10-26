@@ -18,7 +18,9 @@ namespace {
 constexpr uint32_t ADVERTISING_INTERVAL_UNIT_US = 625;
 constexpr size_t UUID128_SIZE = 16;
 constexpr size_t AD_HEADER_SIZE = 2;
-constexpr size_t MAX_BROADCAST_DATA_SIZE = BLE_HS_ADV_MAX_SZ - AD_HEADER_SIZE - UUID128_SIZE;
+constexpr size_t COMPANY_ID_SIZE = 2;
+constexpr size_t MAX_BROADCAST_DATA_SIZE =
+    BLE_HS_ADV_MAX_SZ - (AD_HEADER_SIZE + UUID128_SIZE) - AD_HEADER_SIZE;
 
 // Maps AgBleProperty flags to the corresponding NIMBLE_PROPERTY bitmask.
 // NIMBLE_PROPERTY is an unscoped enum; its enumerators are in global scope.
@@ -337,8 +339,9 @@ bool NimbleBleServer::set_advertising_interval(uint32_t interval_us) {
   return true;
 }
 
-bool NimbleBleServer::set_service_broadcast(const char *uuid, const uint8_t *data, size_t len) {
-  if (_server == nullptr || uuid == nullptr || data == nullptr || len == 0 ||
+bool NimbleBleServer::set_service_list_broadcast(const char *uuid, const uint8_t *data,
+                                                 size_t len) {
+  if (_server == nullptr || uuid == nullptr || data == nullptr || len <= COMPANY_ID_SIZE ||
       len > MAX_BROADCAST_DATA_SIZE || _server->getConnectedCount() != 0) {
     return false;
   }
@@ -352,7 +355,7 @@ bool NimbleBleServer::set_service_broadcast(const char *uuid, const uint8_t *dat
     return false;
   }
   NimBLEAdvertisementData packet;
-  if (!packet.setServiceData(service_uuid, data, len)) {
+  if (!packet.setCompleteServices(service_uuid) || !packet.setManufacturerData(data, len)) {
     return false;
   }
 

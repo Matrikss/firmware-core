@@ -53,17 +53,15 @@ enum class Screen : uint8_t {
   PowerSaving,       ///< Power-saving settings submenu
 };
 
-enum class Metric : uint8_t {
-  None,
-  Pm25,
-  Co2,
-  Temp,
-  Humidity,
-  Tvoc,
-  Nox,
-};
-
 inline constexpr uint8_t MAX_LIST_ROWS = 10;
+
+// More frequent PM operation heats the enclosure enough to bias ambient T/RH.
+inline constexpr int DISPLAY_TEMP_HUM_MIN_INTERVAL_SECONDS = 300;
+inline constexpr uint8_t DISPLAY_CHART_BUF_SIZE = 16;
+
+inline constexpr bool display_temp_hum_for_interval(int interval_seconds) {
+  return interval_seconds >= DISPLAY_TEMP_HUM_MIN_INTERVAL_SECONDS;
+}
 
 struct ListRow {
   char text[48];
@@ -141,6 +139,23 @@ struct DisplayValues {
   // --- Screen navigation ---
   Screen screen = Screen::Home;
   Metric active_metric = Metric::None;
+  bool show_temp_hum = true;
+
+  Metric pinned_chart = Metric::Pm25;
+
+  bool metric_available(Metric metric) const {
+    return is_chart_metric_valid(static_cast<int>(metric)) &&
+           (show_temp_hum || (metric != Metric::Temp && metric != Metric::Humidity));
+  }
+
+  bool browsing_chart() const {
+    return !locked && active_metric != Metric::None && metric_available(active_metric);
+  }
+
+  Metric chart_metric() const {
+    const Metric metric = browsing_chart() ? active_metric : pinned_chart;
+    return metric_available(metric) ? metric : Metric::None;
+  }
 
   // --- List/menu content ---
   ListRow rows[MAX_LIST_ROWS] = {};
@@ -240,6 +255,8 @@ struct RtcDisplaySnapshot {
   bool use_fahrenheit;
   bool use_feet;
   bool pm_use_usaqi;
+  bool show_temp_hum = true;
+  Metric pinned_chart = Metric::Pm25;
 };
 
 // ---------------------------------------------------------------------------
@@ -361,6 +378,7 @@ private:
   void _draw_shutdown(Screen s);
   void _draw_pairing_passkey(const DisplayValues &v);
   void _draw_chart(const DisplayValues &v);
+  void _draw_chart_details(const DisplayValues &v);
   void _draw_info(const DisplayValues &v);
   void _draw_provisioning(const DisplayValues &v);
   void _draw_provisioning_confirm(const DisplayValues &v);
@@ -402,6 +420,8 @@ public:
     ++spy_init_count;
     spy_last_screen = values.screen;
     spy_last_init_deferred = defer_refresh;
+    if (spy_on_init != nullptr)
+      spy_on_init(values);
     RTOS::delay_ms(spy_init_delay_ms);
     return true;
   }
@@ -437,6 +457,7 @@ public:
   inline static bool spy_last_init_deferred = false;
   inline static bool spy_last_update_wait = false;
   inline static bool spy_worker_busy = false;
+  inline static void (*spy_on_init)(const DisplayValues &) = nullptr;
 };
 
 // Stub implementations for host builds.
