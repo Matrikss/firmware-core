@@ -129,7 +129,7 @@ private:
   std::size_t _write_attempt_count = 0;
 };
 
-static constexpr std::size_t GO_SETTINGS_WRITE_COUNT = 31;
+static constexpr std::size_t GO_SETTINGS_WRITE_COUNT = 32;
 
 // ============================================================================
 // Defaults — load from empty store returns struct defaults
@@ -892,4 +892,37 @@ TEST_CASE("Pending tracking recovery requires a successful clear before creating
   store.set_fail_writes(true);
   CHECK_FALSE(save_pending_tracking_start(store, false));
   CHECK(pending_tracking_start(store));
+}
+
+TEST_CASE("pinned chart persists every choice independently of measurement interval",
+          "[settings][chart]") {
+  FakeConfigStore store;
+  CHECK(load_go_settings(store).pinned_chart == Metric::Pm25);
+  for (int value = 0; value <= static_cast<int>(Metric::Altitude); ++value) {
+    CAPTURE(value);
+    GoSettings settings{};
+    settings.measure_interval_seconds = 60;
+    settings.pinned_chart = static_cast<Metric>(value);
+    REQUIRE(save_go_settings(store, settings));
+    CHECK(load_go_settings(store).pinned_chart == settings.pinned_chart);
+    CHECK(load_go_settings(store).equals(settings));
+    auto changed = settings;
+    changed.pinned_chart = value == 0 ? Metric::Pm25 : Metric::None;
+    CHECK_FALSE(settings.equals(changed));
+  }
+}
+
+TEST_CASE("pinned chart rejects invalid settings and recovers corrupt persisted values",
+          "[settings][chart]") {
+  for (int value : {-1, 9, 255}) {
+    FakeConfigStore store;
+    REQUIRE(store.set_int("pchart", value) == ConfigStoreResult::OK);
+    CHECK(load_go_settings(store).pinned_chart == Metric::Pm25);
+  }
+  FakeConfigStore store;
+  GoSettings settings{};
+  settings.pinned_chart = static_cast<Metric>(255);
+  CHECK_FALSE(is_go_settings_valid(settings));
+  CHECK_FALSE(save_go_settings(store, settings));
+  CHECK(store.write_attempt_count() == 0);
 }

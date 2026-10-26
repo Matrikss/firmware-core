@@ -652,7 +652,7 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
     // Rendering is synchronous even when panel refresh is deferred. Keep the
     // sample buffer alive through init() and the saved display snapshot.
     float chart_samples[DISPLAY_CHART_BUF_SIZE]{};
-    if (!values.show_temp_hum) {
+    if (values.chart_metric() != Metric::None) {
       MeasuresAGo cache[DISPLAY_CHART_BUF_SIZE];
       const uint16_t count = stor.read_cache(cache, DISPLAY_CHART_BUF_SIZE);
       for (uint16_t i = 0; i < count; ++i) {
@@ -1283,6 +1283,7 @@ DisplayValues build_fast_path_display(const MeasuresAGo &measures, const GpsData
   v.use_fahrenheit = settings.use_fahrenheit;
   v.use_feet = settings.use_feet;
   v.pm_use_usaqi = settings.pm_use_usaqi;
+  v.pinned_chart = settings.pinned_chart;
   v.show_temp_hum = display_temp_hum_for_interval(settings.measure_interval_seconds);
   v.display_off = false;
 
@@ -1320,6 +1321,7 @@ DisplayValues build_wake_values(const RtcDisplaySnapshot &snapshot, bool snapsho
     v.use_feet = snapshot.use_feet;
     v.pm_use_usaqi = snapshot.pm_use_usaqi;
     v.show_temp_hum = snapshot.show_temp_hum;
+    v.pinned_chart = snapshot.pinned_chart;
   }
 
   v.screen = Screen::Home;

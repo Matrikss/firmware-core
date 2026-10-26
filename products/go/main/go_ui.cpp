@@ -127,10 +127,11 @@ static constexpr uint8_t PAGE_SIZE = 8;
 /// Sentinel deadline: snackbar was just shown, not yet armed.
 static constexpr uint32_t SNACKBAR_PENDING = UINT32_MAX;
 
-/// Selectable metrics in browse order: None, Pm25, Co2, Temp, Humidity.
-static constexpr Metric METRIC_CYCLE[] = {Metric::None, Metric::Pm25, Metric::Co2, Metric::Temp,
-                                          Metric::Humidity};
-static constexpr uint8_t METRIC_CYCLE_LEN = 5;
+// Indexed by the persisted Metric enum, including the no-selection dashboard.
+static const char *const CHART_OPTIONS[] = {"None", "PM2.5", "CO2",      "Temperature", "Humidity",
+                                            "TVOC", "NOx",   "Pressure", "Altitude"};
+static constexpr uint8_t CHART_OPTION_COUNT = sizeof(CHART_OPTIONS) / sizeof(CHART_OPTIONS[0]);
+static_assert(CHART_OPTION_COUNT == static_cast<int>(Metric::Altitude) + 1);
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -342,7 +343,8 @@ DisplayValues UIManager::build_values(const BuildContext &ctx) const {
   v.screen = _screen;
   v.active_metric = _active_metric;
   v.show_temp_hum = display_temp_hum_for_interval(_setting_measure_interval_seconds);
-  if (!v.show_temp_hum && ctx.locked)
+  v.pinned_chart = _setting_pinned_chart;
+  if (ctx.locked)
     v.active_metric = Metric::None;
 
   // --- Populate rows based on current screen ---
@@ -548,6 +550,7 @@ void UIManager::sync_settings(const GoSettings &s) {
   _setting_units = s.use_fahrenheit ? 1 : 0;
   _setting_altitude_unit = s.use_feet ? 1 : 0;
   _setting_pm_display = s.pm_use_usaqi ? 1 : 0;
+  _setting_pinned_chart = s.pinned_chart;
 
   _setting_measure_interval_seconds = s.measure_interval_seconds;
   if (!display_temp_hum_for_interval(_setting_measure_interval_seconds) &&
@@ -597,6 +600,7 @@ void UIManager::apply_to_settings(GoSettings &settings) const {
   settings.use_fahrenheit = (_setting_units == 1);
   settings.use_feet = (_setting_altitude_unit == 1);
   settings.pm_use_usaqi = (_setting_pm_display == 1);
+  settings.pinned_chart = _setting_pinned_chart;
 
   settings.measure_interval_seconds = _setting_measure_interval_seconds;
 
@@ -975,23 +979,13 @@ void UIManager::browse_metric(int delta) {
   // when unlocked.  When unlocked the dashboard is always visible
   // (display_off is suppressed by the orchestrator), so browsing is valid.
   //
-  // Omit T/RH from the compact dashboard's navigation.
-  // TVOC and NOx remain in the enum but are not selectable.
-  static constexpr Metric COMPACT_METRIC_CYCLE[] = {Metric::None, Metric::Pm25, Metric::Co2};
   const bool show_temp_hum = display_temp_hum_for_interval(_setting_measure_interval_seconds);
-  const Metric *cycle = show_temp_hum ? METRIC_CYCLE : COMPACT_METRIC_CYCLE;
-  const int cycle_len = show_temp_hum
-                            ? METRIC_CYCLE_LEN
-                            : sizeof(COMPACT_METRIC_CYCLE) / sizeof(COMPACT_METRIC_CYCLE[0]);
-  int idx = 0;
-  for (int i = 0; i < cycle_len; ++i) {
-    if (cycle[i] == _active_metric) {
-      idx = i;
-      break;
-    }
-  }
-  idx = wrap(idx + delta, cycle_len);
-  _active_metric = cycle[idx];
+  int index = static_cast<int>(_active_metric);
+  do {
+    index = wrap(index + delta, CHART_OPTION_COUNT);
+    _active_metric = static_cast<Metric>(index);
+  } while (!show_temp_hum &&
+           (_active_metric == Metric::Temp || _active_metric == Metric::Humidity));
 }
 
 // ---------------------------------------------------------------------------
@@ -1001,9 +995,9 @@ void UIManager::browse_metric(int delta) {
 const UIManager::SettingId *UIManager::group_items(Screen screen, uint8_t &count) {
   static constexpr SettingId OPERATIONS[] = {SettingId::MeasureInterval, SettingId::Co2Calibration,
                                              SettingId::GpsMode, SettingId::Buzzer};
-  static constexpr SettingId DISPLAY_TOUCH[] = {SettingId::Units,     SettingId::AltitudeUnit,
-                                                SettingId::PmDisplay, SettingId::AutoLock,
-                                                SettingId::AqiLed,    SettingId::TouchLed};
+  static constexpr SettingId DISPLAY_TOUCH[] = {
+      SettingId::Units,    SettingId::AltitudeUnit, SettingId::PmDisplay, SettingId::PinnedChart,
+      SettingId::AutoLock, SettingId::AqiLed,       SettingId::TouchLed};
   static constexpr SettingId POWER_SAVING[] = {SettingId::WifiPowerSaving};
   static_assert(sizeof(OPERATIONS) / sizeof(OPERATIONS[0]) + 2 <= MAX_LIST_ROWS);
   static_assert(sizeof(DISPLAY_TOUCH) / sizeof(DISPLAY_TOUCH[0]) + 2 <= MAX_LIST_ROWS);
@@ -1033,6 +1027,8 @@ uint8_t UIManager::setting_option_count(SettingId setting_id) const {
     return ALTITUDE_UNIT_COUNT;
   case SettingId::PmDisplay:
     return PM_DISPLAY_COUNT;
+  case SettingId::PinnedChart:
+    return CHART_OPTION_COUNT;
   case SettingId::MeasureInterval: {
     uint8_t option_count = MEASURE_INTERVAL_COUNT;
     if (is_custom_measure_interval(_setting_measure_interval_seconds))
@@ -1068,6 +1064,8 @@ uint8_t UIManager::setting_current_option(SettingId setting_id) const {
     return _setting_altitude_unit;
   case SettingId::PmDisplay:
     return _setting_pm_display;
+  case SettingId::PinnedChart:
+    return static_cast<uint8_t>(_setting_pinned_chart);
   case SettingId::MeasureInterval:
     if (is_custom_measure_interval(_setting_measure_interval_seconds))
       return 0;
@@ -1111,6 +1109,10 @@ void UIManager::apply_setting_choice(uint8_t option_index) {
     break;
   case SettingId::PmDisplay:
     _setting_pm_display = option_index;
+    break;
+  case SettingId::PinnedChart:
+    if (option_index < CHART_OPTION_COUNT)
+      _setting_pinned_chart = static_cast<Metric>(option_index);
     break;
   case SettingId::MeasureInterval:
     if (is_custom_measure_interval(_setting_measure_interval_seconds)) {
@@ -1866,6 +1868,9 @@ void UIManager::populate_settings_group_rows(DisplayValues &v) const {
       (void)snprintf(label, sizeof(label), "PM Display: %s",
                      PM_DISPLAY_OPTIONS[_setting_pm_display]);
       break;
+    case SettingId::PinnedChart:
+      (void)snprintf(label, sizeof(label), "Pinned Chart");
+      break;
     case SettingId::MeasureInterval: {
       const int option_index = measure_interval_option_index(_setting_measure_interval_seconds);
       if (option_index >= 0) {
@@ -1931,6 +1936,9 @@ void UIManager::populate_settings_choice_rows(DisplayValues &v) const {
     break;
   case SettingId::PmDisplay:
     options = PM_DISPLAY_OPTIONS;
+    break;
+  case SettingId::PinnedChart:
+    options = CHART_OPTIONS;
     break;
   case SettingId::GpsMode:
     options = GPS_MODE_OPTIONS;

@@ -2934,7 +2934,7 @@ TEST_CASE("build_fast_path_display: interval threshold preserves readings and co
     const auto v = build_fast_path_display(m, {}, {}, settings, TrackingState::Idle);
     CHECK(v.show_temp_hum == (interval >= 300));
     CHECK(v.active_metric == Metric::None);
-    CHECK(v.chart_metric() == (interval < 300 ? Metric::Pm25 : Metric::None));
+    CHECK(v.chart_metric() == Metric::Pm25);
     CHECK(v.temperature_c == 25.0f);
     CHECK(v.humidity_pct == 60.0f);
   }
@@ -2995,4 +2995,61 @@ TEST_CASE("fast path: compact display charts corrected PM history without changi
   CHECK(test_spy::cached_measurements[2].pm_a.pm_25 == 10.0f);
   CHECK(test_spy::cached_measurements[2].temp_hum_a.temperature == 25.0f);
   CHECK(test_spy::cached_measurements[2].temp_hum_a.humidity == 60.0f);
+}
+
+TEST_CASE("fast path: pinned chart is honored at every interval", "[chart]") {
+  static Metric expected_metric = Metric::None;
+  static float expected_value = 0.0f;
+  for (int interval : {60, 300}) {
+    for (auto metric : {Metric::None, Metric::Co2, Metric::Pressure, Metric::Altitude}) {
+      CAPTURE(interval, static_cast<int>(metric));
+      test_spy::reset();
+      MockBoard board;
+      board.settings.measure_interval_seconds = interval;
+      board.settings.pinned_chart = metric;
+      test_spy::measures_to_return.co2.co2 = 650;
+      test_spy::measures_to_return.pressure = {1013.0f, -42.0f};
+      expected_metric = metric;
+      expected_value = metric == Metric::Co2        ? 650.0f
+                       : metric == Metric::Pressure ? 1013.0f
+                                                    : -42.0f;
+      DisplayService::spy_on_init = [](const DisplayValues &v) {
+        CHECK(v.pinned_chart == expected_metric);
+        CHECK(v.chart_metric() == expected_metric);
+        CHECK_FALSE(v.browsing_chart());
+        if (expected_metric == Metric::None) {
+          CHECK(v.chart_count == 0);
+          CHECK(v.chart_samples == nullptr);
+        } else {
+          REQUIRE(v.chart_samples != nullptr);
+          REQUIRE(v.chart_count == 1);
+          CHECK(v.chart_samples[0] == expected_value);
+          CHECK(v.chart_min == expected_value);
+          CHECK(v.chart_max == expected_value);
+        }
+      };
+      GoApp app(board);
+      GoAppTestAccess access(app);
+      volatile bool button = false;
+      access.execute_fast_path(RtcAppState{}, button);
+      DisplayService::spy_on_init = nullptr;
+      CHECK(DisplayService::spy_init_count == 1);
+    }
+  }
+}
+
+TEST_CASE("wake display retains pinned chart and suppresses hidden thermal readings", "[chart]") {
+  for (auto metric :
+       {Metric::None, Metric::Co2, Metric::Temp, Metric::Humidity, Metric::Altitude}) {
+    for (bool show_temp_hum : {false, true}) {
+      RtcDisplaySnapshot snapshot{};
+      snapshot.pinned_chart = metric;
+      snapshot.show_temp_hum = show_temp_hum;
+      const auto v = build_wake_values(snapshot, true);
+      CHECK(v.pinned_chart == metric);
+      CHECK_FALSE(v.browsing_chart());
+      const bool hidden = !show_temp_hum && (metric == Metric::Temp || metric == Metric::Humidity);
+      CHECK(v.chart_metric() == (hidden ? Metric::None : metric));
+    }
+  }
 }

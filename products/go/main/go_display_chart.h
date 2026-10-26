@@ -63,6 +63,18 @@ inline void populate_display_chart(DisplayValues &v, const MeasuresAGo *cache, u
         valid = true;
       }
       break;
+    case Metric::Pressure:
+      if (cache[i].pressure.is_pressure_valid()) {
+        sample = cache[i].pressure.pressure;
+        valid = true;
+      }
+      break;
+    case Metric::Altitude:
+      if (cache[i].pressure.is_altitude_valid()) {
+        sample = cache[i].pressure.altitude;
+        valid = true;
+      }
+      break;
     case Metric::None:
     default:
       break;

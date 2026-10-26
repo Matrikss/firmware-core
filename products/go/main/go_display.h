@@ -53,16 +53,6 @@ enum class Screen : uint8_t {
   PowerSaving,       ///< Power-saving settings submenu
 };
 
-enum class Metric : uint8_t {
-  None,
-  Pm25,
-  Co2,
-  Temp,
-  Humidity,
-  Tvoc,
-  Nox,
-};
-
 inline constexpr uint8_t MAX_LIST_ROWS = 10;
 
 // More frequent PM operation heats the enclosure enough to bias ambient T/RH.
@@ -151,11 +141,20 @@ struct DisplayValues {
   Metric active_metric = Metric::None;
   bool show_temp_hum = true;
 
-  // The compact dashboard has a default PM chart without a selection highlight.
+  Metric pinned_chart = Metric::Pm25;
+
+  bool metric_available(Metric metric) const {
+    return is_chart_metric_valid(static_cast<int>(metric)) &&
+           (show_temp_hum || (metric != Metric::Temp && metric != Metric::Humidity));
+  }
+
+  bool browsing_chart() const {
+    return !locked && active_metric != Metric::None && metric_available(active_metric);
+  }
+
   Metric chart_metric() const {
-    if (!show_temp_hum && (locked || active_metric == Metric::None))
-      return Metric::Pm25;
-    return active_metric;
+    const Metric metric = browsing_chart() ? active_metric : pinned_chart;
+    return metric_available(metric) ? metric : Metric::None;
   }
 
   // --- List/menu content ---
@@ -257,6 +256,7 @@ struct RtcDisplaySnapshot {
   bool use_feet;
   bool pm_use_usaqi;
   bool show_temp_hum = true;
+  Metric pinned_chart = Metric::Pm25;
 };
 
 // ---------------------------------------------------------------------------
@@ -378,6 +378,7 @@ private:
   void _draw_shutdown(Screen s);
   void _draw_pairing_passkey(const DisplayValues &v);
   void _draw_chart(const DisplayValues &v);
+  void _draw_chart_details(const DisplayValues &v);
   void _draw_info(const DisplayValues &v);
   void _draw_provisioning(const DisplayValues &v);
   void _draw_provisioning_confirm(const DisplayValues &v);

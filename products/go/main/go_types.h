@@ -3,6 +3,23 @@
 
 #include <cstdint>
 
+// Chart identifiers are persisted in settings; keep numeric values stable.
+enum class Metric : uint8_t {
+  None = 0,
+  Pm25 = 1,
+  Co2 = 2,
+  Temp = 3,
+  Humidity = 4,
+  Tvoc = 5,
+  Nox = 6,
+  Pressure = 7,
+  Altitude = 8,
+};
+
+inline constexpr bool is_chart_metric_valid(int value) {
+  return value >= static_cast<int>(Metric::None) && value <= static_cast<int>(Metric::Altitude);
+}
+
 // --- Operating mode and behavior ---
 
 enum class OperatingMode : uint8_t {

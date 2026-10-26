@@ -316,6 +316,7 @@ private:
     Units,
     AltitudeUnit,
     PmDisplay,
+    PinnedChart,
     MeasureInterval,
     GpsMode,
     Mode,
@@ -376,6 +377,7 @@ private:
   uint8_t _setting_units = 0;         // 0=C, 1=F
   uint8_t _setting_altitude_unit = 0; // 0=m, 1=ft
   uint8_t _setting_pm_display = 0;    // 0=ug/m3, 1=USAQI
+  Metric _setting_pinned_chart = Metric::Pm25;
   int _setting_measure_interval_seconds = MEASURE_INTERVAL_SECONDS_DEFAULT;
   uint8_t _setting_gps_mode = 1; // 1="On When Tracking"
   OperatingMode _setting_mode = OperatingMode::Portable;
