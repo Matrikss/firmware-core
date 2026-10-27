@@ -534,7 +534,8 @@ GoApp::FastPathResult GoApp::execute_fast_path(const RtcAppState &state,
   } else {
     // Sleep across this acquisition cycle and the following ESP sleep.
     // The final sleep request remains a fallback if this one fails or expires.
-    const uint32_t interval_ms = static_cast<uint32_t>(settings.measure_interval_seconds) * 1000;
+    const uint32_t interval_ms =
+        static_cast<uint32_t>(settings.active_measure_interval_seconds()) * 1000;
     prepare_gps_for_sleep(interval_ms, gps_state);
   }
 
@@ -1286,7 +1287,7 @@ DisplayValues build_fast_path_display(const MeasuresAGo &measures, const GpsData
   v.use_feet = settings.use_feet;
   v.pm_use_usaqi = settings.pm_use_usaqi;
   v.pinned_chart = settings.pinned_chart;
-  v.show_temp_hum = display_temp_hum_for_interval(settings.measure_interval_seconds);
+  v.show_temp_hum = display_temp_hum_for_interval(settings.active_measure_interval_seconds());
   v.display_off = false;
 
   return v;

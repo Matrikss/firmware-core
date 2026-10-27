@@ -124,6 +124,7 @@ TEST_CASE("GET config serializes the provider config", "[handler][config]") {
   FakeConfigProvider config;
   config.config.temperature_unit = "f";
   config.config.altitude_unit = "ft";
+  config.config.pinned_chart = "co2";
 
   LocalServer ls(server, {measures, &config, ConfigAccess::ReadOnly});
   REQUIRE(ls.begin());
@@ -135,6 +136,7 @@ TEST_CASE("GET config serializes the provider config", "[handler][config]") {
   cJSON *root = cJSON_Parse(body_string(resp).c_str());
   REQUIRE(std::strcmp(cJSON_GetObjectItem(root, "temperatureUnit")->valuestring, "f") == 0);
   REQUIRE(std::strcmp(cJSON_GetObjectItem(root, "altitudeUnit")->valuestring, "ft") == 0);
+  REQUIRE(std::strcmp(cJSON_GetObjectItem(root, "pinnedChart")->valuestring, "co2") == 0);
   cJSON_Delete(root);
 }
 
@@ -183,6 +185,32 @@ TEST_CASE("PUT config maps submit results to status codes", "[handler][config]")
     REQUIRE(resp.body_size() == 0);
     REQUIRE(config.submit_called);
     REQUIRE(*config.last_submitted.altitude_unit == "m");
+  }
+
+  SECTION("pinned chart is admitted as a partial update") {
+    config.submit_result = {ConfigSubmitStatus::Accepted, ConfigFieldId::None};
+    HttpResponse resp;
+    put(R"({"pinnedChart":"none"})", resp);
+    REQUIRE(resp.status == HttpStatus::Accepted);
+    REQUIRE(config.submit_called);
+    REQUIRE(config.last_submitted.pinned_chart == "none");
+  }
+
+  SECTION("invalid pinned chart is rejected before reaching the provider") {
+    HttpResponse resp;
+    put(R"({"pinnedChart":1})", resp);
+    REQUIRE(resp.status == HttpStatus::BadRequest);
+    REQUIRE(error_code(resp) == "invalid_value");
+    REQUIRE(error_field(resp) == "pinnedChart");
+    REQUIRE_FALSE(config.submit_called);
+  }
+
+  SECTION("unsupported pinned chart reports the canonical field") {
+    config.submit_result = {ConfigSubmitStatus::NotSupported, ConfigFieldId::PinnedChart};
+    HttpResponse resp;
+    put(R"({"pinnedChart":"co2"})", resp);
+    REQUIRE(resp.status == HttpStatus::NotFound);
+    REQUIRE(error_field(resp) == "pinnedChart");
   }
 
   SECTION("parse invalid_body -> 400, provider not called") {

@@ -23,6 +23,8 @@ namespace {
 constexpr const char *PM_STANDARD_VALUES[] = {"ugm3", "us-aqi"};
 constexpr const char *TEMP_UNIT_VALUES[] = {"c", "f"};
 constexpr const char *ALTITUDE_UNIT_VALUES[] = {"m", "ft"};
+constexpr const char *PINNED_CHART_VALUES[] = {
+    "none", "pm25", "co2", "temperature", "humidity", "tvoc", "nox", "pressure", "altitude"};
 constexpr const char *CONFIG_CONTROL_VALUES[] = {"cloud", "local", "both"};
 constexpr const char *GPS_MODE_VALUES[] = {"off", "tracking", "always"};
 constexpr const char *LED_MODE_VALUES[] = {"co2", "pm", "iaqs", "off"};
@@ -231,6 +233,11 @@ ParseStatus apply_item(const cJSON *item, LocalServerConfig &out, ConfigFieldId 
   if (std::strcmp(key, fields::POST_DATA_TO_CLOUD) == 0) {
     field = ConfigFieldId::PostDataToCloud;
     return take_bool(item, out.post_data_to_cloud) ? ParseStatus::Ok : ParseStatus::InvalidValue;
+  }
+  if (std::strcmp(key, fields::PINNED_CHART) == 0) {
+    field = ConfigFieldId::PinnedChart;
+    return take_enum(item, PINNED_CHART_VALUES, out.pinned_chart) ? ParseStatus::Ok
+                                                                  : ParseStatus::InvalidValue;
   }
   if (std::strcmp(key, fields::CLOUD_CONNECTION) == 0) {
     field = ConfigFieldId::CloudConnection;
@@ -444,6 +451,9 @@ size_t serialize(const LocalServerConfig &cfg, char *buf, size_t buf_len) {
   if (cfg.altitude_unit.has_value()) {
     cJSON_AddStringToObject(root, fields::ALTITUDE_UNIT, cfg.altitude_unit->c_str());
   }
+  if (cfg.pinned_chart.has_value()) {
+    cJSON_AddStringToObject(root, fields::PINNED_CHART, cfg.pinned_chart->c_str());
+  }
   if (cfg.post_data_to_cloud.has_value()) {
     cJSON_AddBoolToObject(root, fields::POST_DATA_TO_CLOUD, *cfg.post_data_to_cloud);
   }
@@ -577,6 +587,8 @@ const char *config_field_wire_key(ConfigFieldId id) {
     return fields::CORRECTIONS_HUMIDITY;
   case ConfigFieldId::AltitudeUnit:
     return fields::ALTITUDE_UNIT;
+  case ConfigFieldId::PinnedChart:
+    return fields::PINNED_CHART;
   case ConfigFieldId::None:
     return nullptr;
   }

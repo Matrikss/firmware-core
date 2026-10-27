@@ -167,7 +167,7 @@ and queues a value-only `FetchConfigEventPayload`. Supported fields map into
 |---|---|---|
 | `pmStandard` | `"ugm3"`, `"us-aqi"` | `pm_use_usaqi` |
 | `temperatureUnit` | `"c"`, `"f"` | `use_fahrenheit` |
-| `measurementInterval` | Integer 1 .. 3600 | `measure_interval_seconds` |
+| `measurementInterval` | Integer 1 .. 3600 | `measure_interval_seconds` (Portable/Stationary; Energy Saving is separate) |
 | `gpsMode` | `"off"`, `"tracking"`, `"always"` | `gps_mode` |
 | `backLedBrightness` | Integer 0 .. 3 | `back_led_brightness` |
 | `touchLedIntensity` | Integer 0 .. 2 | `touch_led_intensity` |

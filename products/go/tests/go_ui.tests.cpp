@@ -153,8 +153,8 @@ TEST_CASE("UIManager: agreed menu hierarchy", "[UIManager][nav][redesign]") {
   CHECK(std::string(values.rows[5].text) == "Buzzer: Off");
   double_press(ui);
   open_row(ui, "Display & Touch");
-  check_rows(ui, {"Exit", "Back", "Temperature Unit: C", "Altitude Unit: m", "PM Display: ug/m3",
-                  "Pinned Chart", "Auto Lock: Off", "AQI LED: Off", "Touch LED: Off"});
+  check_rows(ui, {"Exit", "Back", "Pinned Chart", "Temperature Unit: C", "Altitude Unit: m",
+                  "PM Display: ug/m3", "Auto Lock: Off", "AQI LED: Off", "Touch LED: Off"});
   double_press(ui);
   open_row(ui, "Power Saving");
   check_rows(ui, {"Exit", "Back", "Wi-Fi Power Saving"});
@@ -175,6 +175,7 @@ TEST_CASE("UIManager: mode choices preserve identities across every transition",
       GoSettings settings{};
       settings.operating_mode = modes[from];
       settings.measure_interval_seconds = 17;
+      settings.energy_saving_measure_interval_seconds = 900;
       ui.sync_settings(settings);
       press(ui, InputSource::TouchEnter);
       open_row(ui, "Operating Mode");
@@ -187,8 +188,67 @@ TEST_CASE("UIManager: mode choices preserve identities across every transition",
       ui.apply_to_settings(settings);
       CHECK(settings.operating_mode == modes[to]);
       CHECK(settings.measure_interval_seconds == 17);
+      CHECK(settings.energy_saving_measure_interval_seconds == 900);
     }
   }
+}
+
+TEST_CASE("UIManager: Energy Saving interval menu edits only its own preference",
+          "[UIManager][settings][interval]") {
+  const int intervals[] = {300, 900, 3600};
+  const char *labels[] = {"5m", "15m", "1h"};
+  for (uint8_t from = 0; from < 3; ++from) {
+    for (uint8_t to = 0; to < 3; ++to) {
+      UIManager ui(DEFAULT_UI_CONFIG);
+      GoSettings settings;
+      settings.operating_mode = OperatingMode::Offline;
+      settings.measure_interval_seconds = 17;
+      settings.energy_saving_measure_interval_seconds = intervals[from];
+      ui.sync_settings(settings);
+      go_to_measure_interval(ui);
+      auto values = ui.build_values(make_default_ctx());
+      CHECK(std::string(values.rows[values.selected_row].text) ==
+            std::string("Measure Int.: ") + labels[from]);
+      press(ui, InputSource::TouchEnter);
+      check_rows(ui, {"Exit", "Back", "5m", "15m", "1h"});
+      CHECK(ui.build_values(make_default_ctx()).selected_row == from + 2);
+      CHECK(open_row(ui, labels[to]).action == UIAction::SettingsChanged);
+      ui.apply_to_settings(settings);
+      CHECK(settings.measure_interval_seconds == 17);
+      CHECK(settings.energy_saving_measure_interval_seconds == intervals[to]);
+      CHECK(ui.build_values(make_default_ctx()).show_temp_hum);
+
+      // Returning to normal mode restores the exact custom preference.
+      settings.operating_mode = OperatingMode::Portable;
+      ui.sync_settings(settings);
+      ui.reset_to_home();
+      open_measure_interval_choice(ui);
+      values = ui.build_values(make_default_ctx());
+      CHECK(std::string(values.rows[values.selected_row].text) == "Custom (17s)");
+      CHECK(open_row(ui, "30s").action == UIAction::SettingsChanged);
+      ui.apply_to_settings(settings);
+      CHECK(settings.measure_interval_seconds == 30);
+      CHECK(settings.energy_saving_measure_interval_seconds == intervals[to]);
+    }
+  }
+}
+
+TEST_CASE("UIManager: open interval menu resynchronizes across modes",
+          "[UIManager][settings][interval]") {
+  UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings;
+  settings.measure_interval_seconds = 3600;
+  settings.energy_saving_measure_interval_seconds = 900;
+  ui.sync_settings(settings);
+  open_measure_interval_choice(ui);
+  settings.operating_mode = OperatingMode::Offline;
+  ui.sync_settings(settings);
+  check_rows(ui, {"Exit", "Back", "5m", "15m", "1h"});
+  CHECK(ui.build_values(make_default_ctx()).selected_row == 3);
+  settings.operating_mode = OperatingMode::Stationary;
+  ui.sync_settings(settings);
+  auto values = ui.build_values(make_default_ctx());
+  CHECK(std::string(values.rows[values.selected_row].text) == "1h");
 }
 
 TEST_CASE("UIManager: group choice returns and exit gestures", "[UIManager][nav][redesign]") {
@@ -404,7 +464,7 @@ TEST_CASE("UIManager: grouped menus wrap and return to their parent",
   const MenuCase cases[] = {
       {nullptr, Screen::Settings, "Operations", "About Device", 9},
       {"Operations", Screen::Operations, "Measure Int.", "Buzzer: Off", 6},
-      {"Display & Touch", Screen::DisplayTouch, "Temperature Unit: C", "Touch LED: Off", 9},
+      {"Display & Touch", Screen::DisplayTouch, "Pinned Chart", "Touch LED: Off", 9},
       {"Power Saving", Screen::PowerSaving, "Wi-Fi Power Saving", "Wi-Fi Power Saving", 3},
       {"Hardware Test", Screen::HardwareTest, "Peripheral Test", "Play Melody", 7},
   };
@@ -1109,21 +1169,27 @@ TEST_CASE("UIManager: custom measurement interval presentation",
 
 TEST_CASE("UIManager: unrelated setting preserves custom measurement interval",
           "[UIManager][settings][interval]") {
-  UIManager ui(DEFAULT_UI_CONFIG);
-  GoSettings settings{};
-  settings.measure_interval_seconds = 17;
-  ui.sync_settings(settings);
+  for (auto mode : {OperatingMode::Portable, OperatingMode::Stationary, OperatingMode::Offline}) {
+    CAPTURE(static_cast<int>(mode));
+    UIManager ui(DEFAULT_UI_CONFIG);
+    GoSettings settings{};
+    settings.operating_mode = mode;
+    settings.measure_interval_seconds = 17;
+    settings.energy_saving_measure_interval_seconds = 900;
+    ui.sync_settings(settings);
 
-  go_to_group(ui, "Display & Touch");
-  open_row(ui, "Temperature Unit");
-  press(ui, InputSource::TouchDown); // C → F
-  const auto result = press(ui, InputSource::TouchEnter);
+    go_to_group(ui, "Display & Touch");
+    open_row(ui, "Temperature Unit");
+    press(ui, InputSource::TouchDown); // C → F
+    const auto result = press(ui, InputSource::TouchEnter);
 
-  REQUIRE(result.action == UIAction::SettingsChanged);
-  GoSettings output{};
-  ui.apply_to_settings(output);
-  CHECK(output.use_fahrenheit);
-  CHECK(output.measure_interval_seconds == 17);
+    REQUIRE(result.action == UIAction::SettingsChanged);
+    GoSettings output{};
+    ui.apply_to_settings(output);
+    CHECK(output.use_fahrenheit);
+    CHECK(output.measure_interval_seconds == 17);
+    CHECK(output.energy_saving_measure_interval_seconds == 900);
+  }
 }
 
 TEST_CASE("UIManager: fixed choice replaces custom measurement interval",
@@ -2554,6 +2620,54 @@ TEST_CASE("UIManager: pinned chart is independent of browsing and lock state",
     ctx.locked = false;
     press(ui, InputSource::TouchDown);
     CHECK(ui.build_values(ctx).chart_metric() == Metric::Pm25);
+  }
+}
+
+TEST_CASE("UIManager: pinned chart hint uses only the empty overview row", "[UIManager][chart]") {
+  for (int interval : {30, 299, 300, 600}) {
+    CAPTURE(interval);
+    UIManager ui(DEFAULT_UI_CONFIG);
+    GoSettings settings{};
+    settings.measure_interval_seconds = interval;
+    settings.pinned_chart = Metric::None;
+    ui.sync_settings(settings);
+    auto ctx = make_default_ctx();
+
+    for (bool locked : {false, true}) {
+      ctx.locked = locked;
+      CHECK(ui.build_values(ctx).show_pinned_chart_hint() == (interval < 300));
+    }
+
+    ctx.locked = false;
+    press(ui, InputSource::TouchDown);
+    REQUIRE(ui.build_values(ctx).browsing_chart());
+    CHECK_FALSE(ui.build_values(ctx).show_pinned_chart_hint());
+
+    ctx.locked = true;
+    CHECK(ui.build_values(ctx).show_pinned_chart_hint() == (interval < 300));
+    ui.reset_to_home();
+    ctx.locked = false;
+    CHECK(ui.build_values(ctx).show_pinned_chart_hint() == (interval < 300));
+  }
+}
+
+TEST_CASE("UIManager: selected charts never show the pin hint even without history",
+          "[UIManager][chart]") {
+  UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings{};
+  settings.measure_interval_seconds = 30;
+  auto ctx = make_default_ctx();
+  for (auto metric : {Metric::Pm25, Metric::Co2, Metric::Temp, Metric::Humidity, Metric::Tvoc,
+                      Metric::Nox, Metric::Pressure, Metric::Altitude}) {
+    CAPTURE(static_cast<int>(metric));
+    settings.pinned_chart = metric;
+    ui.sync_settings(settings);
+    for (bool locked : {false, true}) {
+      ctx.locked = locked;
+      const auto v = ui.build_values(ctx);
+      CHECK(v.chart_count == 0);
+      CHECK_FALSE(v.show_pinned_chart_hint());
+    }
   }
 }
 

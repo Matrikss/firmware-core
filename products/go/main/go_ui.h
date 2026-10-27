@@ -379,6 +379,8 @@ private:
   uint8_t _setting_pm_display = 0;    // 0=ug/m3, 1=USAQI
   Metric _setting_pinned_chart = Metric::Pm25;
   int _setting_measure_interval_seconds = MEASURE_INTERVAL_SECONDS_DEFAULT;
+  int _setting_energy_saving_measure_interval_seconds =
+      ENERGY_SAVING_MEASURE_INTERVAL_SECONDS_DEFAULT;
   uint8_t _setting_gps_mode = 1; // 1="On When Tracking"
   OperatingMode _setting_mode = OperatingMode::Portable;
   uint8_t _setting_auto_lock = 0;       // 0="Off"
@@ -507,6 +509,7 @@ private:
 
   // --- Settings choice helpers ---
   static const SettingId *group_items(Screen screen, uint8_t &count);
+  int setting_measure_interval_seconds() const;
   uint8_t setting_option_count(SettingId setting_id) const;
   uint8_t setting_current_option(SettingId setting_id) const;
   void apply_setting_choice(uint8_t option_index);

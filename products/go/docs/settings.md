@@ -27,6 +27,7 @@ functions for load/save.
 | Function | Returns | Purpose |
 |---|---|---|
 | `load_go_settings(store)` | `GoSettings` | Read all keys from NVS, fall back to defaults for missing or invalid values. Never fails. |
+| `GoSettings::active_measure_interval_seconds()` | `int` | Select the saved interval for the current operating mode. |
 | `save_go_settings(store, settings)` | `bool` | Validate every field, then write all keys and commit. Returns `false` if validation fails or any write/commit fails. Multi-key persistence is not transactional. |
 
 See [`go_settings.h`](../main/go_settings.h) for full signatures.
@@ -35,11 +36,12 @@ See [`go_settings.h`](../main/go_settings.h) for full signatures.
 
 | Field | NVS Key | Type | Default | Valid Range | Notes |
 |---|---|---|---|---|---|
-| `measure_interval_seconds` | `"mi"` | `int` | `10` | 1 .. 3600 | Exact cadence for all sensors; no per-group on/off |
+| `measure_interval_seconds` | `"mi"` | `int` | `10` | 1 .. 3600 | Shared cadence for Portable and Stationary |
+| `energy_saving_measure_interval_seconds` | `"es_mi"` | `int` | `300` | 300 .. 3600 | Separate Energy Saving cadence |
 | `use_fahrenheit` | `"uf"` | `bool` | `false` | — | Temperature display unit (false=C, true=F) |
 | `use_feet` | `"auf"` | `bool` | `false` | — | Altitude display unit (false=m, true=ft); stored altitude remains meters |
 | `pm_use_usaqi` | `"pmu"` | `bool` | `false` | — | PM display format (false=µg/m³, true=USAQI) |
-| `pinned_chart` | `"pchart"` | `int` (stored) / `Metric` (in struct) | `Pm25` (1) | 0 .. 8 | UI-only Pinned Chart choice; None (0) disables the automatic chart |
+| `pinned_chart` | `"pchart"` | `int` (stored) / `Metric` (in struct) | `Pm25` (1) | 0 .. 8 | Pinned Chart choice shared by UI, BLE, and Local Server; None (0) disables the automatic chart |
 | `gps_mode` | `"gpm"` | `int` (stored) / `GpsMode` (in struct) | `OnWhenTracking` (1) | 0 .. 2 | GPS operating mode: AlwaysOff / OnWhenTracking / AlwaysOn |
 | `operating_mode` | `"opm"` | `int` (stored) / `OperatingMode` (in struct) | `Portable` (0) | 0 .. 2 | Serialized as int; cast to `OperatingMode` on load |
 | `auto_lock_seconds` | `"als"` | `int` | `10` | 0, 10, 30, 60 | Runtime auto-lock timeout; `0` = disabled |
@@ -60,21 +62,26 @@ See [`go_settings.h`](../main/go_settings.h) for full signatures.
 
 ### Measurement Interval Presentation
 
-The firmware persists every valid measurement interval from 1 through 3600
-seconds exactly. The on-device menu offers fixed choices of 3, 10, 30, 60, 300,
-900, and 3600 seconds. When an interface activates another valid value, the
-Settings > Operations summary shows the exact seconds and the interval submenu prepends a
-selected `Custom (<seconds>s)` row.
+Portable and Stationary share `measure_interval_seconds`; Energy Saving uses
+`energy_saving_measure_interval_seconds`. Switching modes selects the saved
+preference without overwriting the other. Both survive restart. A missing or
+invalid `es_mi` loads as 300 seconds, preserving the existing `mi` value.
 
-Changing an unrelated UI setting preserves the custom interval. Selecting one
-of the fixed interval choices explicitly replaces it.
+The same Settings > Operations > Measurement Interval menu edits the active
+preference. Portable and Stationary offer 3s, 10s, 30s, 60s, 5m, 15m, and 1h;
+Energy Saving offers 5m, 15m, and 1h. Valid non-fixed values retain their exact
+seconds and appear as `Custom (<seconds>s)`; the menu has no custom-value input.
+Unrelated settings preserve both intervals; choosing a fixed value replaces
+only the active preference.
 
 ### Pinned Chart
 
 Persisted identifiers are None (0), PM2.5 (1), CO2 (2), Temperature (3), Humidity
 (4), TVOC (5), NOx (6), Pressure (7), and Altitude (8). Missing or invalid values
 load as PM2.5; invalid choices are rejected on save. The UI exposes this setting
-under Display & Touch; remote configuration interfaces do not expose it.
+as the first setting under Display & Touch. BLE uses unsigned `pchart` IDs;
+the Local Server uses `pinnedChart` names. See the [BLE protocol](../go_ble_client.md#72-write-set-config)
+and [local configuration](local_server.md#configuration).
 
 The preference survives interval changes, even when Temperature or Humidity
 cannot be shown below 300 seconds. See [Pinned Charts](ui_manager.md#pinned-charts).
@@ -146,12 +153,14 @@ after `save_go_settings()` returns `true`.
 
 ## Validation Rules
 
-All validation is implemented in an anonymous namespace in `go_settings.cpp`
-(file-local; not visible to callers).
+`is_go_settings_valid()` checks the complete settings object. Shared field
+bounds and validators live in `go_config_types.h`; local checks stay in
+`go_settings.cpp`.
 
 | Field | Rule |
 |---|---|
 | `measure_interval_seconds` | `>= 1 && <= 3600` |
+| `energy_saving_measure_interval_seconds` | `>= 300 && <= 3600` |
 | `use_fahrenheit` | No range check (bool) |
 | `use_feet` | No range check (bool) |
 | `pm_use_usaqi` | No range check (bool) |

@@ -506,10 +506,10 @@ Sleep is only eligible when:
 ### Sleep Type Selection
 
 `PowerService::decide_sleep()` computes sleep type and duration in one
-call:
+call, using the saved Energy Saving interval (minimum/default 5 minutes):
 
 ```text
-sleep_ms = (measure_interval_seconds * 1000) - awake_ms   (clamped to 0)
+sleep_ms = (energy_saving_measure_interval_seconds * 1000) - awake_ms   (clamped to 0)
 ```
 
 | sleep_ms | Sleep Type | Rationale |
@@ -797,9 +797,8 @@ Two tiers of storage:
 
 Settings fields:
 
-- PM interval, other sensor interval (independent timers; 0 = off)
-- Display refresh interval (0 = display off while locked; unlocked always
-  shows dashboard)
+- Measurement cadence shared by Portable/Stationary (default 10 s), plus a
+  separate Energy Saving cadence (default 5 min); see [Settings](docs/settings.md)
 - Temperature units (C / F), altitude units (m / ft), PM display
   (µg/m³ / USAQI)
 - GPS mode (AlwaysOff / OnWhenTracking / AlwaysOn)
@@ -860,9 +859,9 @@ Settings fields:
   firmware identity returned by the measures endpoint
 - Serves corrected measurement, system-information, and active-config snapshots
   cached by `GoLocalApiService` behind a short-held RTOS mutex
-- Supports `pmStandard`, `temperatureUnit`, `altitudeUnit`, `cloudConnection`,
-  `configurationControl`, `co2AbcDays`, and PM2.5, temperature, and humidity
-  corrections; other generic catalog fields are not exposed by Go
+- Supports display settings including `pinnedChart`, measurement and GPS
+  settings, output controls, cloud/source policy, and sensor configuration; see
+  the [supported fields](docs/local_server.md#configuration)
 - Accepts validated config updates asynchronously: HTTP `202` means admitted,
   not persisted or applied; clients read config until the cached value converges
 - Uses one four-entry FIFO for config and action requests. Each admitted entry

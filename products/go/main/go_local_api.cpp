@@ -24,6 +24,15 @@ constexpr const char *TEMPERATURE_UNIT_CELSIUS = "c";
 constexpr const char *TEMPERATURE_UNIT_FAHRENHEIT = "f";
 constexpr const char *ALTITUDE_UNIT_METERS = "m";
 constexpr const char *ALTITUDE_UNIT_FEET = "ft";
+constexpr const char *PINNED_CHART_NONE = "none";
+constexpr const char *PINNED_CHART_PM25 = "pm25";
+constexpr const char *PINNED_CHART_CO2 = "co2";
+constexpr const char *PINNED_CHART_TEMPERATURE = "temperature";
+constexpr const char *PINNED_CHART_HUMIDITY = "humidity";
+constexpr const char *PINNED_CHART_TVOC = "tvoc";
+constexpr const char *PINNED_CHART_NOX = "nox";
+constexpr const char *PINNED_CHART_PRESSURE = "pressure";
+constexpr const char *PINNED_CHART_ALTITUDE = "altitude";
 constexpr const char *CONFIG_CONTROL_CLOUD = "cloud";
 constexpr const char *CONFIG_CONTROL_LOCAL = "local";
 constexpr const char *CONFIG_CONTROL_BOTH = "both";
@@ -383,6 +392,7 @@ GoLocalApiService::make_active_config(const GoSettings &settings) {
   active.pm_use_usaqi = settings.pm_use_usaqi;
   active.use_fahrenheit = settings.use_fahrenheit;
   active.use_feet = settings.use_feet;
+  active.pinned_chart = settings.pinned_chart;
   active.disable_cloud = settings.disable_cloud;
   active.configuration_control = settings.configuration_control;
   active.measure_interval_seconds = settings.measure_interval_seconds;
@@ -413,6 +423,36 @@ LocalServerConfig GoLocalApiService::map_config(const ActiveConfigSnapshot &acti
                             : active.co2_abc_days;
   config.tvoc_learning_offset = active.tvoc_learning_offset;
   config.nox_learning_offset = active.nox_learning_offset;
+
+  switch (active.pinned_chart) {
+  case Metric::None:
+    config.pinned_chart = PINNED_CHART_NONE;
+    break;
+  case Metric::Pm25:
+    config.pinned_chart = PINNED_CHART_PM25;
+    break;
+  case Metric::Co2:
+    config.pinned_chart = PINNED_CHART_CO2;
+    break;
+  case Metric::Temp:
+    config.pinned_chart = PINNED_CHART_TEMPERATURE;
+    break;
+  case Metric::Humidity:
+    config.pinned_chart = PINNED_CHART_HUMIDITY;
+    break;
+  case Metric::Tvoc:
+    config.pinned_chart = PINNED_CHART_TVOC;
+    break;
+  case Metric::Nox:
+    config.pinned_chart = PINNED_CHART_NOX;
+    break;
+  case Metric::Pressure:
+    config.pinned_chart = PINNED_CHART_PRESSURE;
+    break;
+  case Metric::Altitude:
+    config.pinned_chart = PINNED_CHART_ALTITUDE;
+    break;
+  }
 
   switch (active.configuration_control) {
   case ConfigurationControl::Cloud:
@@ -483,7 +523,8 @@ bool GoLocalApiService::is_exact_control_recovery(const LocalServerConfig &parti
 
   return !partial.country.has_value() && !partial.pm_standard.has_value() &&
          !partial.temperature_unit.has_value() && !partial.altitude_unit.has_value() &&
-         !partial.post_data_to_cloud.has_value() && !partial.cloud_connection.has_value() &&
+         !partial.pinned_chart.has_value() && !partial.post_data_to_cloud.has_value() &&
+         !partial.cloud_connection.has_value() &&
          !partial.measurement_interval_seconds.has_value() && !partial.gps_mode.has_value() &&
          !partial.front_led_brightness.has_value() && !partial.back_led_brightness.has_value() &&
          !partial.touch_led_intensity.has_value() && !partial.buzzer_enabled.has_value() &&
@@ -530,6 +571,31 @@ ConfigSubmitResult GoLocalApiService::translate_config(const LocalServerConfig &
       return {ConfigSubmitStatus::InvalidValue, ConfigFieldId::AltitudeUnit};
     }
     update.update_mask |= static_cast<uint32_t>(GoConfigField::AltitudeUnit);
+  }
+
+  if (partial.pinned_chart.has_value()) {
+    if (*partial.pinned_chart == PINNED_CHART_NONE) {
+      update.pinned_chart = Metric::None;
+    } else if (*partial.pinned_chart == PINNED_CHART_PM25) {
+      update.pinned_chart = Metric::Pm25;
+    } else if (*partial.pinned_chart == PINNED_CHART_CO2) {
+      update.pinned_chart = Metric::Co2;
+    } else if (*partial.pinned_chart == PINNED_CHART_TEMPERATURE) {
+      update.pinned_chart = Metric::Temp;
+    } else if (*partial.pinned_chart == PINNED_CHART_HUMIDITY) {
+      update.pinned_chart = Metric::Humidity;
+    } else if (*partial.pinned_chart == PINNED_CHART_TVOC) {
+      update.pinned_chart = Metric::Tvoc;
+    } else if (*partial.pinned_chart == PINNED_CHART_NOX) {
+      update.pinned_chart = Metric::Nox;
+    } else if (*partial.pinned_chart == PINNED_CHART_PRESSURE) {
+      update.pinned_chart = Metric::Pressure;
+    } else if (*partial.pinned_chart == PINNED_CHART_ALTITUDE) {
+      update.pinned_chart = Metric::Altitude;
+    } else {
+      return {ConfigSubmitStatus::InvalidValue, ConfigFieldId::PinnedChart};
+    }
+    update.update_mask |= static_cast<uint32_t>(GoConfigField::PinnedChart);
   }
 
   if (partial.measurement_interval_seconds.has_value()) {

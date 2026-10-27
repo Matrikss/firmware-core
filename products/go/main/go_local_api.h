@@ -82,6 +82,7 @@ private:
     bool pm_use_usaqi = false;
     bool use_fahrenheit = false;
     bool use_feet = false;
+    Metric pinned_chart = Metric::Pm25;
     bool disable_cloud = false;
     ConfigurationControl configuration_control = ConfigurationControl::Both;
     int measure_interval_seconds = MEASURE_INTERVAL_SECONDS_DEFAULT;

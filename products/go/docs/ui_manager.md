@@ -186,13 +186,13 @@ rows follow this order:
 | Tracking | Status, Pause Tracking or Resume Tracking, Stop Tracking |
 | Settings | Operations, Display & Touch, Power Saving, Hardware Test, Clear Data, Setup Guide, About Device |
 | Operations | Measurement Interval, CO2 Calibration, GPS Mode, Buzzer |
-| Display & Touch | Temperature Unit, Altitude Unit, PM Display, Pinned Chart, Auto Lock, AQI LED, Touch LED |
+| Display & Touch | Pinned Chart, Temperature Unit, Altitude Unit, PM Display, Auto Lock, AQI LED, Touch LED |
 | Power Saving | Wi-Fi Power Saving |
 | Hardware Test | Peripheral Test, GPS Test, Accelerometer Test, Battery Calibration, Play Melody |
 
 Settings and its groups fit on one page. Opening Settings selects Operations;
-Operations selects Measurement Interval, Display & Touch selects Temperature
-Unit, Power Saving selects Wi-Fi Power Saving, and Hardware Test selects
+Operations selects Measurement Interval, Display & Touch selects Pinned Chart,
+Power Saving selects Wi-Fi Power Saving, and Hardware Test selects
 Peripheral Test. Reopening these menus selects the first content row.
 Choice screens select the active value; applying an ordinary setting returns
 to its owning group on the source row. Back and double-press restore that
@@ -323,10 +323,10 @@ factory-state write and reboot path.
 ## Internal Settings State
 
 The UI Manager stores most settings as option indices internally. It stores
-operating mode as `OperatingMode` and the measurement interval as exact seconds so values supplied through firmware
-interfaces are not normalized to a display choice. This state drives the
-settings row labels and pre-selects the current value when opening a
-SettingsChoice screen. `SettingId` identities are independent of menu row
+operating mode as `OperatingMode` and both measurement intervals as exact
+seconds, preserving valid values that do not match a fixed display choice.
+This state drives the settings row labels and pre-selects the current value when
+opening a SettingsChoice screen. `SettingId` identities are independent of menu row
 positions. `_choice_parent` records the owning menu, whose cursor remains in
 place while a choice is open. Operating-mode choices use explicit enum/label
 pairs so display ordering cannot change persisted mode identities.
@@ -337,7 +337,7 @@ pairs so display ordering cannot change persisted mode identities.
 | Temperature Unit | `Temperature Unit: C / F` | C, F |
 | Altitude Unit | `Altitude Unit: m / ft` | m, ft |
 | PM Display | `PM Display: ug/m3 / USAQI` | ug/m3, USAQI |
-| Measure Interval | `Measure Int.: <value>` | Conditional `Custom (<seconds>s)`, then 3s, 10s, 30s, 60s, 5m, 15m, 1h |
+| Measure Interval | `Measure Int.: <value>` | Portable/Stationary: 3s, 10s, 30s, 60s, 5m, 15m, 1h; Energy Saving: 5m, 15m, 1h. A non-fixed saved value prepends `Custom (<seconds>s)` |
 | GPS Mode | `GPS: ...` (summary uses `When tracking`) | Always Off, On When Tracking, Always On |
 | Mode | Main Menu: `Operating Mode` | Portable, Stationary, Energy Saving |
 | Auto Lock | `Auto Lock: Off / 10s / 30s / 60s` | Off, 10 Seconds, 30 Seconds, 60 Seconds |
@@ -349,6 +349,10 @@ pairs so display ordering cannot change persisted mode identities.
 | Wi-Fi Power Saving | `Wi-Fi Power Saving` | Disable, Enable; default Disable |
 | Play Melody | Hardware Test action row | Chime, Tetris |
 
+The interval menu edits the current mode's saved preference. Switching modes
+restores that preference and its selected row; choices below 5m are hidden in
+Energy Saving. See [Settings](settings.md#measurement-interval-presentation).
+
 The orchestrator calls `sync_settings(const GoSettings &)` after loading or
 activating settings. A measurement interval that exactly matches a fixed choice
 uses its compact label. A different valid value, such as 17 seconds, renders as
@@ -356,7 +360,7 @@ uses its compact label. A different valid value, such as 17 seconds, renders as
 Selecting a fixed choice replaces the custom value and removes the custom row.
 
 `apply_to_settings()` maps the internal state back to `GoSettings`, including
-the exact interval, `use_feet`, `wifi_power_save_enabled`, and the two LED fields
+both exact intervals, `use_feet`, `wifi_power_save_enabled`, and the two LED fields
 (`back_led_brightness`, `touch_led_intensity`). Changing
 an unrelated UI setting therefore preserves an active custom interval.
 
@@ -486,10 +490,10 @@ no sample pointer and no plotted line.
 
 ### Pinned Charts
 
-Settings > Display & Touch > Pinned Chart selects None or any of the eight
-metrics. PM2.5 is the initial default. The saved choice applies while locked
-and whenever no metric is selected; browsing never changes it. Locking or
-entering the menu clears only the transient selection.
+Pinned Chart is the first setting under Settings > Display & Touch and selects
+None or any of the eight metrics. PM2.5 is the initial default. The saved choice
+applies while locked and whenever no metric is selected; browsing never changes
+it. Locking or entering the menu clears only the transient selection.
 
 Unlocked Up/Down browsing shows a metric header, Min/Max, and chart. Returning
 to None restores the overview and the pinned chart, if enabled. Pinned Chart
@@ -497,5 +501,8 @@ None disables the automatic chart at every interval; browsing remains available.
 
 Below 300 seconds, Temperature and Humidity are skipped during browsing. A
 pinned Temperature or Humidity chart is temporarily hidden, without substituting
-another chart or changing the saved choice. It returns at 300 seconds or longer.
+another chart or changing the saved choice. The empty chart area shows
+“Not available”; choosing None shows “Pin a chart here”. Both are small, centered
+text, visible while locked or unselected, and absent during chart browsing.
+The selected thermal chart returns at 300 seconds or longer.
 See [Home Charts](display_service.md#home-charts) for the visible layout.

@@ -157,6 +157,11 @@ struct DisplayValues {
     return metric_available(metric) ? metric : Metric::None;
   }
 
+  bool show_pinned_chart_hint() const {
+    // At longer intervals, pressure and altitude occupy the unused chart row.
+    return !show_temp_hum && pinned_chart == Metric::None && !browsing_chart();
+  }
+
   // --- List/menu content ---
   ListRow rows[MAX_LIST_ROWS] = {};
   uint8_t row_count = 0;

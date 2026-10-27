@@ -598,7 +598,7 @@ This characteristic supports three operations:
 
 Read the characteristic to receive the full device configuration.
 
-#### Payload (16-key CBOR map)
+#### Payload (17-key CBOR map)
 
 | Key | Type | Description |
 |---|---|---|
@@ -606,6 +606,7 @@ Read the characteristic to receive the full device configuration.
 | `"temp_f"` | bool | `true` = Fahrenheit, `false` = Celsius |
 | `"alt_ft"` | bool | `true` = feet, `false` = meters |
 | `"pm_aqi"` | bool | `true` = US AQI for PM, `false` = raw ug/m3 |
+| `"pchart"` | uint | Pinned Chart: 0=None, 1=PM2.5, 2=CO2, 3=Temperature, 4=Humidity, 5=TVOC, 6=NOx, 7=Pressure, 8=Altitude |
 | `"gps_mode"` | text | GPS mode (see table below) |
 | `"auto_lock"` | uint | Auto-lock timeout (seconds) |
 | `"op_mode"` | text | Operating mode (see table below) |
@@ -620,7 +621,9 @@ Read the characteristic to receive the full device configuration.
 | `"hum_corr"` | map | Humidity correction (`s`, `v`) |
 
 `temp_f`, `alt_ft`, and `pm_aqi` affect device presentation only. They do not
-change the units in Measures.
+change the units in Measures. `pchart` selects the Home chart; its default is
+PM2.5 (1). Temperature/Humidity remain selectable below a five-minute interval,
+but Home shows “Not available” until the interval permits them.
 
 Correction maps contain schema version `s` and a positional value array `v`.
 Schema version 1 uses `[algorithm, scale, intercept]` for temperature and
@@ -660,19 +663,11 @@ for `op_mode` and `"op_offline"` for disconnect notices.
 
 ```json
 {
-  "meas_int": 10,
-  "temp_f": false,
-  "alt_ft": false,
-  "pm_aqi": false,
-  "gps_mode": "tracking",
-  "auto_lock": 60,
-  "op_mode": "portable",
-  "bled": 3,
-  "tled": 2,
-  "buz": true,
-  "abc": 7,
-  "tlo": 12,
-  "nlo": 12,
+  "meas_int": 10, "temp_f": false, "alt_ft": false,
+  "pm_aqi": false, "pchart": 1, "gps_mode": "tracking",
+  "auto_lock": 60, "op_mode": "portable",
+  "bled": 3, "tled": 2, "buz": true,
+  "abc": 7, "tlo": 12, "nlo": 12,
   "pm25_corr": {"s": 1, "v": [2, 1.08, -0.2, 0]},
   "temp_corr": {"s": 1, "v": [0, 1.0, 0.0]},
   "hum_corr": {"s": 1, "v": [0, 1.0, 0.0]}
@@ -710,6 +705,7 @@ silently ignored for backward compatibility. They do not modify any setting.
 | `"temp_f"` | bool | |
 | `"alt_ft"` | bool | Altitude display unit: `true` = feet |
 | `"pm_aqi"` | bool | |
+| `"pchart"` | uint | 0–8, using the Read payload metric IDs |
 | `"gps_mode"` | text | `"off"`, `"tracking"`, or `"always"` |
 | `"auto_lock"` | uint | |
 | `"op_mode"` | text | `"portable"`, `"stationary"`, or `"offline"` |
@@ -722,6 +718,10 @@ silently ignored for backward compatibility. They do not modify any setting.
 | `"pm25_corr"` | map | Complete PM2.5 correction group |
 | `"temp_corr"` | map | Complete temperature correction group |
 | `"hum_corr"` | map | Complete humidity correction group |
+
+For example, `{"op":"set","pchart":2}` selects CO2. A changed choice produces
+`{"type":"config","pchart":2}`; an unchanged choice produces no notification.
+Out-of-range IDs and non-integer values return `invalid_config_value`.
 
 Correction writes replace one complete correction group and count as one
 recognized config key:
@@ -1727,7 +1727,7 @@ negotiated interval; only its speed is affected.
 
 ### Required MTUs by operation
 
-- **Config Read**: the full 16-key snapshot is bounded by a 512-byte
+- **Config Read**: the full 17-key snapshot is bounded by a 512-byte
   characteristic buffer. Use Read-Long / Read Blob and
   collect all fragments. Config Read does not require MTU 512, but it does
   require a client API that supports long reads.

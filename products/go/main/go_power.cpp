@@ -669,7 +669,8 @@ PowerService::SleepDecision PowerService::decide_sleep(const GoSettings &setting
     return {SleepType::None, 0};
   }
 
-  uint32_t interval_ms = static_cast<uint32_t>(settings.measure_interval_seconds) * 1000;
+  uint32_t interval_ms =
+      static_cast<uint32_t>(settings.energy_saving_measure_interval_seconds) * 1000;
 
   // Subtract time already spent awake so total cycle matches the interval
   uint32_t sleep_ms = (awake_ms < interval_ms) ? (interval_ms - awake_ms) : 0;
@@ -677,7 +678,7 @@ PowerService::SleepDecision PowerService::decide_sleep(const GoSettings &setting
   if (sleep_ms >= static_cast<uint32_t>(_config.deep_sleep_threshold_ms)) {
     return {SleepType::Deep, sleep_ms};
   }
-  // Interval too short: deep sleep overhead (~3–4 s reboot) exceeds the
+  // Too little time remains: deep sleep overhead (~3–4 s reboot) exceeds the
   // sleep duration.  Stay awake and let the main loop run normally.
   return {SleepType::None, 0};
 }
