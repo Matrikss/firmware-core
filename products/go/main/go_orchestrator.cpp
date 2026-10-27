@@ -420,7 +420,7 @@ uint32_t Orchestrator::compute_queue_timeout_ms() const {
   // values stay frozen and are rebased to "now" on resume so the next
   // deadline lands a full interval into the future, not back-to-back to
   // catch up on missed cycles.
-  uint32_t interval_ms = static_cast<uint32_t>(_settings.measure_interval_seconds) * 1000;
+  uint32_t interval_ms = static_cast<uint32_t>(_settings.active_measure_interval_seconds()) * 1000;
   if (!_provisioning_sensitive_services_paused) {
     // Sensor timer deadline
     if (!_measurement_pending && _pm_state == PmState::Ready) {
@@ -532,7 +532,7 @@ uint32_t Orchestrator::compute_queue_timeout_ms() const {
 void Orchestrator::check_timers() {
   uint32_t now = static_cast<uint32_t>(RTOS::get_time_ms());
 
-  uint32_t interval = static_cast<uint32_t>(_settings.measure_interval_seconds) * 1000;
+  uint32_t interval = static_cast<uint32_t>(_settings.active_measure_interval_seconds()) * 1000;
 
   // The following timers are all skipped while sensitive services are
   // paused (Provisioning / ProvisioningConfirm).  Skipping the firing
@@ -716,13 +716,15 @@ void Orchestrator::on_inactivity_timeout() {
 }
 
 void Orchestrator::reschedule_sensor_timer(const GoSettings &previous_settings) {
-  if (previous_settings.measure_interval_seconds == _settings.measure_interval_seconds) {
+  if (previous_settings.active_measure_interval_seconds() ==
+      _settings.active_measure_interval_seconds()) {
     return;
   }
   _last_measurement_ms = static_cast<uint32_t>(RTOS::get_time_ms());
 
   // Reconcile PM state with the new interval.
-  uint32_t new_interval_ms = static_cast<uint32_t>(_settings.measure_interval_seconds) * 1000;
+  uint32_t new_interval_ms =
+      static_cast<uint32_t>(_settings.active_measure_interval_seconds()) * 1000;
   if (_mode != OperatingMode::Offline &&
       _svc.power_service.should_sleep_pm_sensor(new_interval_ms)) {
     if (!_measurement_pending && !_refresh_pending && !_periph.active &&
@@ -1155,7 +1157,7 @@ void Orchestrator::sleep_pm_if_idle() {
   }
 
   // The producer sleeps PM before PmSensorAsleep lets us isolate the bus.
-  uint32_t interval_ms = static_cast<uint32_t>(_settings.measure_interval_seconds) * 1000;
+  uint32_t interval_ms = static_cast<uint32_t>(_settings.active_measure_interval_seconds()) * 1000;
   const uint32_t now = static_cast<uint32_t>(RTOS::get_time_ms());
   const int32_t until_regular = static_cast<int32_t>(_last_measurement_ms + interval_ms - now);
   const uint32_t remaining_ms = until_regular > 0 ? static_cast<uint32_t>(until_regular) : 0;
@@ -1311,7 +1313,8 @@ void Orchestrator::on_pm_event(EventType type) {
   } else {
     _pm_state = PmState::Asleep;
     _svc.power_service.set_pm_power(false);
-    const uint32_t interval = static_cast<uint32_t>(_settings.measure_interval_seconds) * 1000;
+    const uint32_t interval =
+        static_cast<uint32_t>(_settings.active_measure_interval_seconds()) * 1000;
     if (_periph.active || _mode == OperatingMode::Offline ||
         !_svc.power_service.should_sleep_pm_sensor(interval)) {
       prepare_pm();
@@ -3544,7 +3547,8 @@ void Orchestrator::deactivate_gps() {
     _latest_gps = GpsData{};
     return;
   }
-  const uint32_t interval = static_cast<uint32_t>(_settings.measure_interval_seconds) * 1000;
+  const uint32_t interval =
+      static_cast<uint32_t>(_settings.active_measure_interval_seconds()) * 1000;
   const uint32_t elapsed = static_cast<uint32_t>(RTOS::get_time_ms()) - _last_measurement_ms;
   const uint32_t next_wake = elapsed < interval ? interval - elapsed : interval;
   if (!_svc.gps_service.start_sleeping(gps_inactive_sleep_ms(_mode, next_wake))) {
