@@ -153,8 +153,8 @@ TEST_CASE("UIManager: agreed menu hierarchy", "[UIManager][nav][redesign]") {
   CHECK(std::string(values.rows[5].text) == "Buzzer: Off");
   double_press(ui);
   open_row(ui, "Display & Touch");
-  check_rows(ui, {"Exit", "Back", "Temperature Unit: C", "Altitude Unit: m", "PM Display: ug/m3",
-                  "Pinned Chart", "Auto Lock: Off", "AQI LED: Off", "Touch LED: Off"});
+  check_rows(ui, {"Exit", "Back", "Pinned Chart", "Temperature Unit: C", "Altitude Unit: m",
+                  "PM Display: ug/m3", "Auto Lock: Off", "AQI LED: Off", "Touch LED: Off"});
   double_press(ui);
   open_row(ui, "Power Saving");
   check_rows(ui, {"Exit", "Back", "Wi-Fi Power Saving"});
@@ -404,7 +404,7 @@ TEST_CASE("UIManager: grouped menus wrap and return to their parent",
   const MenuCase cases[] = {
       {nullptr, Screen::Settings, "Operations", "About Device", 9},
       {"Operations", Screen::Operations, "Measure Int.", "Buzzer: Off", 6},
-      {"Display & Touch", Screen::DisplayTouch, "Temperature Unit: C", "Touch LED: Off", 9},
+      {"Display & Touch", Screen::DisplayTouch, "Pinned Chart", "Touch LED: Off", 9},
       {"Power Saving", Screen::PowerSaving, "Wi-Fi Power Saving", "Wi-Fi Power Saving", 3},
       {"Hardware Test", Screen::HardwareTest, "Peripheral Test", "Play Melody", 7},
   };

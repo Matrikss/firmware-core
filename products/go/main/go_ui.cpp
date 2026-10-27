@@ -996,8 +996,8 @@ const UIManager::SettingId *UIManager::group_items(Screen screen, uint8_t &count
   static constexpr SettingId OPERATIONS[] = {SettingId::MeasureInterval, SettingId::Co2Calibration,
                                              SettingId::GpsMode, SettingId::Buzzer};
   static constexpr SettingId DISPLAY_TOUCH[] = {
-      SettingId::Units,    SettingId::AltitudeUnit, SettingId::PmDisplay, SettingId::PinnedChart,
-      SettingId::AutoLock, SettingId::AqiLed,       SettingId::TouchLed};
+      SettingId::PinnedChart, SettingId::Units,  SettingId::AltitudeUnit, SettingId::PmDisplay,
+      SettingId::AutoLock,    SettingId::AqiLed, SettingId::TouchLed};
   static constexpr SettingId POWER_SAVING[] = {SettingId::WifiPowerSaving};
   static_assert(sizeof(OPERATIONS) / sizeof(OPERATIONS[0]) + 2 <= MAX_LIST_ROWS);
   static_assert(sizeof(DISPLAY_TOUCH) / sizeof(DISPLAY_TOUCH[0]) + 2 <= MAX_LIST_ROWS);
