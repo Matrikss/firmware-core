@@ -1788,13 +1788,16 @@ void DisplayService::_draw_home(const DisplayValues &v) {
     format_altitude_value(value, sizeof(value), v.altitude_m, v.use_feet);
     draw_cell(&_u8g2, gas_cell + 3, "Altitude", value, false);
   }
+  const bool thermal_chart_hidden =
+      !v.show_temp_hum && (v.pinned_chart == Metric::Temp || v.pinned_chart == Metric::Humidity);
   if (chart_visible) {
     _draw_chart(v);
-  } else if (v.show_pinned_chart_hint()) {
+  } else if (v.show_pinned_chart_hint() || thermal_chart_hidden) {
     u8g2_SetFont(&_u8g2, u8g2_font_helvR08_tr);
     const int hint_baseline =
         PLOT_Y + (PLOT_H + u8g2_GetAscent(&_u8g2) + u8g2_GetDescent(&_u8g2)) / 2;
-    draw_centered_text(&_u8g2, SCREEN_W / 2, hint_baseline, "Pin a chart here");
+    const char *hint = thermal_chart_hidden ? "Not available" : "Pin a chart here";
+    draw_centered_text(&_u8g2, SCREEN_W / 2, hint_baseline, hint);
   }
 }
 
