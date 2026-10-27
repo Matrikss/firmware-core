@@ -487,35 +487,30 @@ TEST_CASE("decide_sleep: sleep type and duration", "[PowerService][sleep]") {
     CHECK(d.duration_ms == 0);
   }
 
-  SECTION("Offline + Locked, interval 60s, awake 3s — Deep 57s") {
+  SECTION("Offline uses its saved interval independently of the normal interval") {
+    PowerService svc(&mock_bms, test_gpio_hal, DEFAULT_CONFIG);
+    for (int interval : {300, 900, 3600}) {
+      GoSettings settings{};
+      settings.measure_interval_seconds = 10;
+      settings.energy_saving_measure_interval_seconds = interval;
+      auto d = svc.decide_sleep(settings, LockState::Locked, OperatingMode::Offline, 3000);
+      CHECK(d.type == PowerService::SleepType::Deep);
+      CHECK(d.duration_ms == static_cast<uint32_t>(interval * 1000 - 3000));
+    }
+  }
+
+  SECTION("Remaining time at the deep sleep threshold still sleeps") {
     PowerService svc(&mock_bms, test_gpio_hal, DEFAULT_CONFIG); // threshold = 5000 ms
-
-    GoSettings settings{};
-    settings.measure_interval_seconds = 60;
-
-    auto d = svc.decide_sleep(settings, LockState::Locked, OperatingMode::Offline, 3000);
+    GoSettings settings{}; // Energy Saving defaults to 300 seconds.
+    auto d = svc.decide_sleep(settings, LockState::Locked, OperatingMode::Offline, 295000);
     CHECK(d.type == PowerService::SleepType::Deep);
-    CHECK(d.duration_ms == 57000);
+    CHECK(d.duration_ms == 5000);
   }
 
-  SECTION("Offline + Locked, interval 10s, awake 7s — None (below threshold)") {
-    PowerService svc(&mock_bms, test_gpio_hal, DEFAULT_CONFIG); // threshold = 5000 ms
-
+  SECTION("Remaining time below the deep sleep threshold stays awake") {
+    PowerService svc(&mock_bms, test_gpio_hal, DEFAULT_CONFIG);
     GoSettings settings{};
-    settings.measure_interval_seconds = 10;
-
-    auto d = svc.decide_sleep(settings, LockState::Locked, OperatingMode::Offline, 7000);
-    CHECK(d.type == PowerService::SleepType::None);
-    CHECK(d.duration_ms == 0);
-  }
-
-  SECTION("Offline + Locked, interval 3s, awake 1s — None (below threshold)") {
-    PowerService svc(&mock_bms, test_gpio_hal, DEFAULT_CONFIG); // threshold = 5000 ms
-
-    GoSettings settings{};
-    settings.measure_interval_seconds = 3;
-
-    auto d = svc.decide_sleep(settings, LockState::Locked, OperatingMode::Offline, 1000);
+    auto d = svc.decide_sleep(settings, LockState::Locked, OperatingMode::Offline, 295001);
     CHECK(d.type == PowerService::SleepType::None);
     CHECK(d.duration_ms == 0);
   }
@@ -524,41 +519,20 @@ TEST_CASE("decide_sleep: sleep type and duration", "[PowerService][sleep]") {
     PowerService::Config config = DEFAULT_CONFIG;
     config.deep_sleep_threshold_ms = 2000;
     PowerService svc(&mock_bms, test_gpio_hal, config);
-
     GoSettings settings{};
-    settings.measure_interval_seconds = 3; // 3000 ms >= 2000
-
-    auto d = svc.decide_sleep(settings, LockState::Locked, OperatingMode::Offline, 0);
+    auto d = svc.decide_sleep(settings, LockState::Locked, OperatingMode::Offline, 298000);
     CHECK(d.type == PowerService::SleepType::Deep);
-    CHECK(d.duration_ms == 3000);
+    CHECK(d.duration_ms == 2000);
   }
 
-  SECTION("Awake time subtracts from duration — Deep to None transition") {
-    PowerService svc(&mock_bms, test_gpio_hal, DEFAULT_CONFIG); // threshold = 5000 ms
-
-    GoSettings settings{};
-    settings.measure_interval_seconds = 10; // interval 10000 ms
-
-    // 0 awake: 10000 ms >= 5000 -> Deep
-    auto d = svc.decide_sleep(settings, LockState::Locked, OperatingMode::Offline, 0);
-    CHECK(d.type == PowerService::SleepType::Deep);
-    CHECK(d.duration_ms == 10000);
-
-    // 6000 awake: 4000 ms < 5000 -> None (stay awake)
-    d = svc.decide_sleep(settings, LockState::Locked, OperatingMode::Offline, 6000);
-    CHECK(d.type == PowerService::SleepType::None);
-    CHECK(d.duration_ms == 0);
-  }
-
-  SECTION("Awake exceeds interval — clamps to 0, stays awake") {
+  SECTION("Awake time reaching or exceeding the interval stays awake") {
     PowerService svc(&mock_bms, test_gpio_hal, DEFAULT_CONFIG);
-
     GoSettings settings{};
-    settings.measure_interval_seconds = 3;
-
-    auto d = svc.decide_sleep(settings, LockState::Locked, OperatingMode::Offline, 5000);
-    CHECK(d.type == PowerService::SleepType::None);
-    CHECK(d.duration_ms == 0);
+    for (uint32_t awake_ms : {300000U, 305000U}) {
+      auto d = svc.decide_sleep(settings, LockState::Locked, OperatingMode::Offline, awake_ms);
+      CHECK(d.type == PowerService::SleepType::None);
+      CHECK(d.duration_ms == 0);
+    }
   }
 }
 

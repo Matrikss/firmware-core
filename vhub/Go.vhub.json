@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "rev": "8bdbed9",
+  "rev": "e5d6b7c",
   "product": {
     "slug": "airgradient-go",
     "name": "AirGradient Go",
@@ -453,15 +453,15 @@
         "V1"
       ],
       "setup": [
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and Temperature Unit and measurement interval. Settings paths start at Main Menu > Settings.",
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and Temperature Unit. Settings paths start at Main Menu > Settings.",
           "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -474,7 +474,7 @@
         }
       ],
       "cleanup": [
-        "Exit menus and restore the recorded Temperature Unit and measurement interval, operating mode, lock state and USB connection, including after interruption. Confirm each restored setting; record any remaining change."
+        "In Portable, exit menus and restore the recorded Temperature Unit and Portable/Stationary interval, operating mode, lock state and USB connection, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/settings.md",
@@ -1117,6 +1117,59 @@
       ]
     },
     {
+      "id": "go.settings.energy-saving-interval",
+      "title": "The interval menu remembers separate Energy Saving and normal choices",
+      "objective": "Verify readable menu selection and independent preferences through mode changes and a cold restart.",
+      "category": "Settings",
+      "sub_category": "Measurement Interval",
+      "applicability": [
+        "V1"
+      ],
+      "setup": [
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h.",
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h.",
+        "No recording or paused tracking session is active."
+      ],
+      "steps": [
+        {
+          "action": "Record the operating mode, lock state and USB connection. Unlock if needed. Select Portable and record Measurement Interval under Settings > Operations and Auto Lock under Settings > Display & Touch before changing them.",
+          "expected_result": "The original normal interval and device state are recorded."
+        },
+        {
+          "action": "Set Auto Lock to Off and Measurement Interval to 10s. Select Energy Saving, record its original interval, then open the same interval menu.",
+          "expected_result": "The menu shows 5m, 15m and 1h with the saved value selected; 3s, 10s, 30s and 60s are absent. Text and selection highlighting are readable."
+        },
+        {
+          "action": "Select 15m, return to Operations, then switch to Portable and reopen Measurement Interval.",
+          "expected_result": "Energy Saving shows Measure Int.: 15m before leaving. Portable restores selected 10s and all seven fixed choices, without leftover rows or clipped labels."
+        },
+        {
+          "action": "Return to Energy Saving and reopen Measurement Interval.",
+          "expected_result": "15m is selected and the short choices remain hidden."
+        },
+        {
+          "action": "Disconnect USB, hold Power until Powered off is painted, release it, wait 10 seconds and press Power to start. Allow 90 seconds for Home, then reopen Measurement Interval.",
+          "expected_result": "The device returns in Energy Saving and the menu still selects 15m.",
+          "evidence": [
+            "Save a post-restart photo of the interval menu."
+          ]
+        },
+        {
+          "action": "Select Portable and reopen Measurement Interval.",
+          "expected_result": "10s is still selected with a complete, readable list."
+        }
+      ],
+      "cleanup": [
+        "After completion, failure or interruption, wake and unlock Go and exit menus.",
+        "Restore each captured interval in its own mode: the normal interval in Portable, and the Energy Saving interval in Energy Saving. Then restore the original operating mode.",
+        "Restore the captured Auto Lock, lock state and USB connection. Confirm each restored value; record any missing baseline or remaining change."
+      ],
+      "references": [
+        "products/go/docs/settings.md",
+        "products/go/docs/ui_manager.md"
+      ]
+    },
+    {
       "id": "go.display.chart-navigation",
       "title": "All available charts render clearly during touch browsing",
       "objective": "Verify physical Up/Down navigation and readable chart headers, statistics and plots; cycle logic and sample filtering are covered by host tests.",
@@ -1126,15 +1179,15 @@
         "V1"
       ],
       "setup": [
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and Auto Lock, measurement interval and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
           "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -1154,7 +1207,7 @@
         }
       ],
       "cleanup": [
-        "Exit menus and restore the recorded Auto Lock, measurement interval and Pinned Chart, operating mode, lock state and USB connection, including after interruption. Confirm each restored setting; record any remaining change."
+        "In Portable, exit menus and restore the recorded Auto Lock, Portable/Stationary interval and Pinned Chart, operating mode, lock state and USB connection, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/ui_manager.md",
@@ -1171,15 +1224,15 @@
         "V1"
       ],
       "setup": [
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and Auto Lock, measurement interval and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
           "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -1199,7 +1252,7 @@
         }
       ],
       "cleanup": [
-        "Exit menus and restore the recorded Auto Lock, measurement interval and Pinned Chart, operating mode, lock state and USB connection, including after interruption. Confirm each restored setting; record any remaining change."
+        "In Portable, exit menus and restore the recorded Auto Lock, Portable/Stationary interval and Pinned Chart, operating mode, lock state and USB connection, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/display_service.md",
@@ -1248,15 +1301,15 @@
         "V1"
       ],
       "setup": [
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval, Auto Lock and Temperature Unit. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state, Auto Lock and Temperature Unit. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -1273,7 +1326,7 @@
       ],
       "cleanup": [
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval, Auto Lock and Temperature Unit, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval, Auto Lock and Temperature Unit, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -1290,15 +1343,15 @@
         "V1"
       ],
       "setup": [
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and measurement interval, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
           "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -1332,7 +1385,7 @@
         }
       ],
       "cleanup": [
-        "Exit menus and restore the recorded measurement interval, Auto Lock and Pinned Chart, operating mode, lock state and USB connection, including after interruption. Confirm each restored setting; record any remaining change."
+        "In Portable, exit menus and restore the recorded Portable/Stationary interval, Auto Lock and Pinned Chart, operating mode, lock state and USB connection, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/display_service.md",
@@ -1504,11 +1557,11 @@
       "setup": [
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and measurement interval. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state and USB connection state. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -1516,7 +1569,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -1529,7 +1582,7 @@
       ],
       "cleanup": [
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: measurement interval, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -1549,11 +1602,11 @@
       "setup": [
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and measurement interval. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state and USB connection state. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -1561,7 +1614,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -1571,7 +1624,7 @@
       ],
       "cleanup": [
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: measurement interval, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -1592,11 +1645,11 @@
       "setup": [
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval, Auto Lock and Buzzer. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state, Auto Lock and Buzzer. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -1604,7 +1657,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -1618,7 +1671,7 @@
       ],
       "cleanup": [
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval, Auto Lock and Buzzer, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval, Auto Lock and Buzzer, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -1639,11 +1692,11 @@
       "setup": [
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval, Auto Lock and Buzzer. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state, Auto Lock and Buzzer. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -1651,7 +1704,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -1665,7 +1718,7 @@
       ],
       "cleanup": [
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval, Auto Lock and Buzzer, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval, Auto Lock and Buzzer, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -1686,11 +1739,11 @@
       "setup": [
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval, Auto Lock and Buzzer. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state, Auto Lock and Buzzer. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -1698,7 +1751,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -1712,7 +1765,7 @@
       ],
       "cleanup": [
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval, Auto Lock and Buzzer, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval, Auto Lock and Buzzer, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -1733,11 +1786,11 @@
       "setup": [
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval, Auto Lock and Buzzer. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state, Auto Lock and Buzzer. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -1745,7 +1798,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -1759,7 +1812,7 @@
       ],
       "cleanup": [
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval, Auto Lock and Buzzer, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval, Auto Lock and Buzzer, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -1835,6 +1888,99 @@
       "references": [
         "products/go/docs/measurement_corrections.md",
         "products/go/docs/display_service.md"
+      ]
+    },
+    {
+      "id": "go.corrections.energy-saving-display",
+      "title": "Energy Saving redraws raw temperature and humidity across mode changes and timer wakes",
+      "objective": "Verify the physical Home readings and charts replace configured temperature and humidity values with raw readings in Energy Saving, remain readable after timer wakes, and restore the configured presentation on leaving the mode. Numerical correction rules are covered by host tests.",
+      "category": "Measurements",
+      "sub_category": "Corrections",
+      "applicability": [
+        "V1"
+      ],
+      "setup": [
+        "A computer with Postman or an equivalent GUI API client that resolves .local names on the test LAN.",
+        "A controllable 2.4 GHz WPA2 test LAN.",
+        "Working credentials for that LAN are saved on the Go.",
+        "A USB data cable.",
+        "A computer with access to the AirGradient logging tool.",
+        "No recording or paused tracking session is active.",
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
+      ],
+      "steps": [
+        {
+          "action": "Record the operating mode, lock state and USB connection state. Unlock with a short Power press if needed. Record Settings > Display & Touch > Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "expected_result": "The original device state is recorded for cleanup."
+        },
+        {
+          "action": "Connect the USB data cable and open the AirGradient logging tool. Select Main Menu > Operating Mode > Stationary and allow up to 30 seconds for the saved Wi-Fi connection. Read the full serial from About Device and replace <serial> in all request URLs. Set the GUI client request timeout to five seconds and send GET http://airgradient_<serial>.local/api/v1/config with No Auth and no body. Save the complete response before changing configuration.",
+          "expected_result": "Logs are visible and the intended device responds. Its original configuration is saved for cleanup."
+        },
+        {
+          "action": "In Postman or the equivalent GUI client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, header Content-Type: application/json, and raw JSON body {\"configurationControl\":\"local\"}. Send GET at the same URL with No Auth and no body every five seconds for up to 20 seconds after Send.",
+          "expected_result": "GET confirms configurationControl is local before test inputs are applied."
+        },
+        {
+          "action": "In Postman or the equivalent GUI client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, header Content-Type: application/json, and raw JSON body {\"cloudConnection\":false,\"measurementInterval\":10,\"temperatureUnit\":\"c\",\"corrections\":{\"temperature\":{\"correctionAlgorithm\":\"none\"},\"humidity\":{\"correctionAlgorithm\":\"none\"}}}. Send GET at the same URL with No Auth and no body every five seconds for up to 20 seconds after Send.",
+          "expected_result": "GET confirms the requested values; PM2.5 correction was not changed."
+        },
+        {
+          "action": "Set Settings > Display & Touch > Auto Lock > Off. Allow five minutes for sensor warmup, then collect five valid raw temperature and humidity samples in the AirGradient logging tool, allowing one minute at the 10-second interval. Continue only if the displayed precision of the raw values is visibly different from 40.0 °C and 10%.",
+          "expected_result": "Valid source readings are available to distinguish raw readings from the prepared corrected presentation. Missing or indistinguishable readings block the run."
+        },
+        {
+          "action": "Set Settings > Operations > Measurement Interval > 5m. On Home, use Up/Down to view Temperature and Humidity in turn, photographing each chart and its current reading. Record the latest completed measurement log alongside the photos.",
+          "expected_result": "Both charts contain valid samples and the Home values match that measurement after rounding temperature to one decimal and humidity to an integer. These are the raw display baselines."
+        },
+        {
+          "action": "In Postman or the equivalent GUI client, send PUT http://airgradient_<serial>.local/api/v1/config with No Auth, header Content-Type: application/json, and raw JSON body {\"corrections\":{\"temperature\":{\"correctionAlgorithm\":\"custom\",\"slr\":{\"scalingFactor\":0,\"intercept\":40}},\"humidity\":{\"correctionAlgorithm\":\"custom\",\"slr\":{\"scalingFactor\":0,\"intercept\":10}}}}. Send GET at the same URL with No Auth and no body every five seconds for up to 20 seconds after Send.",
+          "expected_result": "GET confirms the prepared inputs. Saved PM2.5 calibration remains unchanged."
+        },
+        {
+          "action": "Before the next five-minute scheduled measurement, return to Home and inspect Temperature and Humidity and their charts. Photograph the first completed redraw of each.",
+          "expected_result": "The physical readings show 40.0 °C and 10%. Each chart replaces its valid samples with the corresponding constant value. Digits, units and chart labels are complete and readable."
+        },
+        {
+          "action": "Select Main Menu > Operating Mode > Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 5m. Before the next five-minute scheduled measurement, inspect the first completed Home redraw and browse the Temperature and Humidity charts. Match the readings to the latest raw measurement log; if a new sample arrived during navigation, use that sample and retain its log with the photo.",
+          "expected_result": "Raw temperature and humidity replace the prepared constants on the first completed measurement-screen redraw. Cached charts return to their raw values, with no lingering constant line or overlapping labels. Temperature uses one decimal and humidity an integer.",
+          "evidence": [
+            "Save the Stationary and Energy Saving Home/chart photos and the matching raw measurement log entries."
+          ]
+        },
+        {
+          "action": "Set Settings > Display & Touch > Pinned Chart > Temperature. Return Home and lock with Power, keeping the USB data cable connected. Observe two complete scheduled sleep/wake/measurement cycles, allowing 11 minutes from locking. Reconnect the AirGradient logging tool after a wake if necessary and photograph each completed Home frame with its matching measurement log. If required logs are missed, record the observation as incomplete.",
+          "expected_result": "Both timer wakes produce complete, readable Home readings and the Temperature chart using raw data. The prepared 40.0 °C and 10% constants do not reappear. Compare each completed frame to its own raw measurement log using the display rounding above; there are no stuck frames or leftover digits.",
+          "evidence": [
+            "Save the two wake-frame photos and corresponding raw measurement entries."
+          ]
+        },
+        {
+          "action": "After the second timer wake, confirm deep sleep in the logging tool within the current five-minute cycle. Wake with Power and select Main Menu > Operating Mode > Portable before the first new measurement. Watch Home without further touch input until that measurement arrives, allowing five minutes, then browse Temperature and Humidity. If logs cannot confirm the mode change preceded the measurement, mark this timing check incomplete.",
+          "expected_result": "The first Portable Home frame shows 40.0 °C and 10%; other previously valid readings remain visible. No extra touch is needed to restore readings. A fresh measurement arrives, and Home and both charts remain readable with the configured corrections.",
+          "evidence": [
+            "Save video of the first Portable frame and logs showing wake, mode change, and the first new measurement."
+          ]
+        },
+        {
+          "action": "Select Main Menu > Operating Mode > Stationary and allow up to 30 seconds for saved Wi-Fi to reconnect. Inspect Home and both charts after the connection page closes, then send GET http://airgradient_<serial>.local/api/v1/config with No Auth and no body.",
+          "expected_result": "The physical display still uses the prepared constants. GET retains both custom algorithms and their coefficients, confirming the mode switches did not erase the calibration."
+        }
+      ],
+      "cleanup": [
+        "After stopping any observation, restore the recorded Energy Saving interval in Energy Saving before returning to Stationary. If its baseline was not captured, leave it unchanged and report the gap.",
+        "After completion, failure or interruption, unlock with Power and return to Stationary. If the original configuration was not captured, restore only recorded UI and USB state and report the missing baseline.",
+        "With the original configuration available, use the same GUI request settings to PUT http://airgradient_<serial>.local/api/v1/config with body {\"configurationControl\":\"local\"}. Confirm local authority through GET at the same URL every five seconds for up to 20 seconds.",
+        "Copy only measurementInterval, temperatureUnit, and the corrections.temperature and corrections.humidity entries from the saved original configuration into a partial JSON body. PUT it to http://airgradient_<serial>.local/api/v1/config with No Auth and Content-Type: application/json. Omit corrections.pm25 to preserve its original algorithm. Confirm the restored fields through GET every five seconds for up to 20 seconds.",
+        "Restore cloudConnection first, then configurationControl last, using separate PUT requests at the same URL with No Auth, Content-Type: application/json, and a JSON object containing each field and its saved value. Confirm each through GET within 20 seconds.",
+        "Restore the recorded Pinned Chart and Auto Lock choices through Settings > Display & Touch, then the original operating mode and lock state. Download the required logs, disconnect the logging tool, and restore the original USB connection state. Record any state that could not be restored."
+      ],
+      "references": [
+        "products/go/docs/measurement_corrections.md",
+        "products/go/docs/ui_manager.md",
+        "products/go/docs/power_management.md",
+        "products/go/tests/go_app.tests.cpp",
+        "products/go/tests/go_orchestrator.tests.cpp"
       ]
     },
     {
@@ -2097,11 +2243,11 @@
       "setup": [
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -2109,7 +2255,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -2123,7 +2269,7 @@
       ],
       "cleanup": [
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -2395,11 +2541,11 @@
         "An outdoor test location with an unobstructed view of the sky.",
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and GPS mode and interval. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and GPS mode. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -2407,7 +2553,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -2426,7 +2572,7 @@
       "cleanup": [
         "Stop this case’s session if active; its data is expendable.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: GPS mode and interval, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: GPS mode and Portable/Stationary interval, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -2448,11 +2594,11 @@
         "An outdoor test location with an unobstructed view of the sky.",
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and GPS mode and interval. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and GPS mode. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -2460,7 +2606,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -2475,7 +2621,7 @@
       "cleanup": [
         "Stop this case’s session if active; its data is expendable.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: GPS mode and interval, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: GPS mode and Portable/Stationary interval, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -2497,11 +2643,11 @@
         "An outdoor test location with an unobstructed view of the sky.",
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and GPS mode and interval. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and GPS mode. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -2509,7 +2655,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -2528,7 +2674,7 @@
       "cleanup": [
         "Stop this case’s session if active; its data is expendable.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: GPS mode and interval, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: GPS mode and Portable/Stationary interval, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -2550,11 +2696,11 @@
         "An outdoor test location with an unobstructed view of the sky.",
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and GPS mode and interval. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and GPS mode. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -2562,7 +2708,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -2581,7 +2727,7 @@
       "cleanup": [
         "Stop this case’s session if active; its data is expendable.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: GPS mode and interval, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: GPS mode and Portable/Stationary interval, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -2603,11 +2749,11 @@
         "An outdoor test location with an unobstructed view of the sky.",
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and GPS mode and interval. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and GPS mode. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -2615,7 +2761,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -2634,7 +2780,7 @@
       "cleanup": [
         "Stop this case’s session if active; its data is expendable.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: GPS mode and interval, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: GPS mode and Portable/Stationary interval, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -2656,11 +2802,11 @@
         "An outdoor test location with an unobstructed view of the sky.",
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and GPS mode and interval. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and GPS mode. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -2668,7 +2814,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -2683,7 +2829,7 @@
       "cleanup": [
         "Stop this case’s session if active; its data is expendable.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: GPS mode and interval, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: GPS mode and Portable/Stationary interval, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -2872,15 +3018,15 @@
       ],
       "setup": [
         "Tracking is idle.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -2895,7 +3041,7 @@
       "cleanup": [
         "Stop any session created by this case; its route data is expendable.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -2914,15 +3060,15 @@
       ],
       "setup": [
         "Tracking is idle.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -2941,7 +3087,7 @@
       "cleanup": [
         "Stop any session created by this case; its route data is expendable.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -2960,15 +3106,15 @@
       ],
       "setup": [
         "Tracking is idle.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -2991,7 +3137,7 @@
       "cleanup": [
         "Stop any session created by this case; its route data is expendable.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -3010,15 +3156,15 @@
       ],
       "setup": [
         "Tracking is idle.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -3037,7 +3183,7 @@
       "cleanup": [
         "Stop any session created by this case; its route data is expendable.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -3056,15 +3202,15 @@
       ],
       "setup": [
         "Tracking is idle.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -3079,7 +3225,7 @@
       "cleanup": [
         "Stop the test session if it remains active.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore the recorded measurement interval and Auto Lock, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
+        "In Portable, restore the recorded Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/orchestrator.md",
@@ -3098,15 +3244,15 @@
       "setup": [
         "Tracking is idle.",
         "A phone displaying the current time.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -3121,7 +3267,7 @@
       "cleanup": [
         "Stop the test session.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -3141,15 +3287,15 @@
       "setup": [
         "Tracking is idle.",
         "A phone displaying the current time.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -3164,7 +3310,7 @@
       "cleanup": [
         "Stop the test session.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -3184,15 +3330,15 @@
       "setup": [
         "Tracking is idle.",
         "A phone displaying the current time.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -3207,7 +3353,7 @@
       "cleanup": [
         "Stop the test session.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -3227,15 +3373,15 @@
       "setup": [
         "Tracking is idle.",
         "A phone displaying the current time.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -3250,7 +3396,7 @@
       "cleanup": [
         "Stop the test session.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -3269,15 +3415,15 @@
       ],
       "setup": [
         "Tracking is idle.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -3288,7 +3434,7 @@
       "cleanup": [
         "Stop the test session.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -3305,15 +3451,15 @@
         "V1"
       ],
       "setup": [
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -3327,7 +3473,7 @@
       ],
       "cleanup": [
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -3346,15 +3492,15 @@
       "setup": [
         "All routes and chart history on this unit are expendable.",
         "Tracking is idle.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and measurement interval, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
           "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
-          "action": "Select Portable mode. Set Auto Lock Off and measurement interval 10s. Allow five minutes for sensor warmup, then collect at least five CO2 samples over one minute. Open the CO2 chart and photograph its history.",
+          "action": "Select Portable mode. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it. Set Auto Lock Off and measurement interval 10s. Allow five minutes for sensor warmup, then collect at least five CO2 samples over one minute. Open the CO2 chart and photograph its history.",
           "expected_result": "The chart contains visible history before clearing."
         },
         {
@@ -3373,7 +3519,7 @@
       "cleanup": [
         "Stop the test session if a failure left it active. Cleared data is intentionally not restored.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore the recorded measurement interval, Auto Lock and Pinned Chart, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
+        "In Portable, restore the recorded Portable/Stationary interval, Auto Lock and Pinned Chart, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/ui_manager.md",
@@ -3392,15 +3538,15 @@
       "setup": [
         "All routes and chart history on this unit are expendable.",
         "Tracking is idle.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and measurement interval, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
           "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
-          "action": "Select Portable mode. Set Auto Lock Off and measurement interval 10s. Allow five minutes for sensor warmup, then collect at least five CO2 samples over one minute. Open the CO2 chart and photograph its history.",
+          "action": "Select Portable mode. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it. Set Auto Lock Off and measurement interval 10s. Allow five minutes for sensor warmup, then collect at least five CO2 samples over one minute. Open the CO2 chart and photograph its history.",
           "expected_result": "The chart contains visible history before clearing."
         },
         {
@@ -3423,7 +3569,7 @@
       "cleanup": [
         "Stop the test session if a failure left it active. Cleared data is intentionally not restored.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore the recorded measurement interval, Auto Lock and Pinned Chart, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
+        "In Portable, restore the recorded Portable/Stationary interval, Auto Lock and Pinned Chart, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/ui_manager.md",
@@ -3442,15 +3588,15 @@
       "setup": [
         "All routes and chart history on this unit are expendable.",
         "Tracking is idle.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode and measurement interval, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
+          "action": "Record the lock state and USB connection. Unlock with a short Power press if needed, then record the operating mode, Auto Lock and Pinned Chart. Settings paths start at Main Menu > Settings.",
           "expected_result": "Original settings are recorded before changes and the controls are unlocked."
         },
         {
-          "action": "Select Portable mode. Set Auto Lock Off and measurement interval 10s. Allow five minutes for sensor warmup, then collect at least five CO2 samples over one minute. Open the CO2 chart and photograph its history.",
+          "action": "Select Portable mode. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it. Set Auto Lock Off and measurement interval 10s. Allow five minutes for sensor warmup, then collect at least five CO2 samples over one minute. Open the CO2 chart and photograph its history.",
           "expected_result": "The chart contains visible history before clearing."
         },
         {
@@ -3477,7 +3623,7 @@
       "cleanup": [
         "Stop the test session if a failure left it active. Cleared data is intentionally not restored.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore the recorded measurement interval, Auto Lock and Pinned Chart, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
+        "In Portable, restore the recorded Portable/Stationary interval, Auto Lock and Pinned Chart, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/ui_manager.md",
@@ -3495,15 +3641,15 @@
       ],
       "setup": [
         "Tracking is idle.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and measurement interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Portable mode, set Auto Lock Off and measurement interval 10s. Allow five minutes for warmup, then collect five chart samples over one minute. Start Tracking and wait for at least three Points, allowing 40 seconds.",
+          "action": "Select Portable mode. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it. Set Auto Lock Off and measurement interval 10s. Allow five minutes for warmup, then collect five chart samples over one minute. Start Tracking and wait for at least three Points, allowing 40 seconds.",
           "expected_result": "The CO2 chart has visible history and Tracking Status shows Recording."
         },
         {
@@ -3522,7 +3668,7 @@
       "cleanup": [
         "Stop the test session.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore the recorded measurement interval and Auto Lock, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
+        "In Portable, restore the recorded Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/ui_manager.md",
@@ -3542,15 +3688,15 @@
         "Tracking is idle.",
         "An outdoor test location with an unobstructed view of the sky.",
         "A phone displaying current position and UTC.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and GPS mode and interval. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and GPS mode. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -3565,7 +3711,7 @@
       "cleanup": [
         "Stop the test session.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: GPS mode and interval, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: GPS mode and Portable/Stationary interval, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -4328,15 +4474,15 @@
         "Tracking is idle.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -4355,7 +4501,7 @@
       "cleanup": [
         "Stop the test route.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -4376,15 +4522,15 @@
         "Tracking is idle.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -4407,7 +4553,7 @@
       "cleanup": [
         "Stop the test route.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -4477,15 +4623,15 @@
         "Tracking is idle.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Stationary.",
+          "action": "Select Main Menu > Operating Mode > Stationary. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Stationary is selected."
         },
         {
@@ -4504,7 +4650,7 @@
       "cleanup": [
         "Stop the test route.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -4525,15 +4671,15 @@
         "Tracking is idle.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Stationary.",
+          "action": "Select Main Menu > Operating Mode > Stationary. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Stationary is selected."
         },
         {
@@ -4556,7 +4702,7 @@
       "cleanup": [
         "Stop the test route.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Portable, restore only the original values captured before this case changed them: Portable/Stationary interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
       ],
       "references": [
@@ -4624,37 +4770,35 @@
       ],
       "setup": [
         "Tracking is idle.",
-        "A controllable 2.4 GHz WPA2 test LAN.",
-        "Working credentials for that LAN are saved on the Go.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h.",
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the operating mode, lock state, USB connection and Auto Lock. Unlock with Power if needed. Settings paths start at Main Menu > Settings.",
+          "expected_result": "The original device state is recorded."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
-          "expected_result": "Portable is selected."
+          "action": "Select Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 10s. Select Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 5m and Auto Lock to Off.",
+          "expected_result": "Both original intervals are recorded before changes; the test uses 10s in Portable/Stationary and 5m in Energy Saving."
         },
         {
-          "action": "Set interval 10s and Auto Lock Off. Start Tracking and record the ID from the Tracking start = <ID> snackbar. Open Status and wait for three points, allowing 40 seconds.",
-          "expected_result": "Status shows Recording and at least three Points; the start snackbar supplied a nonzero session ID."
+          "action": "Select Portable. Allow five minutes for sensor warmup. Start Tracking and record the five-digit ID from its start snackbar. Open Tracking > Status and wait for at least one point, allowing 40 seconds.",
+          "expected_result": "Status shows Recording and at least one Point; the start snackbar supplied a session ID."
         },
         {
-          "action": "Record Points from Status alongside the start snackbar ID, select Energy Saving mode, reopen Status and observe for 30 seconds.",
-          "expected_result": "Status remains Recording. Points increases."
+          "action": "Record Points and the start snackbar ID. Select Energy Saving, reopen Tracking > Status and observe for six minutes.",
+          "expected_result": "Status remains Recording and Points increases."
         },
         {
-          "action": "Stop Tracking and compare the Tracking stop = <ID> snackbar with the recorded start ID.",
-          "expected_result": "The mode transition preserved the session: the stop ID matches the start ID."
+          "action": "Stop Tracking and compare its stop snackbar ID with the recorded start ID.",
+          "expected_result": "The stop ID matches the start ID."
         }
       ],
       "cleanup": [
-        "Stop the test route.",
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
+        "After completion, failure or interruption, stop only this case's session and exit its menus.",
+        "Restore each captured interval in its own mode: the normal interval in Portable, and the Energy Saving interval in Energy Saving. Then restore the original operating mode.",
+        "Restore the recorded Auto Lock, lock state and USB connection. Confirm restoration; if a baseline was not captured or restoration fails, record the remaining state."
       ],
       "references": [
         "products/go/docs/orchestrator.md",
@@ -4672,41 +4816,39 @@
       ],
       "setup": [
         "Tracking is idle.",
-        "A controllable 2.4 GHz WPA2 test LAN.",
-        "Working credentials for that LAN are saved on the Go.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h.",
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the operating mode, lock state, USB connection and Auto Lock. Unlock with Power if needed. Settings paths start at Main Menu > Settings.",
+          "expected_result": "The original device state is recorded."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
-          "expected_result": "Portable is selected."
+          "action": "Select Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 10s. Select Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 5m and Auto Lock to Off.",
+          "expected_result": "Both original intervals are recorded before changes; the test uses 10s in Portable/Stationary and 5m in Energy Saving."
         },
         {
-          "action": "Set interval 10s and Auto Lock Off. Start Tracking and record the ID from the Tracking start = <ID> snackbar. Open Status and wait for three points, allowing 40 seconds.",
-          "expected_result": "Status shows Recording and at least three Points; the start snackbar supplied a nonzero session ID."
+          "action": "Select Portable. Allow five minutes for sensor warmup. Start Tracking and record the five-digit ID from its start snackbar. Open Tracking > Status and wait for at least one point, allowing 40 seconds.",
+          "expected_result": "Status shows Recording and at least one Point; the start snackbar supplied a session ID."
         },
         {
-          "action": "Pause and reopen Status.",
-          "expected_result": "The session is Paused."
+          "action": "Pause Tracking and reopen Status.",
+          "expected_result": "Status shows Paused."
         },
         {
-          "action": "Record Points from Status alongside the start snackbar ID, select Energy Saving mode, reopen Status and observe for 30 seconds.",
-          "expected_result": "Status remains Paused. Points stays unchanged and the pause icon remains."
+          "action": "Record Points and the start snackbar ID. Select Energy Saving, reopen Tracking > Status and observe for 30 seconds.",
+          "expected_result": "Status remains Paused, Points stays unchanged and the pause icon remains."
         },
         {
-          "action": "Stop Tracking and compare the Tracking stop = <ID> snackbar with the recorded start ID.",
-          "expected_result": "The mode transition preserved the session: the stop ID matches the start ID."
+          "action": "Stop Tracking and compare its stop snackbar ID with the recorded start ID.",
+          "expected_result": "The stop ID matches the start ID."
         }
       ],
       "cleanup": [
-        "Stop the test route.",
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
+        "After completion, failure or interruption, stop only this case's session and exit its menus.",
+        "Restore each captured interval in its own mode: the normal interval in Portable, and the Energy Saving interval in Energy Saving. Then restore the original operating mode.",
+        "Restore the recorded Auto Lock, lock state and USB connection. Confirm restoration; if a baseline was not captured or restoration fails, record the remaining state."
       ],
       "references": [
         "products/go/docs/orchestrator.md",
@@ -4773,37 +4915,35 @@
       ],
       "setup": [
         "Tracking is idle.",
-        "A controllable 2.4 GHz WPA2 test LAN.",
-        "Working credentials for that LAN are saved on the Go.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h.",
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the operating mode, lock state, USB connection and Auto Lock. Unlock with Power if needed. Settings paths start at Main Menu > Settings.",
+          "expected_result": "The original device state is recorded."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Energy Saving is selected."
+          "action": "Select Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 10s. Select Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 5m and Auto Lock to Off.",
+          "expected_result": "Both original intervals are recorded before changes; the test uses 10s in Portable/Stationary and 5m in Energy Saving."
         },
         {
-          "action": "Set interval 10s and Auto Lock Off. Start Tracking and record the ID from the Tracking start = <ID> snackbar. Open Status and wait for three points, allowing 40 seconds.",
-          "expected_result": "Status shows Recording and at least three Points; the start snackbar supplied a nonzero session ID."
+          "action": "Keep Energy Saving selected. Allow five minutes for sensor warmup. Start Tracking and record the five-digit ID from its start snackbar. Open Tracking > Status and wait for at least one point, allowing six minutes.",
+          "expected_result": "Status shows Recording and at least one Point; the start snackbar supplied a session ID."
         },
         {
-          "action": "Record Points from Status alongside the start snackbar ID, select Portable mode, reopen Status and observe for 30 seconds.",
-          "expected_result": "Status remains Recording. Points increases."
+          "action": "Record Points and the start snackbar ID. Select Portable, reopen Tracking > Status and observe for 30 seconds.",
+          "expected_result": "Status remains Recording and Points increases."
         },
         {
-          "action": "Stop Tracking and compare the Tracking stop = <ID> snackbar with the recorded start ID.",
-          "expected_result": "The mode transition preserved the session: the stop ID matches the start ID."
+          "action": "Stop Tracking and compare its stop snackbar ID with the recorded start ID.",
+          "expected_result": "The stop ID matches the start ID."
         }
       ],
       "cleanup": [
-        "Stop the test route.",
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
+        "After completion, failure or interruption, stop only this case's session and exit its menus.",
+        "Restore each captured interval in its own mode: the normal interval in Portable, and the Energy Saving interval in Energy Saving. Then restore the original operating mode.",
+        "Restore the recorded Auto Lock, lock state and USB connection. Confirm restoration; if a baseline was not captured or restoration fails, record the remaining state."
       ],
       "references": [
         "products/go/docs/orchestrator.md",
@@ -4821,41 +4961,39 @@
       ],
       "setup": [
         "Tracking is idle.",
-        "A controllable 2.4 GHz WPA2 test LAN.",
-        "Working credentials for that LAN are saved on the Go.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h.",
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the operating mode, lock state, USB connection and Auto Lock. Unlock with Power if needed. Settings paths start at Main Menu > Settings.",
+          "expected_result": "The original device state is recorded."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Energy Saving is selected."
+          "action": "Select Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 10s. Select Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 5m and Auto Lock to Off.",
+          "expected_result": "Both original intervals are recorded before changes; the test uses 10s in Portable/Stationary and 5m in Energy Saving."
         },
         {
-          "action": "Set interval 10s and Auto Lock Off. Start Tracking and record the ID from the Tracking start = <ID> snackbar. Open Status and wait for three points, allowing 40 seconds.",
-          "expected_result": "Status shows Recording and at least three Points; the start snackbar supplied a nonzero session ID."
+          "action": "Keep Energy Saving selected. Allow five minutes for sensor warmup. Start Tracking and record the five-digit ID from its start snackbar. Open Tracking > Status and wait for at least one point, allowing six minutes.",
+          "expected_result": "Status shows Recording and at least one Point; the start snackbar supplied a session ID."
         },
         {
-          "action": "Pause and reopen Status.",
-          "expected_result": "The session is Paused."
+          "action": "Pause Tracking and reopen Status.",
+          "expected_result": "Status shows Paused."
         },
         {
-          "action": "Record Points from Status alongside the start snackbar ID, select Portable mode, reopen Status and observe for 30 seconds.",
-          "expected_result": "Status remains Paused. Points stays unchanged and the pause icon remains."
+          "action": "Record Points and the start snackbar ID. Select Portable, reopen Tracking > Status and observe for 30 seconds.",
+          "expected_result": "Status remains Paused, Points stays unchanged and the pause icon remains."
         },
         {
-          "action": "Stop Tracking and compare the Tracking stop = <ID> snackbar with the recorded start ID.",
-          "expected_result": "The mode transition preserved the session: the stop ID matches the start ID."
+          "action": "Stop Tracking and compare its stop snackbar ID with the recorded start ID.",
+          "expected_result": "The stop ID matches the start ID."
         }
       ],
       "cleanup": [
-        "Stop the test route.",
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
+        "After completion, failure or interruption, stop only this case's session and exit its menus.",
+        "Restore each captured interval in its own mode: the normal interval in Portable, and the Energy Saving interval in Energy Saving. Then restore the original operating mode.",
+        "Restore the recorded Auto Lock, lock state and USB connection. Confirm restoration; if a baseline was not captured or restoration fails, record the remaining state."
       ],
       "references": [
         "products/go/docs/orchestrator.md",
@@ -4924,35 +5062,35 @@
         "Tracking is idle.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h.",
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the operating mode, lock state, USB connection and Auto Lock. Unlock with Power if needed. Settings paths start at Main Menu > Settings.",
+          "expected_result": "The original device state is recorded."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Stationary.",
-          "expected_result": "Stationary is selected."
+          "action": "Select Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 10s. Select Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 5m and Auto Lock to Off.",
+          "expected_result": "Both original intervals are recorded before changes; the test uses 10s in Portable/Stationary and 5m in Energy Saving."
         },
         {
-          "action": "Set interval 10s and Auto Lock Off. Start Tracking and record the ID from the Tracking start = <ID> snackbar. Open Status and wait for three points, allowing 40 seconds.",
-          "expected_result": "Status shows Recording and at least three Points; the start snackbar supplied a nonzero session ID."
+          "action": "Select Stationary. Allow five minutes for sensor warmup. Start Tracking and record the five-digit ID from its start snackbar. Open Tracking > Status and wait for at least one point, allowing 40 seconds.",
+          "expected_result": "Status shows Recording and at least one Point; the start snackbar supplied a session ID."
         },
         {
-          "action": "Record Points from Status alongside the start snackbar ID, select Energy Saving mode, reopen Status and observe for 30 seconds.",
-          "expected_result": "Status remains Recording. Points increases."
+          "action": "Record Points and the start snackbar ID. Select Energy Saving, reopen Tracking > Status and observe for six minutes.",
+          "expected_result": "Status remains Recording and Points increases."
         },
         {
-          "action": "Stop Tracking and compare the Tracking stop = <ID> snackbar with the recorded start ID.",
-          "expected_result": "The mode transition preserved the session: the stop ID matches the start ID."
+          "action": "Stop Tracking and compare its stop snackbar ID with the recorded start ID.",
+          "expected_result": "The stop ID matches the start ID."
         }
       ],
       "cleanup": [
-        "Stop the test route.",
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
+        "After completion, failure or interruption, stop only this case's session and exit its menus.",
+        "Restore each captured interval in its own mode: the normal interval in Portable, and the Energy Saving interval in Energy Saving. Then restore the original operating mode.",
+        "Restore the recorded Auto Lock, lock state and USB connection. Confirm restoration; if a baseline was not captured or restoration fails, record the remaining state."
       ],
       "references": [
         "products/go/docs/orchestrator.md",
@@ -4972,39 +5110,39 @@
         "Tracking is idle.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h.",
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the operating mode, lock state, USB connection and Auto Lock. Unlock with Power if needed. Settings paths start at Main Menu > Settings.",
+          "expected_result": "The original device state is recorded."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Stationary.",
-          "expected_result": "Stationary is selected."
+          "action": "Select Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 10s. Select Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 5m and Auto Lock to Off.",
+          "expected_result": "Both original intervals are recorded before changes; the test uses 10s in Portable/Stationary and 5m in Energy Saving."
         },
         {
-          "action": "Set interval 10s and Auto Lock Off. Start Tracking and record the ID from the Tracking start = <ID> snackbar. Open Status and wait for three points, allowing 40 seconds.",
-          "expected_result": "Status shows Recording and at least three Points; the start snackbar supplied a nonzero session ID."
+          "action": "Select Stationary. Allow five minutes for sensor warmup. Start Tracking and record the five-digit ID from its start snackbar. Open Tracking > Status and wait for at least one point, allowing 40 seconds.",
+          "expected_result": "Status shows Recording and at least one Point; the start snackbar supplied a session ID."
         },
         {
-          "action": "Pause and reopen Status.",
-          "expected_result": "The session is Paused."
+          "action": "Pause Tracking and reopen Status.",
+          "expected_result": "Status shows Paused."
         },
         {
-          "action": "Record Points from Status alongside the start snackbar ID, select Energy Saving mode, reopen Status and observe for 30 seconds.",
-          "expected_result": "Status remains Paused. Points stays unchanged and the pause icon remains."
+          "action": "Record Points and the start snackbar ID. Select Energy Saving, reopen Tracking > Status and observe for 30 seconds.",
+          "expected_result": "Status remains Paused, Points stays unchanged and the pause icon remains."
         },
         {
-          "action": "Stop Tracking and compare the Tracking stop = <ID> snackbar with the recorded start ID.",
-          "expected_result": "The mode transition preserved the session: the stop ID matches the start ID."
+          "action": "Stop Tracking and compare its stop snackbar ID with the recorded start ID.",
+          "expected_result": "The stop ID matches the start ID."
         }
       ],
       "cleanup": [
-        "Stop the test route.",
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
+        "After completion, failure or interruption, stop only this case's session and exit its menus.",
+        "Restore each captured interval in its own mode: the normal interval in Portable, and the Energy Saving interval in Energy Saving. Then restore the original operating mode.",
+        "Restore the recorded Auto Lock, lock state and USB connection. Confirm restoration; if a baseline was not captured or restoration fails, record the remaining state."
       ],
       "references": [
         "products/go/docs/orchestrator.md",
@@ -5073,35 +5211,35 @@
         "Tracking is idle.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h.",
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the operating mode, lock state, USB connection and Auto Lock. Unlock with Power if needed. Settings paths start at Main Menu > Settings.",
+          "expected_result": "The original device state is recorded."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Energy Saving is selected."
+          "action": "Select Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 10s. Select Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 5m and Auto Lock to Off.",
+          "expected_result": "Both original intervals are recorded before changes; the test uses 10s in Portable/Stationary and 5m in Energy Saving."
         },
         {
-          "action": "Set interval 10s and Auto Lock Off. Start Tracking and record the ID from the Tracking start = <ID> snackbar. Open Status and wait for three points, allowing 40 seconds.",
-          "expected_result": "Status shows Recording and at least three Points; the start snackbar supplied a nonzero session ID."
+          "action": "Keep Energy Saving selected. Allow five minutes for sensor warmup. Start Tracking and record the five-digit ID from its start snackbar. Open Tracking > Status and wait for at least one point, allowing six minutes.",
+          "expected_result": "Status shows Recording and at least one Point; the start snackbar supplied a session ID."
         },
         {
-          "action": "Record Points from Status alongside the start snackbar ID, select Stationary mode, reopen Status and observe for 30 seconds.",
-          "expected_result": "Status remains Recording. Points increases."
+          "action": "Record Points and the start snackbar ID. Select Stationary, reopen Tracking > Status and observe for 30 seconds.",
+          "expected_result": "Status remains Recording and Points increases."
         },
         {
-          "action": "Stop Tracking and compare the Tracking stop = <ID> snackbar with the recorded start ID.",
-          "expected_result": "The mode transition preserved the session: the stop ID matches the start ID."
+          "action": "Stop Tracking and compare its stop snackbar ID with the recorded start ID.",
+          "expected_result": "The stop ID matches the start ID."
         }
       ],
       "cleanup": [
-        "Stop the test route.",
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
+        "After completion, failure or interruption, stop only this case's session and exit its menus.",
+        "Restore each captured interval in its own mode: the normal interval in Portable, and the Energy Saving interval in Energy Saving. Then restore the original operating mode.",
+        "Restore the recorded Auto Lock, lock state and USB connection. Confirm restoration; if a baseline was not captured or restoration fails, record the remaining state."
       ],
       "references": [
         "products/go/docs/orchestrator.md",
@@ -5121,39 +5259,39 @@
         "Tracking is idle.",
         "A controllable 2.4 GHz WPA2 test LAN.",
         "Working credentials for that LAN are saved on the Go.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h.",
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
+          "action": "Record the operating mode, lock state, USB connection and Auto Lock. Unlock with Power if needed. Settings paths start at Main Menu > Settings.",
+          "expected_result": "The original device state is recorded."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Energy Saving is selected."
+          "action": "Select Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 10s. Select Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 5m and Auto Lock to Off.",
+          "expected_result": "Both original intervals are recorded before changes; the test uses 10s in Portable/Stationary and 5m in Energy Saving."
         },
         {
-          "action": "Set interval 10s and Auto Lock Off. Start Tracking and record the ID from the Tracking start = <ID> snackbar. Open Status and wait for three points, allowing 40 seconds.",
-          "expected_result": "Status shows Recording and at least three Points; the start snackbar supplied a nonzero session ID."
+          "action": "Keep Energy Saving selected. Allow five minutes for sensor warmup. Start Tracking and record the five-digit ID from its start snackbar. Open Tracking > Status and wait for at least one point, allowing six minutes.",
+          "expected_result": "Status shows Recording and at least one Point; the start snackbar supplied a session ID."
         },
         {
-          "action": "Pause and reopen Status.",
-          "expected_result": "The session is Paused."
+          "action": "Pause Tracking and reopen Status.",
+          "expected_result": "Status shows Paused."
         },
         {
-          "action": "Record Points from Status alongside the start snackbar ID, select Stationary mode, reopen Status and observe for 30 seconds.",
-          "expected_result": "Status remains Paused. Points stays unchanged and the pause icon remains."
+          "action": "Record Points and the start snackbar ID. Select Stationary, reopen Tracking > Status and observe for 30 seconds.",
+          "expected_result": "Status remains Paused, Points stays unchanged and the pause icon remains."
         },
         {
-          "action": "Stop Tracking and compare the Tracking stop = <ID> snackbar with the recorded start ID.",
-          "expected_result": "The mode transition preserved the session: the stop ID matches the start ID."
+          "action": "Stop Tracking and compare its stop snackbar ID with the recorded start ID.",
+          "expected_result": "The stop ID matches the start ID."
         }
       ],
       "cleanup": [
-        "Stop the test route.",
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state."
+        "After completion, failure or interruption, stop only this case's session and exit its menus.",
+        "Restore each captured interval in its own mode: the normal interval in Portable, and the Energy Saving interval in Energy Saving. Then restore the original operating mode.",
+        "Restore the recorded Auto Lock, lock state and USB connection. Confirm restoration; if a baseline was not captured or restoration fails, record the remaining state."
       ],
       "references": [
         "products/go/docs/orchestrator.md",
@@ -5316,11 +5454,11 @@
       "setup": [
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -5328,17 +5466,17 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Energy Saving.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Energy Saving is selected."
         },
         {
-          "action": "Set interval 10s and Auto Lock Off. Capture serial for one minute while navigating Home > Settings > Back > Home.",
-          "expected_result": "At least three measurements complete, controls respond, and no deep-sleep entry occurs."
+          "action": "Set Settings > Operations > Measurement Interval to 5m and Auto Lock to Off. Keep Go unlocked for six minutes, navigating Home > Settings > Back > Home while the AirGradient logging tool runs.",
+          "expected_result": "A scheduled measurement completes and Home refreshes. Controls remain responsive and no deep-sleep entry occurs during the observation."
         }
       ],
       "cleanup": [
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Energy Saving, restore only the original values captured before this case changed them: Energy Saving interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -5347,51 +5485,9 @@
       ]
     },
     {
-      "id": "go.offline.short-interval",
-      "title": "Locked Energy Saving (Offline) stays awake at a three-second interval",
-      "objective": "Verify a short cadence does not enter an unsuitable deep sleep.",
-      "category": "Modes & Sleep",
-      "sub_category": "Offline",
-      "applicability": [
-        "V1"
-      ],
-      "setup": [
-        "A USB data cable.",
-        "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
-      ],
-      "steps": [
-        {
-          "action": "Record the current operating mode, lock state, USB connection state and interval. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
-        },
-        {
-          "action": "Connect the USB data cable and start the AirGradient logging tool. Keep logging during the observations below; reconnect if the connection is lost.",
-          "expected_result": "The device logs are visible before the observations that use them."
-        },
-        {
-          "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Energy Saving is selected."
-        },
-        {
-          "action": "Set interval 3s, short-press Power to lock and capture serial for two minutes.",
-          "expected_result": "Measurements continue with no deep-sleep entry."
-        }
-      ],
-      "cleanup": [
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
-        "Download the required logs from the AirGradient logging tool and disconnect the tool."
-      ],
-      "references": [
-        "products/go/docs/power_management.md"
-      ]
-    },
-    {
-      "id": "go.sleep.interval-10",
-      "title": "Locked Energy Saving (Offline) retains sensing at a 10-second interval",
-      "objective": "Verify sensing and display updates continue when a short interval leaves insufficient time for deep sleep.",
+      "id": "go.sleep.interval-300",
+      "title": "Energy Saving timer wakes refresh complete readings at five minutes",
+      "objective": "Verify repeated deep-sleep wakes recover the sensors and refresh a readable Home display.",
       "category": "Modes & Sleep",
       "sub_category": "Timer Wake",
       "applicability": [
@@ -5400,11 +5496,11 @@
       "setup": [
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -5412,106 +5508,21 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Energy Saving.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Energy Saving is selected."
         },
         {
-          "action": "Set interval 10s and Auto Lock 10s. Lock, keeping the USB data cable connected and the AirGradient logging tool open. Capture three completed measurements, allowing five minutes; repeated deep-sleep cycles are not required. Watch Home after each completed measurement and save the corresponding measurement log entries. Reconnect the logging tool after a wake if needed; if required measurement logs were missed, record the observation as incomplete.",
-          "expected_result": "All three measurements return valid PM2.5 and CO2 readings in the log and a complete Home display refresh. The device may remain awake and locked when acquisition leaves insufficient time for deep sleep. No panic, I2C timeout or stuck frame interrupts sensing."
-        }
-      ],
-      "cleanup": [
-        "Wake with Power if asleep; unlock if needed.",
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
-        "Download the required logs from the AirGradient logging tool and disconnect the tool."
-      ],
-      "references": [
-        "products/go/docs/power_management.md",
-        "products/go/docs/sensor_producer.md"
-      ]
-    },
-    {
-      "id": "go.sleep.interval-30",
-      "title": "Energy Saving (Offline) timer wakes retain sensing at 30 seconds",
-      "objective": "Verify real sensor measurements and the display recover across repeated Offline timer wakes.",
-      "category": "Modes & Sleep",
-      "sub_category": "Timer Wake",
-      "applicability": [
-        "V1"
-      ],
-      "setup": [
-        "A USB data cable.",
-        "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
-      ],
-      "steps": [
-        {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
-        },
-        {
-          "action": "Connect the USB data cable and start the AirGradient logging tool. Keep logging during the observations below; reconnect if the connection is lost.",
-          "expected_result": "The device logs are visible before the observations that use them."
-        },
-        {
-          "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Energy Saving is selected."
-        },
-        {
-          "action": "Set interval 30s and Auto Lock 10s. Lock, keeping the USB data cable connected and the AirGradient logging tool open. Capture three complete sleep/wake/measurement cycles, allowing five minutes. Watch Home after each completed measurement and save the corresponding measurement log entries. Reconnect the logging tool after a wake if needed; if required cycle logs were missed, record the observation as incomplete.",
-          "expected_result": "Each of the three cycles returns valid PM2.5 and CO2 readings in the log and a complete Home display refresh. No panic, I2C timeout, stuck frame or unexpected full startup interrupts the cycles."
+          "action": "Set Settings > Operations > Measurement Interval to 5m and Auto Lock to 10s. Return Home and lock with Power. Capture two complete sleep/wake/measurement cycles, allowing 11 minutes from locking. Watch each Home refresh and retain its measurement log; reconnect the AirGradient logging tool after wake if needed.",
+          "expected_result": "Both timer wakes return valid PM2.5 and CO2 readings and complete, readable Home frames. No panic, I2C timeout, stuck frame or unexpected cold startup interrupts either cycle. Missing cycle evidence leaves the run incomplete.",
+          "evidence": [
+            "Save a Home photo and the corresponding measurement log for each wake."
+          ]
         }
       ],
       "cleanup": [
         "Wake with Power.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
-        "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
-        "Download the required logs from the AirGradient logging tool and disconnect the tool."
-      ],
-      "references": [
-        "products/go/docs/power_management.md",
-        "products/go/docs/sensor_producer.md"
-      ]
-    },
-    {
-      "id": "go.sleep.interval-60",
-      "title": "Energy Saving (Offline) timer wakes retain sensing at 60 seconds",
-      "objective": "Verify real sensor measurements and the display recover across repeated Offline timer wakes.",
-      "category": "Modes & Sleep",
-      "sub_category": "Timer Wake",
-      "applicability": [
-        "V1"
-      ],
-      "setup": [
-        "A USB data cable.",
-        "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
-      ],
-      "steps": [
-        {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
-          "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
-        },
-        {
-          "action": "Connect the USB data cable and start the AirGradient logging tool. Keep logging during the observations below; reconnect if the connection is lost.",
-          "expected_result": "The device logs are visible before the observations that use them."
-        },
-        {
-          "action": "Select Main Menu > Operating Mode > Energy Saving.",
-          "expected_result": "Energy Saving is selected."
-        },
-        {
-          "action": "Set interval 60s and Auto Lock 10s. Lock, keeping the USB data cable connected and the AirGradient logging tool open. Capture three complete sleep/wake/measurement cycles, allowing five minutes. Watch Home after each completed measurement and save the corresponding measurement log entries. Reconnect the logging tool after a wake if needed; if required cycle logs were missed, record the observation as incomplete.",
-          "expected_result": "Each of the three cycles returns valid PM2.5 and CO2 readings in the log and a complete Home display refresh. No panic, I2C timeout, stuck frame or unexpected full startup interrupts the cycles."
-        }
-      ],
-      "cleanup": [
-        "Wake with Power.",
-        "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Energy Saving, restore only the original values captured before this case changed them: Energy Saving interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -5531,19 +5542,19 @@
       ],
       "setup": [
         "Phone with BLE and the AirGradient app supporting Offline v1 broadcasts.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state and measurement interval. Unlock Go if needed.",
+          "action": "Record the current operating mode and lock state. Unlock Go if needed.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Set the measurement interval to 60s in Main Menu > Settings. Select Main Menu > Operating Mode > Energy Saving, return Home and lock Go.",
-          "expected_result": "Go is locked in Offline mode with a 60-second measurement interval."
+          "action": "Select Main Menu > Operating Mode > Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 5m, return Home and lock Go.",
+          "expected_result": "Go is locked in Energy Saving with a five-minute measurement interval."
         },
         {
-          "action": "Use the AirGradient app to receive measurements from this Go. Keep the app visible and the phone screen awake for five minutes from starting reception, with Go locked in Offline mode.",
+          "action": "Use the AirGradient app to receive measurements from this Go. Keep the app visible and the phone screen awake for 11 minutes from starting reception, with Go locked in Offline mode.",
           "expected_result": "The app receives new measurements from this Go during the observation period. Missed individual wakeups are acceptable.",
           "evidence": [
             "Save evidence of measurements received during the observation period."
@@ -5551,7 +5562,7 @@
         }
       ],
       "cleanup": [
-        "Wake and unlock Go if needed. Restore the recorded measurement interval, operating mode and lock state, including after interruption. Confirm restoration; record any remaining change."
+        "Wake and unlock Go if needed. In Energy Saving, restore its recorded interval before restoring the original operating mode and lock state. Confirm restoration after completion or interruption; record any missing baseline or remaining change."
       ],
       "references": [
         "products/go/go_ble_client.md#offline-measurement-broadcasts",
@@ -5570,23 +5581,23 @@
       "setup": [
         "Phone with BLE and the AirGradient app supporting Offline v1 broadcasts and background reception.",
         "A documented AirGradient app view of per-reading phone receipt times, including background receipts.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current Go operating mode, lock state and measurement interval. Unlock Go if needed.",
+          "action": "Record the current Go operating mode and lock state. Unlock Go if needed.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Set the measurement interval to 60s in Main Menu > Settings. Select Main Menu > Operating Mode > Energy Saving, return Home and lock Go.",
-          "expected_result": "Go is locked in Offline mode with a 60-second measurement interval."
+          "action": "Select Main Menu > Operating Mode > Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 5m, return Home and lock Go.",
+          "expected_result": "Go is locked in Energy Saving with a five-minute measurement interval."
         },
         {
-          "action": "Start receiving this Go's measurements in the AirGradient app. Allow five minutes from starting reception and record the latest reading's receipt time.",
+          "action": "Start receiving this Go's measurements in the AirGradient app. Allow 11 minutes from starting reception and record the latest reading's receipt time.",
           "expected_result": "A new reading arrives from the intended Go and its phone receipt time is available as a baseline."
         },
         {
-          "action": "Record the phone time, background the AirGradient app without force-closing it, and lock the phone. Keep Go nearby and locked for five minutes. Record the phone time at the end of the locked period before reopening the app.",
+          "action": "Record the phone time, background the AirGradient app without force-closing it, and lock the phone. Keep Go nearby and locked for 11 minutes. Record the phone time at the end of the locked period before reopening the app.",
           "expected_result": "The phone remains locked with the app backgrounded for the observation period; its start and end times are recorded."
         },
         {
@@ -5598,7 +5609,7 @@
         }
       ],
       "cleanup": [
-        "Unlock the phone. Wake and unlock Go if needed. Restore the recorded Go measurement interval, operating mode and lock state, including after interruption. Confirm restoration; record any remaining change."
+        "Unlock the phone and Go if needed. In Energy Saving, restore its recorded interval before restoring the original Go operating mode and lock state. Confirm restoration after completion or interruption; record any missing baseline or remaining change."
       ],
       "references": [
         "products/go/go_ble_client.md#offline-measurement-broadcasts",
@@ -5617,11 +5628,11 @@
       "setup": [
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -5629,11 +5640,11 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Energy Saving.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Energy Saving is selected."
         },
         {
-          "action": "Set interval 60s and Auto Lock 10s. Lock and wait for enter_sleep in serial. Short-press Power once during sleep.",
+          "action": "Set Settings > Operations > Measurement Interval to 5m and Auto Lock to 10s. Return Home, lock and allow six minutes for a deep-sleep entry in the AirGradient logging tool. Short-press Power once during sleep and allow 30 seconds for Home.",
           "expected_result": "The device returns to unlocked Home with cached readings or dashes for unavailable fields; it does not show an empty intermediate screen or immediately relock."
         },
         {
@@ -5643,7 +5654,7 @@
       ],
       "cleanup": [
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Energy Saving, restore only the original values captured before this case changed them: Energy Saving interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -5665,11 +5676,11 @@
         "Tracking is idle.",
         "A USB data connection with VBUS disconnected, so logging does not power Go.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the operating mode, lock state, USB connection state, measurement interval, Auto Lock and GPS mode. Unlock with a short Power press if needed.",
+          "action": "Record the operating mode, lock state, USB connection state, Auto Lock and GPS mode. Unlock with a short Power press if needed.",
           "expected_result": "The original settings are recorded for cleanup."
         },
         {
@@ -5677,7 +5688,7 @@
           "expected_result": "Logs are visible and the power source is None or OTG, not USB input. If battery power cannot be confirmed, the case is blocked."
         },
         {
-          "action": "Select Energy Saving mode. In Settings, set measurement interval 5m (300 seconds), Auto Lock 10s and GPS On When Tracking. Lock and capture the first sleep, timer wake and return to sleep, allowing six minutes from locking. Reconnect the logging tool after wake if needed.",
+          "action": "Select Energy Saving mode. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. In Settings, set measurement interval 5m (300 seconds), Auto Lock 10s and GPS On When Tracking. Lock and capture the first sleep, timer wake and return to sleep, allowing six minutes from locking. Reconnect the logging tool after wake if needed.",
           "expected_result": "Go completes an idle Offline measurement cycle and returns to deep sleep. The long interval leaves time to start tracking well before the next GPS wake.",
           "evidence": [
             "Save the sleep-duration and timer-wake log entries. Missing cycle logs make this observation incomplete."
@@ -5700,7 +5711,7 @@
       ],
       "cleanup": [
         "Wake Go and stop the tracking session created by this case, including after interruption. Leave pre-existing routes untouched.",
-        "Restore the recorded measurement interval, Auto Lock, GPS mode, operating mode, lock state and USB connection state. Record any setting that cannot be restored.",
+        "In Energy Saving, restore the recorded Energy Saving interval, Auto Lock, GPS mode, operating mode, lock state and USB connection state. Record any setting that cannot be restored.",
         "Save the required logs and disconnect the AirGradient logging tool."
       ],
       "references": [
@@ -5723,11 +5734,12 @@
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
         "A phone displaying the current time.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h.",
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval, Auto Lock and GPS mode. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state, Auto Lock and GPS mode. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -5735,7 +5747,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -5743,7 +5755,7 @@
           "expected_result": "The session is Recording."
         },
         {
-          "action": "Photograph Status Points/Active/Elapsed/Last with phone time. Select Energy Saving and lock. Capture two complete timer-wake measurements, allowing three minutes. Reconnect the logging tool after a wake if needed; if required cycle logs were missed, record the observation as incomplete.",
+          "action": "Photograph Status Points/Active/Elapsed/Last with phone time. Select Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 5m, return Home and lock. Capture two complete timer-wake measurements, allowing 11 minutes from locking. Reconnect the logging tool after a wake if needed; if required cycle logs were missed, record the observation as incomplete.",
           "expected_result": "Both timer wake cycles complete without an unexpected cold reset."
         },
         {
@@ -5758,7 +5770,7 @@
       "cleanup": [
         "Wake and stop test tracking.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval, Auto Lock and GPS mode, operating mode, lock state and USB connection state.",
+        "Restore only the original values captured before this case changed them: both intervals in their respective modes, Auto Lock and GPS mode, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -5781,11 +5793,12 @@
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
         "A phone displaying the current time.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h.",
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval, Auto Lock and GPS mode. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state, Auto Lock and GPS mode. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -5793,7 +5806,7 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -5805,7 +5818,7 @@
           "expected_result": "The session is Paused."
         },
         {
-          "action": "Photograph Status Points/Active/Elapsed/Last with phone time. Select Energy Saving and lock. Capture two complete timer-wake measurements, allowing three minutes. Reconnect the logging tool after a wake if needed; if required cycle logs were missed, record the observation as incomplete.",
+          "action": "Photograph Status Points/Active/Elapsed/Last with phone time. Select Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it. Set its interval to 5m, return Home and lock. Capture two complete timer-wake measurements, allowing 11 minutes from locking. Reconnect the logging tool after a wake if needed; if required cycle logs were missed, record the observation as incomplete.",
           "expected_result": "Both timer wake cycles complete without an unexpected cold reset."
         },
         {
@@ -5820,7 +5833,7 @@
       "cleanup": [
         "Wake and stop test tracking.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval, Auto Lock and GPS mode, operating mode, lock state and USB connection state.",
+        "Restore only the original values captured before this case changed them: both intervals in their respective modes, Auto Lock and GPS mode, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -5842,11 +5855,11 @@
         "Tracking is idle.",
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds."
+        "The saved Energy Saving measurement interval is one of the fixed UI choices: 5m, 15m or 1h."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state, USB connection state and Auto Lock. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
@@ -5854,22 +5867,22 @@
           "expected_result": "The device logs are visible before the observations that use them."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Energy Saving.",
+          "action": "Select Main Menu > Operating Mode > Energy Saving. Record the Energy Saving interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Energy Saving is selected."
         },
         {
-          "action": "Set interval 30s and Auto Lock 10s. Start Tracking and leave Status open for 30 seconds while capturing serial.",
+          "action": "Set Settings > Operations > Measurement Interval to 5m and Auto Lock to 10s. Start Tracking and leave Status open for 30 seconds while capturing logs.",
           "expected_result": "Status remains unlocked and there is no deep-sleep entry."
         },
         {
-          "action": "Short-press Power to lock and observe through the next measurement cycle.",
-          "expected_result": "Deep sleep becomes eligible and an enter_sleep log appears."
+          "action": "Short-press Power to lock and observe Home and the logs for up to six minutes from locking.",
+          "expected_result": "Home shows the locked state and a deep-sleep entry appears in the AirGradient logging tool."
         }
       ],
       "cleanup": [
         "Wake and stop the test route.",
         "Exit any menu or diagnostic opened by this case.",
-        "Restore only the original values captured before this case changed them: interval and Auto Lock, operating mode, lock state and USB connection state.",
+        "In Energy Saving, restore only the original values captured before this case changed them: Energy Saving interval and Auto Lock, operating mode, lock state and USB connection state.",
         "Verify the restored settings. If restoration fails or a required baseline was not captured, record the remaining state.",
         "Download the required logs from the AirGradient logging tool and disconnect the tool."
       ],
@@ -5890,16 +5903,16 @@
       "setup": [
         "The battery charge shown on Home is above 5% and at most 95%.",
         "A USB power source.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds.",
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h.",
         "A compatible USB cable."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state and USB connection state. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -5917,7 +5930,7 @@
       ],
       "cleanup": [
         "Exit any menu or diagnostic opened by this case.",
-        "Restore the recorded measurement interval, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
+        "In Portable, restore the recorded Portable/Stationary interval, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/power_management.md"
@@ -5935,16 +5948,16 @@
       "setup": [
         "The battery charge shown on Home is above 5% and at most 95%.",
         "A USB power source.",
-        "The original measurement interval is one of the fixed UI choices: 3, 10, 30, 60, 300, 900 or 3600 seconds.",
+        "The saved Portable/Stationary measurement interval is one of the fixed UI choices: 3s, 10s, 30s, 60s, 5m, 15m or 1h.",
         "A compatible USB cable."
       ],
       "steps": [
         {
-          "action": "Record the current operating mode, lock state, USB connection state and interval. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
+          "action": "Record the current operating mode, lock state and USB connection state. Unlock with a short Power press if needed. Settings paths below start at Main Menu > Settings.",
           "expected_result": "The original values are recorded for cleanup and the controls are unlocked."
         },
         {
-          "action": "Select Main Menu > Operating Mode > Portable.",
+          "action": "Select Main Menu > Operating Mode > Portable. Record the Portable/Stationary interval in Settings > Operations > Measurement Interval before changing it.",
           "expected_result": "Portable is selected."
         },
         {
@@ -5962,7 +5975,7 @@
       ],
       "cleanup": [
         "Exit any menu or diagnostic opened by this case.",
-        "Restore the recorded measurement interval, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
+        "In Portable, restore the recorded Portable/Stationary interval, operating mode, lock state and USB connection state, including after interruption. Confirm each restored setting; record any remaining change."
       ],
       "references": [
         "products/go/docs/power_management.md"
@@ -6380,15 +6393,15 @@
           "expected_result": "Both are recorded for cleanup."
         },
         {
-          "action": "Hold BOOT for at least two seconds. After restart, complete Getting Started with a one-second Enter hold. Record the factory Temperature Unit and measurement interval through Settings.",
-          "expected_result": "The dedicated unit is onboarded and its two visible factory settings are recorded."
+          "action": "Hold BOOT for at least two seconds. After restart, complete Getting Started with a one-second Enter hold. Record the factory Temperature Unit and Portable measurement interval through Settings. Select Energy Saving and record its measurement interval, then return to Portable.",
+          "expected_result": "The dedicated unit is onboarded. The factory Temperature Unit and both intervals are recorded; Energy Saving defaults to 5m."
         },
         {
           "action": "Select Stationary, choose Switch to Wi-Fi and confirm Yes. Join the setup network shown on Go with password cleanair, open http://192.168.4.1/ in the browser, and enter the test network credentials. Allow 30 seconds after submitting.",
           "expected_result": "Connected! and then Home appear, establishing saved Wi-Fi credentials before reset."
         },
         {
-          "action": "Select Portable. Change Temperature Unit to the opposite of the factory value and set interval 10s. Allow five minutes for warmup, then collect five CO2 chart samples over one minute. Set interval 30s, or 60s if the factory interval was 30s. Start Tracking.",
+          "action": "Select Portable. Change Temperature Unit to the opposite of the factory value and set interval 10s. Allow five minutes for warmup, then collect five CO2 chart samples over one minute. Set interval 30s, or 60s if the factory interval was 30s. Select Energy Saving, set interval 15m, then return to Portable and Start Tracking.",
           "expected_result": "The unit has nondefault settings, chart history, saved Wi-Fi and an active recording indicator."
         },
         {
@@ -6396,8 +6409,8 @@
           "expected_result": "The device restarts into Getting Started instead of returning directly to its previous Home state."
         },
         {
-          "action": "Finish onboarding. Inspect the CO2 chart, Main Menu, Operating Mode, Temperature Unit and Measure Int.",
-          "expected_result": "Previous chart history is absent; new post-reset samples may appear. Main Menu offers Start Tracking, Portable is selected, and both recorded factory settings are restored."
+          "action": "Finish onboarding. Inspect the CO2 chart, Main Menu, Operating Mode, Temperature Unit and Measure Int. Then select Energy Saving and inspect Measure Int.",
+          "expected_result": "Previous chart history is absent; new post-reset samples may appear. Main Menu offers Start Tracking and Portable is initially selected. The recorded factory Temperature Unit and both intervals are restored, including Energy Saving at 5m."
         },
         {
           "action": "Select Stationary while the test access point is still available.",

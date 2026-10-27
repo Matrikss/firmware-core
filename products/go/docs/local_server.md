@@ -161,10 +161,11 @@ or types return `400 invalid_value` with field `pinnedChart`. Existing
 `configurationControl` rules apply. Temperature/Humidity remain selectable below
 five minutes, where Home shows “Not available”; the preference is preserved.
 
-Accepted measurement intervals are persisted and scheduled exactly. The device
-menu offers fixed choices of 3s, 10s, 30s, 60s, 5m, 15m, and 1h. For another
-valid value such as 17, the Settings summary shows `Measure Int.: 17s` and the
-interval submenu prepends and selects `Custom (17s)`. Changing another UI
+The API edits the shared Portable/Stationary interval; Energy Saving retains its
+separate preference. Accepted values are persisted and scheduled exactly. In
+Portable/Stationary, the menu offers 3s, 10s, 30s, 60s, 5m, 15m, and 1h. For
+another valid value such as 17, the Settings summary shows `Measure Int.: 17s`
+and the interval submenu prepends and selects `Custom (17s)`. Changing another UI
 setting preserves 17 seconds; explicitly selecting a fixed interval replaces
 it.
 

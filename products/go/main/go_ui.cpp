@@ -35,6 +35,10 @@ static constexpr MeasureIntervalOption MEASURE_INTERVAL_OPTIONS[] = {
 };
 static constexpr uint8_t MEASURE_INTERVAL_COUNT =
     sizeof(MEASURE_INTERVAL_OPTIONS) / sizeof(MEASURE_INTERVAL_OPTIONS[0]);
+static constexpr uint8_t ENERGY_SAVING_MEASURE_INTERVAL_START = 4;
+static_assert(MEASURE_INTERVAL_OPTIONS[ENERGY_SAVING_MEASURE_INTERVAL_START].seconds ==
+                  ENERGY_SAVING_MEASURE_INTERVAL_SECONDS_MIN,
+              "Energy Saving choices must start at the minimum interval");
 
 static const char *const GPS_MODE_OPTIONS[] = {"Always Off", "On When Tracking", "Always On"};
 static constexpr uint8_t GPS_MODE_COUNT = 3;
@@ -179,6 +183,10 @@ static int measure_interval_option_index(int seconds) {
 
 static bool is_custom_measure_interval(int seconds) {
   return measure_interval_option_index(seconds) < 0;
+}
+
+static uint8_t measure_interval_option_start(OperatingMode mode) {
+  return mode == OperatingMode::Offline ? ENERGY_SAVING_MEASURE_INTERVAL_START : 0;
 }
 
 static void copy_tracking_duration(DisplayValues &v, uint8_t row, const char *label,
@@ -342,7 +350,7 @@ DisplayValues UIManager::build_values(const BuildContext &ctx) const {
   // --- Screen navigation ---
   v.screen = _screen;
   v.active_metric = _active_metric;
-  v.show_temp_hum = display_temp_hum_for_interval(_setting_measure_interval_seconds);
+  v.show_temp_hum = display_temp_hum_for_interval(setting_measure_interval_seconds());
   v.pinned_chart = _setting_pinned_chart;
   if (ctx.locked)
     v.active_metric = Metric::None;
@@ -553,7 +561,9 @@ void UIManager::sync_settings(const GoSettings &s) {
   _setting_pinned_chart = s.pinned_chart;
 
   _setting_measure_interval_seconds = s.measure_interval_seconds;
-  if (!display_temp_hum_for_interval(_setting_measure_interval_seconds) &&
+  _setting_energy_saving_measure_interval_seconds = s.energy_saving_measure_interval_seconds;
+  _setting_mode = s.operating_mode;
+  if (!display_temp_hum_for_interval(setting_measure_interval_seconds()) &&
       (_active_metric == Metric::Temp || _active_metric == Metric::Humidity)) {
     _active_metric = Metric::None;
   }
@@ -575,8 +585,6 @@ void UIManager::sync_settings(const GoSettings &s) {
     _setting_gps_mode = 2;
     break;
   }
-
-  _setting_mode = s.operating_mode;
 
   // Auto-lock: 0=Off, 10=1, 30=2, 60=3
   if (s.auto_lock_seconds <= 0)
@@ -603,6 +611,7 @@ void UIManager::apply_to_settings(GoSettings &settings) const {
   settings.pinned_chart = _setting_pinned_chart;
 
   settings.measure_interval_seconds = _setting_measure_interval_seconds;
+  settings.energy_saving_measure_interval_seconds = _setting_energy_saving_measure_interval_seconds;
 
   // GPS mode
   switch (_setting_gps_mode) {
@@ -979,7 +988,7 @@ void UIManager::browse_metric(int delta) {
   // when unlocked.  When unlocked the dashboard is always visible
   // (display_off is suppressed by the orchestrator), so browsing is valid.
   //
-  const bool show_temp_hum = display_temp_hum_for_interval(_setting_measure_interval_seconds);
+  const bool show_temp_hum = display_temp_hum_for_interval(setting_measure_interval_seconds());
   int index = static_cast<int>(_active_metric);
   do {
     index = wrap(index + delta, CHART_OPTION_COUNT);
@@ -1019,6 +1028,11 @@ const UIManager::SettingId *UIManager::group_items(Screen screen, uint8_t &count
   return nullptr;
 }
 
+int UIManager::setting_measure_interval_seconds() const {
+  return _setting_mode == OperatingMode::Offline ? _setting_energy_saving_measure_interval_seconds
+                                                 : _setting_measure_interval_seconds;
+}
+
 uint8_t UIManager::setting_option_count(SettingId setting_id) const {
   switch (setting_id) {
   case SettingId::Units:
@@ -1030,8 +1044,8 @@ uint8_t UIManager::setting_option_count(SettingId setting_id) const {
   case SettingId::PinnedChart:
     return CHART_OPTION_COUNT;
   case SettingId::MeasureInterval: {
-    uint8_t option_count = MEASURE_INTERVAL_COUNT;
-    if (is_custom_measure_interval(_setting_measure_interval_seconds))
+    uint8_t option_count = MEASURE_INTERVAL_COUNT - measure_interval_option_start(_setting_mode);
+    if (is_custom_measure_interval(setting_measure_interval_seconds()))
       ++option_count;
     return option_count;
   }
@@ -1067,9 +1081,10 @@ uint8_t UIManager::setting_current_option(SettingId setting_id) const {
   case SettingId::PinnedChart:
     return static_cast<uint8_t>(_setting_pinned_chart);
   case SettingId::MeasureInterval:
-    if (is_custom_measure_interval(_setting_measure_interval_seconds))
+    if (is_custom_measure_interval(setting_measure_interval_seconds()))
       return 0;
-    return (uint8_t)measure_interval_option_index(_setting_measure_interval_seconds);
+    return (uint8_t)(measure_interval_option_index(setting_measure_interval_seconds()) -
+                     measure_interval_option_start(_setting_mode));
   case SettingId::GpsMode:
     return _setting_gps_mode;
   case SettingId::Mode:
@@ -1115,13 +1130,19 @@ void UIManager::apply_setting_choice(uint8_t option_index) {
       _setting_pinned_chart = static_cast<Metric>(option_index);
     break;
   case SettingId::MeasureInterval:
-    if (is_custom_measure_interval(_setting_measure_interval_seconds)) {
+    if (is_custom_measure_interval(setting_measure_interval_seconds())) {
       if (option_index == 0)
         break;
       --option_index;
     }
-    if (option_index < MEASURE_INTERVAL_COUNT)
-      _setting_measure_interval_seconds = MEASURE_INTERVAL_OPTIONS[option_index].seconds;
+    option_index += measure_interval_option_start(_setting_mode);
+    if (option_index < MEASURE_INTERVAL_COUNT) {
+      if (_setting_mode == OperatingMode::Offline)
+        _setting_energy_saving_measure_interval_seconds =
+            MEASURE_INTERVAL_OPTIONS[option_index].seconds;
+      else
+        _setting_measure_interval_seconds = MEASURE_INTERVAL_OPTIONS[option_index].seconds;
+    }
     break;
   case SettingId::GpsMode:
     _setting_gps_mode = option_index;
@@ -1872,13 +1893,13 @@ void UIManager::populate_settings_group_rows(DisplayValues &v) const {
       (void)snprintf(label, sizeof(label), "Pinned Chart");
       break;
     case SettingId::MeasureInterval: {
-      const int option_index = measure_interval_option_index(_setting_measure_interval_seconds);
+      const int option_index = measure_interval_option_index(setting_measure_interval_seconds());
       if (option_index >= 0) {
         (void)snprintf(label, sizeof(label), "Measure Int.: %s",
                        MEASURE_INTERVAL_OPTIONS[option_index].label);
       } else {
         (void)snprintf(label, sizeof(label), "Measure Int.: %ds",
-                       _setting_measure_interval_seconds);
+                       setting_measure_interval_seconds());
       }
     } break;
     case SettingId::Co2Calibration:
@@ -1984,18 +2005,19 @@ void UIManager::populate_settings_choice_rows(DisplayValues &v) const {
 }
 
 void UIManager::populate_measure_interval_choice_rows(DisplayValues &v) const {
-  const bool has_custom = is_custom_measure_interval(_setting_measure_interval_seconds);
+  const bool has_custom = is_custom_measure_interval(setting_measure_interval_seconds());
   const uint8_t option_count = setting_option_count(SettingId::MeasureInterval);
+  const uint8_t option_start = measure_interval_option_start(_setting_mode);
   uint8_t visible = 0;
 
   for (uint8_t i = 0; i < PAGE_SIZE && (_settings_choice_scroll_start + i) < option_count; ++i) {
     const uint8_t option_index = (uint8_t)(_settings_choice_scroll_start + i);
     if (has_custom && option_index == 0) {
       char label[48];
-      (void)snprintf(label, sizeof(label), "Custom (%ds)", _setting_measure_interval_seconds);
+      (void)snprintf(label, sizeof(label), "Custom (%ds)", setting_measure_interval_seconds());
       copy_row(v, (uint8_t)(2 + visible), label, false);
     } else {
-      uint8_t fixed_index = option_index;
+      uint8_t fixed_index = option_index + option_start;
       if (has_custom)
         --fixed_index;
       copy_row(v, (uint8_t)(2 + visible), MEASURE_INTERVAL_OPTIONS[fixed_index].label, false);

@@ -37,7 +37,7 @@ power-off). Called synchronously by the orchestrator — no independent task.
 | Capacity | `PAYLOAD_CACHE_MAX_SIZE` (default 16, configurable via Kconfig) |
 
 The cache delegates entirely to `PayloadCache`. `StorageService` adds no
-extra logic — `cache_measurement()` calls `push()`,
+correction logic — `cache_measurement()` calls `push()`,
 `backup_cache()`/`restore_cache()` call `backup()`/`restore()`, and
 `clear_cache()` calls `clean()`.
 
@@ -129,6 +129,7 @@ wake if the previous chart data should be recovered.
 |---|---|
 | `cache_measurement(m)` | Push `MeasuresAGo` into the ring buffer. Overwrites the oldest entry when full. |
 | `read_cached_field(field, out, max_count)` | Fill `out[]` with the history of one field across all cached entries, oldest-first. Returns the number of values written. |
+| `read_latest_cached_measurement(out)` | Copy the newest raw sample, preserving invalid fields. Returns `false` if empty; does not consume or modify the cache. |
 | `cached_count()` | Number of measurements currently in the buffer. |
 | `backup_cache()` | Persist the ring buffer to RTC memory. Call before deep sleep. |
 | `restore_cache()` | Reload the ring buffer from RTC memory. Call after deep sleep wake. |

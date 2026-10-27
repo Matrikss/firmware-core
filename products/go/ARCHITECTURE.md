@@ -456,8 +456,15 @@ async.
 ## Measurement Views
 
 The orchestrator keeps the latest sensor result as `_raw_measures` and derives
-`_corrected_measures` with the active PM2.5, temperature, and humidity
-corrections. Corrections do not rewrite stored or transmitted raw history.
+`_corrected_measures` with the effective corrections for the operating mode.
+Energy Saving bypasses temperature and humidity correction, while Portable and
+Stationary use the saved algorithms. PM2.5 correction remains active in all
+modes. Switching modes recomputes the view before the transition display
+update, preserving saved calibration and raw history.
+
+Button wake seeds `_raw_measures` from the newest RTC cache sample so mode
+changes work before fresh acquisition completes. Fresh fast-path data takes
+priority; see [wake initialization](docs/measurement_corrections.md#button-wake-initialization).
 
 | Consumer or Use | View | Behavior |
 |---|---|---|
@@ -476,7 +483,8 @@ corrections. Corrections do not rewrite stored or transmitted raw history.
 | RTC display snapshot | Corrected display state | It never seeds raw cloud or storage state |
 
 The Offline fast path follows the same boundary: storage and BLE broadcasts
-receive raw values, while the display receives a corrected copy. See
+receive raw values, while the display receives a copy with PM2.5 correction
+and raw temperature and humidity. See
 [`docs/measurement_corrections.md`](docs/measurement_corrections.md).
 
 Manual refresh results update the current readings, BLE, local API, AQI LEDs,
@@ -498,10 +506,10 @@ Sleep is only eligible when:
 ### Sleep Type Selection
 
 `PowerService::decide_sleep()` computes sleep type and duration in one
-call:
+call, using the saved Energy Saving interval (minimum/default 5 minutes):
 
 ```text
-sleep_ms = (measure_interval_seconds * 1000) - awake_ms   (clamped to 0)
+sleep_ms = (energy_saving_measure_interval_seconds * 1000) - awake_ms   (clamped to 0)
 ```
 
 | sleep_ms | Sleep Type | Rationale |
@@ -789,9 +797,8 @@ Two tiers of storage:
 
 Settings fields:
 
-- PM interval, other sensor interval (independent timers; 0 = off)
-- Display refresh interval (0 = display off while locked; unlocked always
-  shows dashboard)
+- Measurement cadence shared by Portable/Stationary (default 10 s), plus a
+  separate Energy Saving cadence (default 5 min); see [Settings](docs/settings.md)
 - Temperature units (C / F), altitude units (m / ft), PM display
   (µg/m³ / USAQI)
 - GPS mode (AlwaysOff / OnWhenTracking / AlwaysOn)

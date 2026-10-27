@@ -129,7 +129,7 @@ private:
   std::size_t _write_attempt_count = 0;
 };
 
-static constexpr std::size_t GO_SETTINGS_WRITE_COUNT = 32;
+static constexpr std::size_t GO_SETTINGS_WRITE_COUNT = 33;
 
 // ============================================================================
 // Defaults — load from empty store returns struct defaults
@@ -140,6 +140,7 @@ TEST_CASE("load from empty store returns struct defaults", "[settings]") {
   GoSettings s = load_go_settings(store);
 
   REQUIRE(s.measure_interval_seconds == 10);
+  REQUIRE(s.energy_saving_measure_interval_seconds == 300);
   REQUIRE(s.gps_mode == GpsMode::OnWhenTracking);
   REQUIRE(s.operating_mode == OperatingMode::Portable);
   REQUIRE(s.use_fahrenheit == false);
@@ -160,6 +161,63 @@ TEST_CASE("load from empty store returns struct defaults", "[settings]") {
   REQUIRE(s.corrections.pm25.algorithm == Pm25CorrectionAlgorithm::None);
   REQUIRE(s.corrections.temperature.algorithm == LinearCorrectionAlgorithm::None);
   REQUIRE(s.corrections.humidity.algorithm == LinearCorrectionAlgorithm::None);
+}
+
+// ============================================================================
+// Measurement intervals — independent preferences, migration, and validation
+// ============================================================================
+
+TEST_CASE("energy saving interval migrates independently of the normal interval",
+          "[settings][interval]") {
+  for (auto mode : {OperatingMode::Portable, OperatingMode::Stationary, OperatingMode::Offline}) {
+    FakeConfigStore store;
+    REQUIRE(store.set_int("mi", 17) == ConfigStoreResult::OK);
+    REQUIRE(store.set_int("opm", static_cast<int>(mode)) == ConfigStoreResult::OK);
+    auto settings = load_go_settings(store);
+    CHECK(settings.measure_interval_seconds == 17);
+    CHECK(settings.energy_saving_measure_interval_seconds == 300);
+    CHECK(settings.active_measure_interval_seconds() ==
+          (mode == OperatingMode::Offline ? 300 : 17));
+    REQUIRE(save_go_settings(store, settings));
+    CHECK(load_go_settings(store).equals(settings));
+  }
+}
+
+TEST_CASE("energy saving interval preserves valid seconds across mode changes",
+          "[settings][interval]") {
+  for (int interval : {300, 301, 420, 900, 3599, 3600}) {
+    CAPTURE(interval);
+    FakeConfigStore store;
+    GoSettings settings;
+    settings.measure_interval_seconds = 17;
+    settings.energy_saving_measure_interval_seconds = interval;
+    for (auto mode : {OperatingMode::Offline, OperatingMode::Portable, OperatingMode::Stationary}) {
+      settings.operating_mode = mode;
+      REQUIRE(save_go_settings(store, settings));
+      auto loaded = load_go_settings(store);
+      CHECK(loaded.equals(settings));
+      CHECK(loaded.active_measure_interval_seconds() ==
+            (mode == OperatingMode::Offline ? interval : 17));
+    }
+    auto changed = settings;
+    changed.energy_saving_measure_interval_seconds = interval == 300 ? 900 : 300;
+    CHECK_FALSE(changed.equals(settings));
+  }
+}
+
+TEST_CASE("energy saving rejects out-of-range intervals and recovers invalid stored values",
+          "[settings][interval]") {
+  for (int interval : {-1, 0, 3, 10, 60, 299, 3601}) {
+    CAPTURE(interval);
+    FakeConfigStore store;
+    GoSettings settings;
+    settings.energy_saving_measure_interval_seconds = interval;
+    CHECK_FALSE(is_go_settings_valid(settings));
+    CHECK_FALSE(save_go_settings(store, settings));
+    CHECK(store.write_attempt_count() == 0);
+    REQUIRE(store.set_int("es_mi", interval) == ConfigStoreResult::OK);
+    CHECK(load_go_settings(store).energy_saving_measure_interval_seconds == 300);
+  }
 }
 
 // ============================================================================

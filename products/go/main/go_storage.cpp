@@ -118,6 +118,11 @@ uint16_t StorageService::read_cache(MeasuresAGo *out, uint16_t max_count) const 
 
 uint16_t StorageService::cached_count() const { return _cache.get_size(); }
 
+bool StorageService::read_latest_cached_measurement(MeasuresAGo &out) const {
+  const uint16_t count = cached_count();
+  return count > 0 && _cache.peek_at_index(count - 1, out);
+}
+
 void StorageService::backup_cache() const { _cache.backup(); }
 
 void StorageService::restore_cache() { _cache.restore(); }

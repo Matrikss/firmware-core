@@ -439,6 +439,9 @@ keeps this value updated whenever the orchestrator calls `update_config()`.
 | `"temp_corr"` | map | `corrections.temperature` | Temperature correction map below |
 | `"hum_corr"` | map | `corrections.humidity` | Humidity correction map below |
 
+`meas_int` reads and writes the shared Portable/Stationary interval. The separate
+Energy Saving interval is not exposed through BLE configuration.
+
 The three presentation booleans affect the device display only; Measures units
 remain unchanged. `pchart` is readable, writable, and included in Config deltas
 when changed. Invalid types or IDs return `invalid_config_value`; all valid

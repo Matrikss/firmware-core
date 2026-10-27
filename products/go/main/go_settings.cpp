@@ -8,6 +8,15 @@ static constexpr const char *TAG = "Settings";
 
 static constexpr const char *KEY_PENDING_TRACKING_START = "trk_start";
 
+MeasurementCorrections effective_measurement_corrections(const GoSettings &settings) {
+  MeasurementCorrections corrections = settings.corrections;
+  if (settings.operating_mode == OperatingMode::Offline) {
+    corrections.temperature.algorithm = LinearCorrectionAlgorithm::None;
+    corrections.humidity.algorithm = LinearCorrectionAlgorithm::None;
+  }
+  return corrections;
+}
+
 bool pending_tracking_start(ConfigStore &store) {
   bool pending = false;
   return store.get_bool(KEY_PENDING_TRACKING_START, pending) == ConfigStoreResult::OK && pending;
@@ -21,6 +30,7 @@ bool save_pending_tracking_start(ConfigStore &store, bool pending) {
 namespace {
 
 constexpr const char *KEY_MEASURE_INTERVAL_SECONDS = "mi";
+constexpr const char *KEY_ENERGY_SAVING_MEASURE_INTERVAL_SECONDS = "es_mi";
 constexpr const char *KEY_GPS_MODE = "gpm";
 constexpr const char *KEY_OPERATING_MODE = "opm";
 constexpr const char *KEY_USE_FAHRENHEIT = "uf";
@@ -199,6 +209,13 @@ GoSettings load_go_settings(ConfigStore &store) {
     settings.measure_interval_seconds = measure_interval_seconds;
   }
 
+  int energy_saving_measure_interval_seconds = 0;
+  if (store.get_int(KEY_ENERGY_SAVING_MEASURE_INTERVAL_SECONDS,
+                    energy_saving_measure_interval_seconds) == ConfigStoreResult::OK &&
+      is_energy_saving_measure_interval_seconds_valid(energy_saving_measure_interval_seconds)) {
+    settings.energy_saving_measure_interval_seconds = energy_saving_measure_interval_seconds;
+  }
+
   int gps_mode = 0;
   if (store.get_int(KEY_GPS_MODE, gps_mode) == ConfigStoreResult::OK &&
       is_gps_mode_valid(gps_mode)) {
@@ -314,8 +331,14 @@ GoSettings load_go_settings(ConfigStore &store) {
   return settings;
 }
 
+int GoSettings::active_measure_interval_seconds() const {
+  return operating_mode == OperatingMode::Offline ? energy_saving_measure_interval_seconds
+                                                  : measure_interval_seconds;
+}
+
 bool GoSettings::equals(const GoSettings &other) const {
   return measure_interval_seconds == other.measure_interval_seconds &&
+         energy_saving_measure_interval_seconds == other.energy_saving_measure_interval_seconds &&
          use_fahrenheit == other.use_fahrenheit && use_feet == other.use_feet &&
          pm_use_usaqi == other.pm_use_usaqi && pinned_chart == other.pinned_chart &&
          gps_mode == other.gps_mode && operating_mode == other.operating_mode &&
@@ -342,6 +365,11 @@ bool is_go_settings_valid(const GoSettings &settings) {
   }
 
   if (!is_measure_interval_seconds_valid(settings.measure_interval_seconds)) {
+    return false;
+  }
+
+  if (!is_energy_saving_measure_interval_seconds_valid(
+          settings.energy_saving_measure_interval_seconds)) {
     return false;
   }
 
@@ -394,6 +422,11 @@ bool save_go_settings(ConfigStore &store, const GoSettings &settings) {
 
   if (store.set_int(KEY_MEASURE_INTERVAL_SECONDS, settings.measure_interval_seconds) !=
       ConfigStoreResult::OK) {
+    return false;
+  }
+
+  if (store.set_int(KEY_ENERGY_SAVING_MEASURE_INTERVAL_SECONDS,
+                    settings.energy_saving_measure_interval_seconds) != ConfigStoreResult::OK) {
     return false;
   }
 
@@ -576,16 +609,17 @@ bool clear_factory_settings(ConfigStore &store) {
 
 void print_settings(const GoSettings &settings) {
   AG_LOGI(TAG,
-          "** settings | meas_int=%d | gps_mode=%d "
+          "** settings | meas_int=%d | energy_saving_meas_int=%d | gps_mode=%d "
           "op_mode=%d | auto_lock=%d | pinned_chart=%d | fahrenheit=%s feet=%s usaqi=%s | "
           "led: back=%d touch=%d | buzzer=%s | "
           "wifi_power_save=%s disable_cloud=%s config_control=%d co2_abc_days=%d "
           "tvoc_learning_offset=%d nox_learning_offset=%d static_ip=%s "
           "onboarding_done=%s **",
-          settings.measure_interval_seconds, settings.gps_mode, settings.operating_mode,
-          settings.auto_lock_seconds, static_cast<int>(settings.pinned_chart),
-          settings.use_fahrenheit ? "true" : "false", settings.use_feet ? "true" : "false",
-          settings.pm_use_usaqi ? "true" : "false", static_cast<int>(settings.back_led_brightness),
+          settings.measure_interval_seconds, settings.energy_saving_measure_interval_seconds,
+          settings.gps_mode, settings.operating_mode, settings.auto_lock_seconds,
+          static_cast<int>(settings.pinned_chart), settings.use_fahrenheit ? "true" : "false",
+          settings.use_feet ? "true" : "false", settings.pm_use_usaqi ? "true" : "false",
+          static_cast<int>(settings.back_led_brightness),
           static_cast<int>(settings.touch_led_intensity), settings.buzzer_enabled ? "on" : "off",
           settings.wifi_power_save_enabled ? "on" : "off",
           settings.disable_cloud ? "true" : "false",

@@ -148,15 +148,23 @@ The orchestrator keeps two `MeasuresAGo` snapshots:
 - `_corrected_measures` is derived for the display, charts, and PM AQI LED. BLE
   Measures and History use the raw values so clients can choose their own policy.
 
-`init()` seeds `_raw_measures` from `fast_path_measures` when available and
-derives `_corrected_measures`. A `display_snapshot` contains corrected display
-state, so it can seed only `_corrected_measures`; raw cloud and storage state
-remains at invalid sentinels until a fresh measurement arrives.
+`init()` uses fresh `fast_path_measures` first, or the newest raw RTC cache
+entry on button wake, then derives `_corrected_measures` for the current mode.
+Cached samples retain invalid fields and do not mark the wake measurement
+complete; normal acquisition still runs. If the cache is empty, the saved
+display snapshot seeds presentation only, never `_raw_measures`.
+
+Current readings and chart samples use
+`effective_measurement_corrections(_settings)`: Energy Saving bypasses
+temperature and humidity corrections, while PM2.5 correction stays active.
+Mode changes recompute the current view before the existing transition render,
+so the measurement screen reflects the new mode without a fresh sensor sample.
+Saved correction settings remain intact for Portable and Stationary.
 
 Chart samples are read from raw cache storage into a scratch buffer and corrected
-before the UI builds chart values. A successful cloud correction update is
-persisted before activation and immediately recomputes the current corrected
-snapshot without rewriting raw storage.
+for the current mode before the UI builds chart values. A successful cloud
+correction update is persisted before activation and immediately recomputes
+the current corrected snapshot without rewriting raw storage.
 
 ### Measurement Completed
 
@@ -258,7 +266,7 @@ the nearest deadline.
 | Timer | Interval | Active When |
 |---|---|---|
 | PM pre-wake | `measure_interval - CONFIG_SENSOR_WARMUP_DURATION_MS` | Not Offline, interval ≥ `pm_sleep_threshold_ms`, PM asleep, sensitive services not paused |
-| Sensor (all groups) | `measure_interval_seconds * 1000` | PM ready, no measurement pending, sensitive services not paused |
+| Sensor (all groups) | `active_measure_interval_seconds() * 1000` | PM ready, no measurement pending, sensitive services not paused |
 | BMS full poll | `BMS_POLL_INTERVAL_MS` (30000 ms) | Sensitive services not paused |
 | BMS status poll | `BMS_STATUS_POLL_INTERVAL_MS` (5000 ms) | Sensitive services not paused |
 | External watchdog | `EXT_WDT_INTERVAL_MS` (60000 ms) | Always — never suppressed during a setup session |
@@ -1097,8 +1105,9 @@ device is locked and the first measurement is complete:
 
 1. `PowerService::decide_sleep()` determines the sleep type (`None` or `Deep`)
    and the adjusted sleep duration in one call. It computes
-   `min(enabled intervals) - awake_ms`. Non-Offline modes and short intervals
-   (< `deep_sleep_threshold_ms`) return `{None, 0}`.
+   `energy_saving_measure_interval_seconds * 1000 - awake_ms`, clamped to zero.
+   Non-Offline modes or remaining sleep below `deep_sleep_threshold_ms` return
+   `{None, 0}`.
 2. If `None`: return immediately — the main loop continues normally.
 3. If `Deep`: call `prepare_for_sleep()`, then `enter_sleep()`.
    `enter_sleep()` does not return; CPU reboots on wake.
@@ -1144,14 +1153,17 @@ through ESP sleep. See [GPS Service](gps_service.md#sleep-policy).
 ## Sensor Scheduling
 
 The orchestrator maintains a single regular timer (`_last_measurement_ms`).
-When `measure_interval_seconds` elapses, `check_timers()` requests a scheduled
+It uses `GoSettings::active_measure_interval_seconds()`: the shared normal
+preference in Portable/Stationary and the separate preference in Energy Saving.
+When that interval elapses, `check_timers()` requests a scheduled
 measurement only if PM is ready and no measurement is pending. The common
 `start_measurement(origin)` helper marks the request pending and requests one
 iteration of `SensorGroup::All`. A scheduled request advances the regular
 timer baseline; a manual refresh does not.
 
-When the interval setting changes, `reschedule_sensor_timer()` resets the
-baseline to `now` and reconciles PM sensor power with the new interval:
+When the active interval changes, including on a mode switch,
+`reschedule_sensor_timer()` resets the baseline to `now` and reconciles PM sensor
+power with the new interval:
 requests sleep when eligible and PM is ready with no measurement or refresh
 pending, or prepares an asleep sensor when the interval requires it to stay
 awake. If the interval is unchanged, the baseline and PM power are not touched.
@@ -1160,7 +1172,8 @@ Iterations are always 1 — AGo sensors perform internal averaging, and the
 per-iteration 2 s delay is skipped for single iterations.
 
 `on_sensor_data()` always overwrites all fields in `_raw_measures`, then derives
-`_corrected_measures` with the active measurement corrections. Sensor readings come from the `SensorDataReady` payload; `MeasuresPower`
+`_corrected_measures` with the effective corrections for the current operating
+mode. Sensor readings come from the `SensorDataReady` payload; `MeasuresPower`
 is refreshed from `_latest_power` (`PowerSnapshot`) because Go battery and
 charger telemetry is owned by `PowerService`, not `SensorProducer`.
 The event wraps readings and `MeasurementOrigin` in `SensorEventData`.
@@ -1262,7 +1275,7 @@ This implementation required two additions to existing services:
 
 Added to `go_ui.h` / `go_ui.cpp`. Converts internal option indices back to
 `GoSettings` field values — the reverse of `sync_settings()`. Covers:
-units, PM display, display interval, PM interval, other sensor interval,
+units, PM display, both saved measurement intervals,
 GPS mode, operating mode, and auto-lock timeout.
 
 ### StorageService::read_cache()

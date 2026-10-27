@@ -107,6 +107,7 @@ extern bool led_touch_bright_seen;
 
 extern bool cache_measurement_called;
 extern MeasuresAGo last_cached_measurement;
+extern std::vector<MeasuresAGo> cached_measurements;
 extern bool route_started;
 extern bool route_resumed;
 extern uint32_t route_session_id;
@@ -3476,6 +3477,8 @@ TEST_CASE("factory_reset: resets settings to defaults without keeping tracking s
   A::set_tracking_timing(orch, {100, 20, 130, 140});
 
   A::settings(orch).operating_mode = OperatingMode::Offline;
+  A::settings(orch).measure_interval_seconds = 17;
+  A::settings(orch).energy_saving_measure_interval_seconds = 900;
   A::settings(orch).gps_mode = GpsMode::AlwaysOff;
   A::settings(orch).configuration_control = ConfigurationControl::Local;
   A::settings(orch).corrections.temperature = {
@@ -3497,6 +3500,9 @@ TEST_CASE("factory_reset: resets settings to defaults without keeping tracking s
   REQUIRE(A::factory_reset(orch));
 
   CHECK(A::settings(orch).operating_mode == OperatingMode::Portable);
+  CHECK(A::settings(orch).measure_interval_seconds == MEASURE_INTERVAL_SECONDS_DEFAULT);
+  CHECK(A::settings(orch).energy_saving_measure_interval_seconds ==
+        ENERGY_SAVING_MEASURE_INTERVAL_SECONDS_DEFAULT);
   CHECK(A::settings(orch).gps_mode == GpsMode::OnWhenTracking);
   CHECK(A::settings(orch).configuration_control == ConfigurationControl::Both);
   CHECK(A::settings(orch).corrections.temperature.algorithm == LinearCorrectionAlgorithm::None);
@@ -4792,6 +4798,87 @@ TEST_CASE("button wake: pre-armed snackbar clears in single timer fire",
 // ============================================================================
 // 12. Settings
 // ============================================================================
+
+TEST_CASE("Energy Saving restores independent intervals and reschedules mode transitions",
+          "[Orchestrator][settings][interval]") {
+  TestFixture f;
+  f.settings.measure_interval_seconds = 17;
+  f.settings.energy_saving_measure_interval_seconds = 900;
+  auto orch = f.make_orchestrator();
+  test_spy::wifi_has_saved_networks = true;
+  ALLOW_CALL(f.mock_config, set_int(trompeloeil::_, trompeloeil::_)).RETURN(ConfigStoreResult::OK);
+  ALLOW_CALL(f.mock_config, set_bool(trompeloeil::_, trompeloeil::_)).RETURN(ConfigStoreResult::OK);
+  ALLOW_CALL(f.mock_config, set_string(trompeloeil::_, trompeloeil::_))
+      .RETURN(ConfigStoreResult::OK);
+  ALLOW_CALL(f.mock_config, commit()).RETURN(ConfigStoreResult::OK);
+  ALLOW_CALL(f.mock_rtos, get_time_ms_impl()).RETURN(9000);
+
+  for (auto mode : {OperatingMode::Offline, OperatingMode::Portable, OperatingMode::Offline,
+                    OperatingMode::Stationary}) {
+    A::set_last_measurement_ms(orch, 1000);
+    A::change_mode(orch, mode);
+    CHECK(A::mode(orch) == mode);
+    CHECK(A::settings(orch).measure_interval_seconds == 17);
+    CHECK(A::settings(orch).energy_saving_measure_interval_seconds == 900);
+    CHECK(A::settings(orch).active_measure_interval_seconds() ==
+          (mode == OperatingMode::Offline ? 900 : 17));
+    CHECK(A::last_measurement_ms(orch) == 9000);
+    GoSettings displayed;
+    f.ui_manager.apply_to_settings(displayed);
+    CHECK(displayed.active_measure_interval_seconds() ==
+          A::settings(orch).active_measure_interval_seconds());
+  }
+}
+
+TEST_CASE("Energy Saving interval edits reschedule only after successful persistence",
+          "[Orchestrator][settings][interval]") {
+  TestFixture f;
+  f.settings.operating_mode = OperatingMode::Offline;
+  f.settings.measure_interval_seconds = 17;
+  auto orch = f.make_orchestrator();
+  A::set_mode(orch, OperatingMode::Offline);
+  GoSettings updated = f.settings;
+  updated.energy_saving_measure_interval_seconds = 900;
+  f.ui_manager.sync_settings(updated);
+  A::set_last_measurement_ms(orch, 1000);
+  ALLOW_CALL(f.mock_rtos, get_time_ms_impl()).RETURN(9000);
+  ALLOW_CALL(f.mock_config, set_int(trompeloeil::_, trompeloeil::_)).RETURN(ConfigStoreResult::OK);
+  ALLOW_CALL(f.mock_config, set_bool(trompeloeil::_, trompeloeil::_)).RETURN(ConfigStoreResult::OK);
+  ALLOW_CALL(f.mock_config, set_string(trompeloeil::_, trompeloeil::_))
+      .RETURN(ConfigStoreResult::OK);
+  bool save_ok = true;
+  SECTION("successful save") {}
+  SECTION("commit failure") { save_ok = false; }
+  REQUIRE_CALL(f.mock_config, commit())
+      .RETURN(save_ok ? ConfigStoreResult::OK : ConfigStoreResult::ERROR);
+
+  A::apply_settings_change(orch);
+
+  CHECK(A::settings(orch).measure_interval_seconds == 17);
+  CHECK(A::settings(orch).energy_saving_measure_interval_seconds == (save_ok ? 900 : 300));
+  CHECK(A::last_measurement_ms(orch) == (save_ok ? 9000 : 1000));
+  GoSettings displayed;
+  f.ui_manager.apply_to_settings(displayed);
+  CHECK(displayed.energy_saving_measure_interval_seconds == (save_ok ? 900 : 300));
+}
+
+TEST_CASE("Energy Saving schedules measurements using its own interval",
+          "[Orchestrator][timers][interval]") {
+  TestFixture f;
+  f.settings.operating_mode = OperatingMode::Offline;
+  f.settings.measure_interval_seconds = 10;
+  f.settings.auto_lock_seconds = 0;
+  auto orch = f.make_orchestrator();
+  A::set_mode(orch, OperatingMode::Offline);
+  uint32_t now = 299999;
+  ALLOW_CALL(f.mock_rtos, get_time_ms_impl()).LR_RETURN(now);
+  A::check_timers(orch);
+  CHECK_FALSE(test_spy::measurement_requested);
+  now = 300000;
+  A::check_timers(orch);
+  CHECK(test_spy::measurement_requested);
+  CHECK(A::last_measurement_ms(orch) == 300000);
+}
 
 TEST_CASE("apply_settings_change: leaves GPS service cadence alone", "[Orchestrator][settings]") {
   TestFixture f;
@@ -11142,4 +11229,221 @@ TEST_CASE("GPS sleep: uncleared intent prevents a duplicate session after failed
   CHECK_FALSE(A::start_tracking(orch));
   CHECK(f.stub_bms.reset_requests == 1);
   CHECK_FALSE(test_spy::route_started);
+}
+
+TEST_CASE("Energy Saving mode changes recalculate current readings and charts",
+          "[Orchestrator][correction][display]") {
+  TestFixture f;
+  f.settings.onboarding_done = true;
+  f.settings.corrections.pm25 = {Pm25CorrectionAlgorithm::FactoryCalibration, 2.0f, 1.0f, false};
+  f.settings.corrections.temperature = {LinearCorrectionAlgorithm::Custom, 1.0f, -2.0f};
+  f.settings.corrections.humidity = {LinearCorrectionAlgorithm::Custom, 1.0f, -10.0f};
+  const auto saved = f.settings.corrections;
+  auto orch = f.make_orchestrator();
+  CP2_ALLOW_CONFIG_WRITES(f);
+
+  MeasuresAGo raw{};
+  raw.pm_a.pm_25 = 10.0f;
+  raw.temp_hum_a = {25.0f, 60.0f};
+  A::on_sensor_data(orch, raw);
+  test_spy::cached_measurements = {raw};
+
+  for (auto mode : {OperatingMode::Offline, OperatingMode::Portable, OperatingMode::Offline,
+                    OperatingMode::Stationary}) {
+    CAPTURE(static_cast<int>(mode));
+    const auto display_updates = DisplayService::spy_update_count;
+    test_spy::cache_measurement_called = false;
+    A::change_mode(orch, mode);
+    CHECK(DisplayService::spy_update_count > display_updates);
+    const auto ctx = A::build_context(orch);
+    const float expected_temp = mode == OperatingMode::Offline ? 25.0f : 23.0f;
+    const float expected_hum = mode == OperatingMode::Offline ? 60.0f : 50.0f;
+    CHECK(ctx.sensor_data.temp_hum_a.temperature == expected_temp);
+    CHECK(ctx.sensor_data.temp_hum_a.humidity == expected_hum);
+    CHECK(ctx.sensor_data.pm_a.pm_25 == 21.0f);
+    REQUIRE(ctx.cache_count == 1);
+    CHECK(ctx.cache[0].temp_hum_a.temperature == expected_temp);
+    CHECK(ctx.cache[0].temp_hum_a.humidity == expected_hum);
+    CHECK(ctx.cache[0].pm_a.pm_25 == 21.0f);
+    CHECK_FALSE(test_spy::cache_measurement_called);
+    CHECK(A::raw_measures(orch).temp_hum_a.temperature == 25.0f);
+    CHECK(A::raw_measures(orch).temp_hum_a.humidity == 60.0f);
+    CHECK(test_spy::cached_measurements[0].temp_hum_a.temperature == 25.0f);
+    CHECK(test_spy::cached_measurements[0].temp_hum_a.humidity == 60.0f);
+    CHECK(measurement_corrections_equal(A::settings(orch).corrections, saved));
+  }
+}
+
+TEST_CASE("Energy Saving bypasses temperature and humidity corrections on boot and sensor updates",
+          "[Orchestrator][correction][init]") {
+  TestFixture f;
+  f.settings.operating_mode = OperatingMode::Offline;
+  f.settings.onboarding_done = true;
+  f.settings.corrections.pm25 = {Pm25CorrectionAlgorithm::CustomViaPm25Raw, 2.0f, 1.0f, false};
+  f.settings.corrections.temperature = {LinearCorrectionAlgorithm::Custom, 1.0f, -2.0f};
+  f.settings.corrections.humidity = {LinearCorrectionAlgorithm::Custom, 1.0f, -10.0f};
+  auto orch = f.make_orchestrator();
+  MeasuresAGo raw{};
+  raw.pm_a.pm_25 = 10.0f;
+  raw.temp_hum_a = {25.0f, 60.0f};
+  BootHandoff handoff{};
+  handoff.fast_path_measures = &raw;
+  handoff.display_painted = true;
+  orch.init(WakeCause::Timer, handoff);
+  CHECK(A::corrected_measures(orch).temp_hum_a.temperature == 25.0f);
+  CHECK(A::corrected_measures(orch).temp_hum_a.humidity == 60.0f);
+  CHECK(A::corrected_measures(orch).pm_a.pm_25 == 21.0f);
+
+  raw.temp_hum_a = {26.0f, 65.0f};
+  A::on_sensor_data(orch, raw);
+  CHECK(A::corrected_measures(orch).temp_hum_a.temperature == 26.0f);
+  CHECK(A::corrected_measures(orch).temp_hum_a.humidity == 65.0f);
+  CHECK(A::corrected_measures(orch).pm_a.pm_25 == 21.0f);
+}
+
+TEST_CASE("button wake: latest raw cache supports mode changes before the first measurement",
+          "[Orchestrator][correction][wake-snapshot]") {
+  for (auto destination : {OperatingMode::Portable, OperatingMode::Stationary}) {
+    CAPTURE(static_cast<int>(destination));
+    TestFixture f;
+    f.settings.operating_mode = OperatingMode::Offline;
+    f.settings.onboarding_done = true;
+    f.settings.corrections.pm25 = {Pm25CorrectionAlgorithm::CustomViaPm25Raw, 2.0f, 1.0f, false};
+    f.settings.corrections.temperature = {LinearCorrectionAlgorithm::Custom, 1.0f, -2.0f};
+    f.settings.corrections.humidity = {LinearCorrectionAlgorithm::Custom, 1.0f, -10.0f};
+    auto orch = f.make_orchestrator();
+    CP2_ALLOW_CONFIG_WRITES(f);
+
+    RtcDisplaySnapshot snapshot{};
+    snapshot.co2_ppm = 600;
+    snapshot.pm25_ugm3 = 21.0f;
+    snapshot.temperature_c = 25.0f;
+    snapshot.humidity_pct = 60.0f;
+    snapshot.tvoc_index = 100;
+    snapshot.nox_index = 10;
+    snapshot.pressure_hpa = 1000.0f;
+    snapshot.altitude_m = 100.0f;
+    MeasuresAGo cached{};
+    cached.co2.co2 = 600;
+    cached.pm_a.pm_25 = 10.0f;
+    cached.temp_hum_a = {25.0f, 60.0f};
+    cached.tvoc_nox.tvoc_index = 100;
+    cached.tvoc_nox.nox_index = 10;
+    cached.pressure = {1000.0f, 100.0f};
+    test_spy::cached_measurements = {MeasuresAGo{}, cached};
+    // A newer manual display refresh must not be mistaken for raw cached data.
+    snapshot.temperature_c = 27.0f;
+    BootHandoff handoff{};
+    handoff.display_painted = true;
+    handoff.initial_lock_state = LockState::Unlocked;
+    handoff.display_snapshot = &snapshot;
+    orch.init(WakeCause::Button, handoff);
+    REQUIRE(test_spy::measurement_requested);
+    REQUIRE_FALSE(A::first_measurement_done(orch));
+
+    CHECK(A::raw_measures(orch).pm_a.pm_25 == 10.0f);
+    CHECK(A::corrected_measures(orch).pm_a.pm_25 == 21.0f);
+    CHECK(A::corrected_measures(orch).temp_hum_a.temperature == 25.0f);
+    A::change_mode(orch, destination);
+    auto candidate = A::settings(orch);
+    candidate.corrections.temperature.intercept = -3.0f;
+    REQUIRE(A::activate_settings_candidate(orch, candidate));
+    const auto ctx = A::build_context(orch);
+    CHECK(ctx.sensor_data.co2.co2 == 600);
+    CHECK(ctx.sensor_data.pm_a.pm_25 == 21.0f);
+    CHECK(ctx.sensor_data.temp_hum_a.temperature == 22.0f);
+    CHECK(ctx.sensor_data.temp_hum_a.humidity == 50.0f);
+    CHECK(ctx.sensor_data.tvoc_nox.tvoc_index == 100);
+    CHECK(ctx.sensor_data.tvoc_nox.nox_index == 10);
+    CHECK(ctx.sensor_data.pressure.pressure == 1000.0f);
+    CHECK(ctx.sensor_data.pressure.altitude == 100.0f);
+    CHECK(A::raw_measures(orch).co2.co2 == 600);
+    CHECK(A::raw_measures(orch).pm_a.pm_25 == 10.0f);
+    CHECK(A::raw_measures(orch).temp_hum_a.temperature == 25.0f);
+    CHECK_FALSE(A::first_measurement_done(orch));
+    CHECK_FALSE(test_spy::cloud_last_snapshot.co2.is_valid());
+    CHECK_FALSE(test_spy::cache_measurement_called);
+
+    MeasuresAGo raw{};
+    SECTION("valid first sample applies the latest settings") {
+      raw.co2.co2 = 650;
+      raw.pm_a.pm_25 = 10.0f;
+      raw.temp_hum_a = {26.0f, 65.0f};
+      A::on_sensor_data(orch, raw);
+      CHECK(A::corrected_measures(orch).co2.co2 == 650);
+      CHECK(A::corrected_measures(orch).pm_a.pm_25 == 21.0f);
+      CHECK(A::corrected_measures(orch).temp_hum_a.temperature == 23.0f);
+      CHECK(A::corrected_measures(orch).temp_hum_a.humidity == 55.0f);
+      A::change_mode(orch, OperatingMode::Offline);
+      CHECK(A::corrected_measures(orch).temp_hum_a.temperature == 26.0f);
+      CHECK(A::corrected_measures(orch).temp_hum_a.humidity == 65.0f);
+    }
+    SECTION("failed first sample replaces cached readings with invalid readings") {
+      A::on_sensor_data(orch, raw);
+      A::change_mode(orch, OperatingMode::Offline);
+      CHECK_FALSE(A::corrected_measures(orch).co2.is_valid());
+      CHECK_FALSE(A::corrected_measures(orch).pm_a.is_pm_25_valid());
+      CHECK_FALSE(A::corrected_measures(orch).temp_hum_a.is_temp_valid());
+      CHECK_FALSE(A::corrected_measures(orch).temp_hum_a.is_hum_valid());
+    }
+  }
+}
+
+TEST_CASE("timer wake: raw handoff allows correction changes before another sample",
+          "[Orchestrator][correction][wake-snapshot]") {
+  TestFixture f;
+  f.settings.operating_mode = OperatingMode::Offline;
+  f.settings.onboarding_done = true;
+  f.settings.corrections.temperature = {LinearCorrectionAlgorithm::Custom, 1.0f, -2.0f};
+  f.settings.corrections.humidity = {LinearCorrectionAlgorithm::Custom, 1.0f, -10.0f};
+  auto orch = f.make_orchestrator();
+  CP2_ALLOW_CONFIG_WRITES(f);
+  MeasuresAGo raw{};
+  raw.temp_hum_a = {25.0f, 60.0f};
+  MeasuresAGo older{};
+  older.temp_hum_a = {10.0f, 20.0f};
+  test_spy::cached_measurements = {older};
+  BootHandoff handoff{};
+  handoff.display_painted = true;
+  handoff.fast_path_measures = &raw;
+  handoff.measurement_completed = true;
+  orch.init(WakeCause::Timer, handoff);
+
+  A::change_mode(orch, OperatingMode::Portable);
+  CHECK(A::corrected_measures(orch).temp_hum_a.temperature == 23.0f);
+  CHECK(A::corrected_measures(orch).temp_hum_a.humidity == 50.0f);
+}
+
+TEST_CASE("button wake: empty cache uses presentation fallback and invalid latest sample wins",
+          "[Orchestrator][correction][wake-snapshot]") {
+  TestFixture f;
+  f.settings.operating_mode = OperatingMode::Offline;
+  f.settings.onboarding_done = true;
+  auto orch = f.make_orchestrator();
+  RtcDisplaySnapshot snapshot{};
+  snapshot.co2_ppm = 600;
+  snapshot.temperature_c = 25.0f;
+  BootHandoff handoff{};
+  handoff.display_painted = true;
+  handoff.initial_lock_state = LockState::Unlocked;
+  handoff.display_snapshot = &snapshot;
+
+  SECTION("empty cache retains the display fallback without seeding raw data") {
+    orch.init(WakeCause::Button, handoff);
+    CHECK_FALSE(A::raw_measures(orch).co2.is_valid());
+    CHECK(A::corrected_measures(orch).co2.co2 == 600);
+    CHECK(A::corrected_measures(orch).temp_hum_a.temperature == 25.0f);
+  }
+  SECTION("an invalid latest sample is not replaced with older valid data") {
+    MeasuresAGo older{};
+    older.co2.co2 = 500;
+    older.temp_hum_a = {20.0f, 50.0f};
+    test_spy::cached_measurements = {older, MeasuresAGo{}};
+    orch.init(WakeCause::Button, handoff);
+    CHECK_FALSE(A::raw_measures(orch).co2.is_valid());
+    CHECK_FALSE(A::corrected_measures(orch).co2.is_valid());
+    CHECK_FALSE(A::corrected_measures(orch).temp_hum_a.is_temp_valid());
+  }
+  CHECK_FALSE(A::first_measurement_done(orch));
+  CHECK(test_spy::measurement_requested);
 }

@@ -175,6 +175,7 @@ TEST_CASE("UIManager: mode choices preserve identities across every transition",
       GoSettings settings{};
       settings.operating_mode = modes[from];
       settings.measure_interval_seconds = 17;
+      settings.energy_saving_measure_interval_seconds = 900;
       ui.sync_settings(settings);
       press(ui, InputSource::TouchEnter);
       open_row(ui, "Operating Mode");
@@ -187,8 +188,67 @@ TEST_CASE("UIManager: mode choices preserve identities across every transition",
       ui.apply_to_settings(settings);
       CHECK(settings.operating_mode == modes[to]);
       CHECK(settings.measure_interval_seconds == 17);
+      CHECK(settings.energy_saving_measure_interval_seconds == 900);
     }
   }
+}
+
+TEST_CASE("UIManager: Energy Saving interval menu edits only its own preference",
+          "[UIManager][settings][interval]") {
+  const int intervals[] = {300, 900, 3600};
+  const char *labels[] = {"5m", "15m", "1h"};
+  for (uint8_t from = 0; from < 3; ++from) {
+    for (uint8_t to = 0; to < 3; ++to) {
+      UIManager ui(DEFAULT_UI_CONFIG);
+      GoSettings settings;
+      settings.operating_mode = OperatingMode::Offline;
+      settings.measure_interval_seconds = 17;
+      settings.energy_saving_measure_interval_seconds = intervals[from];
+      ui.sync_settings(settings);
+      go_to_measure_interval(ui);
+      auto values = ui.build_values(make_default_ctx());
+      CHECK(std::string(values.rows[values.selected_row].text) ==
+            std::string("Measure Int.: ") + labels[from]);
+      press(ui, InputSource::TouchEnter);
+      check_rows(ui, {"Exit", "Back", "5m", "15m", "1h"});
+      CHECK(ui.build_values(make_default_ctx()).selected_row == from + 2);
+      CHECK(open_row(ui, labels[to]).action == UIAction::SettingsChanged);
+      ui.apply_to_settings(settings);
+      CHECK(settings.measure_interval_seconds == 17);
+      CHECK(settings.energy_saving_measure_interval_seconds == intervals[to]);
+      CHECK(ui.build_values(make_default_ctx()).show_temp_hum);
+
+      // Returning to normal mode restores the exact custom preference.
+      settings.operating_mode = OperatingMode::Portable;
+      ui.sync_settings(settings);
+      ui.reset_to_home();
+      open_measure_interval_choice(ui);
+      values = ui.build_values(make_default_ctx());
+      CHECK(std::string(values.rows[values.selected_row].text) == "Custom (17s)");
+      CHECK(open_row(ui, "30s").action == UIAction::SettingsChanged);
+      ui.apply_to_settings(settings);
+      CHECK(settings.measure_interval_seconds == 30);
+      CHECK(settings.energy_saving_measure_interval_seconds == intervals[to]);
+    }
+  }
+}
+
+TEST_CASE("UIManager: open interval menu resynchronizes across modes",
+          "[UIManager][settings][interval]") {
+  UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings;
+  settings.measure_interval_seconds = 3600;
+  settings.energy_saving_measure_interval_seconds = 900;
+  ui.sync_settings(settings);
+  open_measure_interval_choice(ui);
+  settings.operating_mode = OperatingMode::Offline;
+  ui.sync_settings(settings);
+  check_rows(ui, {"Exit", "Back", "5m", "15m", "1h"});
+  CHECK(ui.build_values(make_default_ctx()).selected_row == 3);
+  settings.operating_mode = OperatingMode::Stationary;
+  ui.sync_settings(settings);
+  auto values = ui.build_values(make_default_ctx());
+  CHECK(std::string(values.rows[values.selected_row].text) == "1h");
 }
 
 TEST_CASE("UIManager: group choice returns and exit gestures", "[UIManager][nav][redesign]") {
@@ -1109,21 +1169,27 @@ TEST_CASE("UIManager: custom measurement interval presentation",
 
 TEST_CASE("UIManager: unrelated setting preserves custom measurement interval",
           "[UIManager][settings][interval]") {
-  UIManager ui(DEFAULT_UI_CONFIG);
-  GoSettings settings{};
-  settings.measure_interval_seconds = 17;
-  ui.sync_settings(settings);
+  for (auto mode : {OperatingMode::Portable, OperatingMode::Stationary, OperatingMode::Offline}) {
+    CAPTURE(static_cast<int>(mode));
+    UIManager ui(DEFAULT_UI_CONFIG);
+    GoSettings settings{};
+    settings.operating_mode = mode;
+    settings.measure_interval_seconds = 17;
+    settings.energy_saving_measure_interval_seconds = 900;
+    ui.sync_settings(settings);
 
-  go_to_group(ui, "Display & Touch");
-  open_row(ui, "Temperature Unit");
-  press(ui, InputSource::TouchDown); // C → F
-  const auto result = press(ui, InputSource::TouchEnter);
+    go_to_group(ui, "Display & Touch");
+    open_row(ui, "Temperature Unit");
+    press(ui, InputSource::TouchDown); // C → F
+    const auto result = press(ui, InputSource::TouchEnter);
 
-  REQUIRE(result.action == UIAction::SettingsChanged);
-  GoSettings output{};
-  ui.apply_to_settings(output);
-  CHECK(output.use_fahrenheit);
-  CHECK(output.measure_interval_seconds == 17);
+    REQUIRE(result.action == UIAction::SettingsChanged);
+    GoSettings output{};
+    ui.apply_to_settings(output);
+    CHECK(output.use_fahrenheit);
+    CHECK(output.measure_interval_seconds == 17);
+    CHECK(output.energy_saving_measure_interval_seconds == 900);
+  }
 }
 
 TEST_CASE("UIManager: fixed choice replaces custom measurement interval",

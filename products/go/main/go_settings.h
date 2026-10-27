@@ -9,8 +9,10 @@
 #include "types/wifi_types.h"
 
 struct GoSettings {
-  // --- Measurement interval ---
+  // --- Measurement intervals ---
+  // Portable and Stationary share the normal preference; Offline keeps its own.
   int measure_interval_seconds = MEASURE_INTERVAL_SECONDS_DEFAULT;
+  int energy_saving_measure_interval_seconds = ENERGY_SAVING_MEASURE_INTERVAL_SECONDS_DEFAULT;
 
   // --- Display ---
   bool use_fahrenheit = false;
@@ -48,10 +50,13 @@ struct GoSettings {
   // --- Measurement corrections ---
   MeasurementCorrections corrections{};
 
+  int active_measure_interval_seconds() const;
   bool equals(const GoSettings &other) const;
 };
 
 GoSettings load_go_settings(ConfigStore &store);
+// Select corrections for the current mode without changing saved calibration.
+MeasurementCorrections effective_measurement_corrections(const GoSettings &settings);
 bool is_go_settings_valid(const GoSettings &settings);
 bool save_go_settings(ConfigStore &store, const GoSettings &settings);
 void print_settings(const GoSettings &settings);
