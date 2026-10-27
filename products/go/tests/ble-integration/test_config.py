@@ -36,7 +36,7 @@ async def config_payload(ago_client: BleakClient) -> dict:
 # ---------------------------------------------------------------------------
 
 class TestConfigRead:
-    """Verify reading the Config characteristic returns a valid 16-key map."""
+    """Verify reading the Config characteristic returns a valid 17-key map."""
 
     def test_read_config(self, config_payload: dict):
         """Reading Config must return valid CBOR map."""
@@ -45,7 +45,7 @@ class TestConfigRead:
         )
 
     def test_all_keys_present(self, config_payload: dict):
-        """Config read must contain exactly the 16 expected keys."""
+        """Config read must contain exactly the 17 expected keys."""
         missing = proto.CONFIG_READ_KEYS - set(config_payload.keys())
         extra = set(config_payload.keys()) - proto.CONFIG_READ_KEYS
         assert not missing, f"Missing Config keys: {missing}"
@@ -68,6 +68,10 @@ class TestConfigRead:
         assert gps_mode in proto.GPS_MODES, (
             f"Unknown gps_mode: '{gps_mode}'. Expected one of: {proto.GPS_MODES}"
         )
+
+    def test_pinned_chart_valid(self, config_payload: dict):
+        """Pinned Chart uses the persisted metric IDs, including None."""
+        assert config_payload["pchart"] in range(9)
 
     def test_operating_mode_valid(self, config_payload: dict):
         """'op_mode' must be one of the known enum strings."""
@@ -229,7 +233,7 @@ class TestConfigWrite:
                 )
                 await config_notifications.wait_for(timeout=ago_notify_timeout)
 
-    @pytest.mark.parametrize("key", ["buz", "abc", "tlo", "nlo"])
+    @pytest.mark.parametrize("key", ["buz", "abc", "tlo", "nlo", "pchart"])
     async def test_set_compact_device_field_roundtrip(
         self,
         key: str,
@@ -244,6 +248,8 @@ class TestConfigWrite:
         original_value = original[key]
         if key == "buz":
             new_value = not original_value
+        elif key == "pchart":
+            new_value = 0 if original_value != 0 else 1
         elif key == "abc":
             new_value = (
                 proto.CO2_ABC_DAYS_MIN
