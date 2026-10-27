@@ -46,6 +46,9 @@ enum class GoConfigField : uint32_t {
 constexpr int MEASURE_INTERVAL_SECONDS_MIN = 1;
 constexpr int MEASURE_INTERVAL_SECONDS_MAX = 3600;
 constexpr int MEASURE_INTERVAL_SECONDS_DEFAULT = 10;
+constexpr int ENERGY_SAVING_MEASURE_INTERVAL_SECONDS_MIN = 300;
+constexpr int ENERGY_SAVING_MEASURE_INTERVAL_SECONDS_DEFAULT =
+    ENERGY_SAVING_MEASURE_INTERVAL_SECONDS_MIN;
 
 constexpr int CO2_ABC_DAYS_DISABLED = -1;
 constexpr int CO2_ABC_DAYS_MIN = 1;
@@ -58,6 +61,11 @@ constexpr int LEARNING_OFFSET_HOURS_DEFAULT = 12;
 
 inline bool is_measure_interval_seconds_valid(int value) {
   return value >= MEASURE_INTERVAL_SECONDS_MIN && value <= MEASURE_INTERVAL_SECONDS_MAX;
+}
+
+inline bool is_energy_saving_measure_interval_seconds_valid(int value) {
+  return value >= ENERGY_SAVING_MEASURE_INTERVAL_SECONDS_MIN &&
+         value <= MEASURE_INTERVAL_SECONDS_MAX;
 }
 
 inline bool is_gps_mode_valid(int value) {

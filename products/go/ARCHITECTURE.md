@@ -506,10 +506,10 @@ Sleep is only eligible when:
 ### Sleep Type Selection
 
 `PowerService::decide_sleep()` computes sleep type and duration in one
-call:
+call, using the saved Energy Saving interval (minimum/default 5 minutes):
 
 ```text
-sleep_ms = (measure_interval_seconds * 1000) - awake_ms   (clamped to 0)
+sleep_ms = (energy_saving_measure_interval_seconds * 1000) - awake_ms   (clamped to 0)
 ```
 
 | sleep_ms | Sleep Type | Rationale |
@@ -797,9 +797,8 @@ Two tiers of storage:
 
 Settings fields:
 
-- PM interval, other sensor interval (independent timers; 0 = off)
-- Display refresh interval (0 = display off while locked; unlocked always
-  shows dashboard)
+- Measurement cadence shared by Portable/Stationary (default 10 s), plus a
+  separate Energy Saving cadence (default 5 min); see [Settings](docs/settings.md)
 - Temperature units (C / F), altitude units (m / ft), PM display
   (µg/m³ / USAQI)
 - GPS mode (AlwaysOff / OnWhenTracking / AlwaysOn)
