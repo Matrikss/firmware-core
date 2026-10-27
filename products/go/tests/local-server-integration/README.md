@@ -74,8 +74,9 @@ actions. The GPS action leaves the live GPS Test screen open for the operator to
 exit.
 
 Persisted mutation tests require `--ago-allow-config-write`. They round-trip the
-temperature and altitude units, measurement and GPS settings, back and touch LED levels,
-buzzer, CO2 ABC period, and TVOC/NOx learning offsets. Each parameterized case
+temperature and altitude units, Pinned Chart, measurement and GPS settings,
+back and touch LED levels, buzzer, CO2 ABC period, and TVOC/NOx learning offsets.
+Each parameterized case
 changes one field, polls the asynchronous GET snapshot for convergence, and
 restores that field during fixture teardown. They run only when
 `configurationControl` is `local`, preventing cloud updates from racing with
@@ -114,8 +115,8 @@ unknown-key rejection, and omission of invalid values rather than JSON `null`.
 ### `test_config.py` — Configuration
 
 Validates the complete Go configuration schema and safe empty-update admission.
-Opt-in parameterized cases round-trip and restore the display-unit, timing, GPS,
-LED, buzzer, CO2 ABC, and gas-learning settings covered by the suite.
+Opt-in parameterized cases round-trip and restore the display-unit, Pinned
+Chart, timing, GPS, LED, buzzer, CO2 ABC, and gas-learning settings.
 
 ### `test_errors.py` — Error Contract
 

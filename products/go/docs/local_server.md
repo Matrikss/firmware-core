@@ -148,11 +148,18 @@ objects from the same subset. Device behavior fields are:
 | `pmStandard` | `ugm3`, `us-aqi` | Select mass concentration or US AQI presentation |
 | `temperatureUnit` | `c`, `f` | Select product display temperature unit |
 | `altitudeUnit` | `m`, `ft` | Select product display altitude unit; raw GPS and stored route altitude remain in meters |
+| `pinnedChart` | `none`, `pm25`, `co2`, `temperature`, `humidity`, `tvoc`, `nox`, `pressure`, `altitude` | Select the Home chart; default `pm25` |
 | `measurementInterval` | Integer 1 .. 3600 | Set the exact measurement interval in seconds; non-fixed UI values appear as custom |
 | `gpsMode` | `off`, `tracking`, `always` | Disable GPS, run it only while tracking, or keep it active |
 | `backLedBrightness` | Integer 0 .. 3 | Set AQI LED brightness: off, dim, mid, or bright |
 | `touchLedIntensity` | Integer 0 .. 2 | Set touch LED intensity: off, dim, or bright |
 | `buzzerEnabled` | Boolean | Enable or disable buzzer playback |
+
+For example, PUT `{"pinnedChart":"co2"}` selects CO2. The choice is persisted
+and shared with the UI and BLE. Names are case-sensitive strings; invalid names
+or types return `400 invalid_value` with field `pinnedChart`. Existing
+`configurationControl` rules apply. Temperature/Humidity remain selectable below
+five minutes, where Home shows “Not available”; the preference is preserved.
 
 Accepted measurement intervals are persisted and scheduled exactly. The device
 menu offers fixed choices of 3s, 10s, 30s, 60s, 5m, 15m, and 1h. For another

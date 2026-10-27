@@ -111,13 +111,15 @@ tracking, confirming actions, and locking or unlocking the interface.
 **Pinned Chart** keeps a chosen measurement chart on Home, including while
 locked. It starts as PM2.5; None disables it. Unlocked Up/Down browsing shows
 each available metric with its value, units, Min/Max, and history without
-changing the pinned choice.
+changing the pinned choice. It is the first setting in Display & Touch and is
+also configurable through BLE and the Local Server.
 
 Below a five-minute measurement interval, enclosure heating makes temperature
 and humidity unsuitable for ambient display, so their cells and charts are
 hidden. They remain in stored measurements and cloud, BLE, and local-server
 payloads. A pinned temperature or humidity chart resumes when the interval
-returns to five minutes or longer.
+returns to five minutes or longer. Below five minutes, the empty chart area
+shows “Pin a chart here” for None or “Not available” for a hidden thermal chart.
 
 ### Shake-To-Refresh
 
@@ -334,8 +336,8 @@ Offline. Settings contains Operations, Display & Touch, Hardware Test, Clear
 Data, Setup Guide, and the existing About Device page.
 
 Operations groups measurement interval, CO2 calibration, GPS mode, and buzzer.
-Display & Touch groups temperature/altitude units, PM display, Pinned Chart, auto-lock, and
-AQI LED and Touch LED brightness. Submenus keep Exit and Back;
+Display & Touch starts with Pinned Chart, followed by temperature/altitude units,
+PM display, auto-lock, and AQI LED and Touch LED brightness. Submenus keep Exit and Back;
 opening Tracking selects Status to show session details. Settings
 and its list submenus select their first content item, while value choices
 select the saved value. Back restores the row that opened the child page.

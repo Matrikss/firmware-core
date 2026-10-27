@@ -518,9 +518,14 @@ With no active browsing selection, the lower rows are:
 | Interval | Visible Pinned Chart | Rows Below PM2.5 And CO2 |
 |---|---|---|
 | Below 300 s | Yes | TVOC/NOx; pressure/altitude; chart |
-| Below 300 s | No | TVOC/NOx; pressure/altitude; unused bottom row |
+| Below 300 s | No | TVOC/NOx; pressure/altitude; chart hint |
 | 300 s or longer | Yes | Temperature/humidity; TVOC/NOx; chart |
 | 300 s or longer | No | Temperature/humidity; TVOC/NOx; pressure/altitude |
+
+Below 300 seconds, the empty chart row shows “Pin a chart here” for None or
+“Not available” for pinned Temperature/Humidity. These are single-line, centered
+labels in the small regular font. A supported chart with no history stays blank.
+At longer intervals, None uses the pressure/altitude row instead of a hint.
 
 While unlocked and browsing, these rows become the highlighted metric header,
 Min/Max, and chart. The header has a regular metric name above a bold value and

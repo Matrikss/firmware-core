@@ -186,13 +186,13 @@ rows follow this order:
 | Tracking | Status, Pause Tracking or Resume Tracking, Stop Tracking |
 | Settings | Operations, Display & Touch, Power Saving, Hardware Test, Clear Data, Setup Guide, About Device |
 | Operations | Measurement Interval, CO2 Calibration, GPS Mode, Buzzer |
-| Display & Touch | Temperature Unit, Altitude Unit, PM Display, Pinned Chart, Auto Lock, AQI LED, Touch LED |
+| Display & Touch | Pinned Chart, Temperature Unit, Altitude Unit, PM Display, Auto Lock, AQI LED, Touch LED |
 | Power Saving | Wi-Fi Power Saving |
 | Hardware Test | Peripheral Test, GPS Test, Accelerometer Test, Battery Calibration, Play Melody |
 
 Settings and its groups fit on one page. Opening Settings selects Operations;
-Operations selects Measurement Interval, Display & Touch selects Temperature
-Unit, Power Saving selects Wi-Fi Power Saving, and Hardware Test selects
+Operations selects Measurement Interval, Display & Touch selects Pinned Chart,
+Power Saving selects Wi-Fi Power Saving, and Hardware Test selects
 Peripheral Test. Reopening these menus selects the first content row.
 Choice screens select the active value; applying an ordinary setting returns
 to its owning group on the source row. Back and double-press restore that
@@ -486,10 +486,10 @@ no sample pointer and no plotted line.
 
 ### Pinned Charts
 
-Settings > Display & Touch > Pinned Chart selects None or any of the eight
-metrics. PM2.5 is the initial default. The saved choice applies while locked
-and whenever no metric is selected; browsing never changes it. Locking or
-entering the menu clears only the transient selection.
+Pinned Chart is the first setting under Settings > Display & Touch and selects
+None or any of the eight metrics. PM2.5 is the initial default. The saved choice
+applies while locked and whenever no metric is selected; browsing never changes
+it. Locking or entering the menu clears only the transient selection.
 
 Unlocked Up/Down browsing shows a metric header, Min/Max, and chart. Returning
 to None restores the overview and the pinned chart, if enabled. Pinned Chart
@@ -497,5 +497,8 @@ None disables the automatic chart at every interval; browsing remains available.
 
 Below 300 seconds, Temperature and Humidity are skipped during browsing. A
 pinned Temperature or Humidity chart is temporarily hidden, without substituting
-another chart or changing the saved choice. It returns at 300 seconds or longer.
+another chart or changing the saved choice. The empty chart area shows
+“Not available”; choosing None shows “Pin a chart here”. Both are small, centered
+text, visible while locked or unselected, and absent during chart browsing.
+The selected thermal chart returns at 300 seconds or longer.
 See [Home Charts](display_service.md#home-charts) for the visible layout.
