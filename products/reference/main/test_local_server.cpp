@@ -220,6 +220,9 @@ public:
   LocalServerConfig get_config() override { return _cfg; }
 
   ConfigSubmitResult submit_config(const LocalServerConfig &p) override {
+    if (p.pinned_chart.has_value()) {
+      return {ConfigSubmitStatus::NotSupported, ConfigFieldId::PinnedChart};
+    }
     // Catalog fields not implemented by this demo are recognized but unsupported.
     if (p.altitude_unit.has_value()) {
       return {ConfigSubmitStatus::NotSupported, ConfigFieldId::AltitudeUnit};

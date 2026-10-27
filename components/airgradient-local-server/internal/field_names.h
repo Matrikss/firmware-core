@@ -49,6 +49,7 @@ inline constexpr const char *COUNTRY = "country";
 inline constexpr const char *PM_STANDARD = "pmStandard";
 inline constexpr const char *TEMPERATURE_UNIT = "temperatureUnit";
 inline constexpr const char *ALTITUDE_UNIT = "altitudeUnit";
+inline constexpr const char *PINNED_CHART = "pinnedChart";
 inline constexpr const char *POST_DATA_TO_CLOUD = "postDataToCloud";
 inline constexpr const char *CLOUD_CONNECTION = "cloudConnection";
 inline constexpr const char *CONFIGURATION_CONTROL = "configurationControl";

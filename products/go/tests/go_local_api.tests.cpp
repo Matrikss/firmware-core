@@ -167,6 +167,7 @@ TEST_CASE("Go local API initializes safe snapshots") {
   REQUIRE(config.pm_standard.has_value());
   REQUIRE(config.temperature_unit.has_value());
   REQUIRE(config.altitude_unit.has_value());
+  REQUIRE(config.pinned_chart.has_value());
   REQUIRE(config.cloud_connection.has_value());
   REQUIRE(config.configuration_control.has_value());
   REQUIRE(config.measurement_interval_seconds.has_value());
@@ -180,6 +181,7 @@ TEST_CASE("Go local API initializes safe snapshots") {
   CHECK(*config.pm_standard == "ugm3");
   CHECK(*config.temperature_unit == "c");
   CHECK(*config.altitude_unit == "m");
+  CHECK(*config.pinned_chart == "pm25");
   CHECK(*config.cloud_connection);
   CHECK(*config.configuration_control == "both");
   CHECK(*config.measurement_interval_seconds == MEASURE_INTERVAL_SECONDS_DEFAULT);
@@ -618,6 +620,9 @@ TEST_CASE("Go local API permits only exact control recovery from cloud control")
   recovery.altitude_unit = "ft";
   require_status(fixture.service->submit_config(recovery), ConfigSubmitStatus::Forbidden);
   recovery.altitude_unit.reset();
+  recovery.pinned_chart = "none";
+  require_status(fixture.service->submit_config(recovery), ConfigSubmitStatus::Forbidden);
+  recovery.pinned_chart.reset();
   recovery.corrections = Corrections{};
   require_status(fixture.service->submit_config(recovery), ConfigSubmitStatus::Forbidden);
   recovery.corrections.reset();
@@ -764,6 +769,49 @@ TEST_CASE("Go local API maps altitude units into config updates") {
   request = fixture.receive_request();
   CHECK(request.config.update_mask == field_mask(GoConfigField::AltitudeUnit));
   CHECK_FALSE(request.config.use_feet);
+}
+
+TEST_CASE("Go local API maps all pinned charts independently of interval") {
+  const struct {
+    const char *name;
+    Metric metric;
+  } choices[] = {{"none", Metric::None},         {"pm25", Metric::Pm25},
+                 {"co2", Metric::Co2},           {"temperature", Metric::Temp},
+                 {"humidity", Metric::Humidity}, {"tvoc", Metric::Tvoc},
+                 {"nox", Metric::Nox},           {"pressure", Metric::Pressure},
+                 {"altitude", Metric::Altitude}};
+  for (int interval : {30, 300}) {
+    for (const auto &choice : choices) {
+      CAPTURE(interval, choice.name);
+      Fixture fixture;
+      fixture.service->set_access(ConfigAccess::ReadWrite);
+      GoSettings settings{};
+      settings.measure_interval_seconds = interval;
+      settings.pinned_chart = choice.metric;
+      fixture.service->publish_config_snapshot(settings);
+      CHECK(fixture.service->get_config().pinned_chart == choice.name);
+
+      LocalServerConfig partial{};
+      partial.pinned_chart = choice.name;
+      require_status(fixture.service->submit_config(partial), ConfigSubmitStatus::Accepted);
+      const auto request = fixture.receive_request();
+      CHECK(request.config.update_mask == field_mask(GoConfigField::PinnedChart));
+      CHECK(request.config.pinned_chart == choice.metric);
+    }
+  }
+}
+
+TEST_CASE("Go local API rejects invalid pinned chart without queuing other fields") {
+  Fixture fixture;
+  fixture.service->set_access(ConfigAccess::ReadWrite);
+  LocalServerConfig partial{};
+  partial.pm_standard = "us-aqi";
+  partial.pinned_chart = "PM25";
+  require_status(fixture.service->submit_config(partial), ConfigSubmitStatus::InvalidValue,
+                 ConfigFieldId::PinnedChart);
+  CHECK(GoLocalApiServiceTestAccess::request_count(*fixture.service) == 0);
+  CHECK(fixture.service->get_config().pinned_chart == "pm25");
+  CHECK(fixture.service->get_config().pm_standard == "ugm3");
 }
 
 TEST_CASE("Go local API rejects invalid interval, GPS mode, and output settings") {

@@ -41,6 +41,7 @@ enum class GoConfigField : uint32_t {
   BackLedBrightness = 1U << 14,
   TouchLedIntensity = 1U << 15,
   BuzzerEnabled = 1U << 16,
+  PinnedChart = 1U << 17,
 };
 
 constexpr int MEASURE_INTERVAL_SECONDS_MIN = 1;
@@ -92,6 +93,7 @@ struct GoConfigUpdate {
   bool pm_use_usaqi = false;
   bool use_fahrenheit = false;
   bool use_feet = false;
+  Metric pinned_chart = Metric::Pm25;
   bool disable_cloud = false;
   ConfigurationControl configuration_control = ConfigurationControl::Both;
   int measure_interval_seconds = MEASURE_INTERVAL_SECONDS_DEFAULT;
