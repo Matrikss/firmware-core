@@ -266,7 +266,7 @@ the nearest deadline.
 | Timer | Interval | Active When |
 |---|---|---|
 | PM pre-wake | `measure_interval - CONFIG_SENSOR_WARMUP_DURATION_MS` | Not Offline, interval ≥ `pm_sleep_threshold_ms`, PM asleep, sensitive services not paused |
-| Sensor (all groups) | `measure_interval_seconds * 1000` | PM ready, no measurement pending, sensitive services not paused |
+| Sensor (all groups) | `active_measure_interval_seconds() * 1000` | PM ready, no measurement pending, sensitive services not paused |
 | BMS full poll | `BMS_POLL_INTERVAL_MS` (30000 ms) | Sensitive services not paused |
 | BMS status poll | `BMS_STATUS_POLL_INTERVAL_MS` (5000 ms) | Sensitive services not paused |
 | External watchdog | `EXT_WDT_INTERVAL_MS` (60000 ms) | Always — never suppressed during a setup session |
@@ -1105,8 +1105,9 @@ device is locked and the first measurement is complete:
 
 1. `PowerService::decide_sleep()` determines the sleep type (`None` or `Deep`)
    and the adjusted sleep duration in one call. It computes
-   `min(enabled intervals) - awake_ms`. Non-Offline modes and short intervals
-   (< `deep_sleep_threshold_ms`) return `{None, 0}`.
+   `energy_saving_measure_interval_seconds * 1000 - awake_ms`, clamped to zero.
+   Non-Offline modes or remaining sleep below `deep_sleep_threshold_ms` return
+   `{None, 0}`.
 2. If `None`: return immediately — the main loop continues normally.
 3. If `Deep`: call `prepare_for_sleep()`, then `enter_sleep()`.
    `enter_sleep()` does not return; CPU reboots on wake.
@@ -1152,14 +1153,17 @@ through ESP sleep. See [GPS Service](gps_service.md#sleep-policy).
 ## Sensor Scheduling
 
 The orchestrator maintains a single regular timer (`_last_measurement_ms`).
-When `measure_interval_seconds` elapses, `check_timers()` requests a scheduled
+It uses `GoSettings::active_measure_interval_seconds()`: the shared normal
+preference in Portable/Stationary and the separate preference in Energy Saving.
+When that interval elapses, `check_timers()` requests a scheduled
 measurement only if PM is ready and no measurement is pending. The common
 `start_measurement(origin)` helper marks the request pending and requests one
 iteration of `SensorGroup::All`. A scheduled request advances the regular
 timer baseline; a manual refresh does not.
 
-When the interval setting changes, `reschedule_sensor_timer()` resets the
-baseline to `now` and reconciles PM sensor power with the new interval:
+When the active interval changes, including on a mode switch,
+`reschedule_sensor_timer()` resets the baseline to `now` and reconciles PM sensor
+power with the new interval:
 requests sleep when eligible and PM is ready with no measurement or refresh
 pending, or prepares an asleep sensor when the interval requires it to stay
 awake. If the interval is unchanged, the baseline and PM power are not touched.
@@ -1271,7 +1275,7 @@ This implementation required two additions to existing services:
 
 Added to `go_ui.h` / `go_ui.cpp`. Converts internal option indices back to
 `GoSettings` field values — the reverse of `sync_settings()`. Covers:
-units, PM display, display interval, PM interval, other sensor interval,
+units, PM display, both saved measurement intervals,
 GPS mode, operating mode, and auto-lock timeout.
 
 ### StorageService::read_cache()

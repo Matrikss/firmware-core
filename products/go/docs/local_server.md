@@ -154,10 +154,11 @@ objects from the same subset. Device behavior fields are:
 | `touchLedIntensity` | Integer 0 .. 2 | Set touch LED intensity: off, dim, or bright |
 | `buzzerEnabled` | Boolean | Enable or disable buzzer playback |
 
-Accepted measurement intervals are persisted and scheduled exactly. The device
-menu offers fixed choices of 3s, 10s, 30s, 60s, 5m, 15m, and 1h. For another
-valid value such as 17, the Settings summary shows `Measure Int.: 17s` and the
-interval submenu prepends and selects `Custom (17s)`. Changing another UI
+The API edits the shared Portable/Stationary interval; Energy Saving retains its
+separate preference. Accepted values are persisted and scheduled exactly. In
+Portable/Stationary, the menu offers 3s, 10s, 30s, 60s, 5m, 15m, and 1h. For
+another valid value such as 17, the Settings summary shows `Measure Int.: 17s`
+and the interval submenu prepends and selects `Custom (17s)`. Changing another UI
 setting preserves 17 seconds; explicitly selecting a fixed interval replaces
 it.
 
