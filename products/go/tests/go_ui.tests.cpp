@@ -2557,6 +2557,54 @@ TEST_CASE("UIManager: pinned chart is independent of browsing and lock state",
   }
 }
 
+TEST_CASE("UIManager: pinned chart hint uses only the empty overview row", "[UIManager][chart]") {
+  for (int interval : {30, 299, 300, 600}) {
+    CAPTURE(interval);
+    UIManager ui(DEFAULT_UI_CONFIG);
+    GoSettings settings{};
+    settings.measure_interval_seconds = interval;
+    settings.pinned_chart = Metric::None;
+    ui.sync_settings(settings);
+    auto ctx = make_default_ctx();
+
+    for (bool locked : {false, true}) {
+      ctx.locked = locked;
+      CHECK(ui.build_values(ctx).show_pinned_chart_hint() == (interval < 300));
+    }
+
+    ctx.locked = false;
+    press(ui, InputSource::TouchDown);
+    REQUIRE(ui.build_values(ctx).browsing_chart());
+    CHECK_FALSE(ui.build_values(ctx).show_pinned_chart_hint());
+
+    ctx.locked = true;
+    CHECK(ui.build_values(ctx).show_pinned_chart_hint() == (interval < 300));
+    ui.reset_to_home();
+    ctx.locked = false;
+    CHECK(ui.build_values(ctx).show_pinned_chart_hint() == (interval < 300));
+  }
+}
+
+TEST_CASE("UIManager: selected charts never show the pin hint even without history",
+          "[UIManager][chart]") {
+  UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings{};
+  settings.measure_interval_seconds = 30;
+  auto ctx = make_default_ctx();
+  for (auto metric : {Metric::Pm25, Metric::Co2, Metric::Temp, Metric::Humidity, Metric::Tvoc,
+                      Metric::Nox, Metric::Pressure, Metric::Altitude}) {
+    CAPTURE(static_cast<int>(metric));
+    settings.pinned_chart = metric;
+    ui.sync_settings(settings);
+    for (bool locked : {false, true}) {
+      ctx.locked = locked;
+      const auto v = ui.build_values(ctx);
+      CHECK(v.chart_count == 0);
+      CHECK_FALSE(v.show_pinned_chart_hint());
+    }
+  }
+}
+
 TEST_CASE("UIManager: hidden pinned chart returns when the interval permits it",
           "[UIManager][chart]") {
   for (auto metric : {Metric::Temp, Metric::Humidity}) {

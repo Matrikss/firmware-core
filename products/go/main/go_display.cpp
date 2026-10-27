@@ -1788,8 +1788,14 @@ void DisplayService::_draw_home(const DisplayValues &v) {
     format_altitude_value(value, sizeof(value), v.altitude_m, v.use_feet);
     draw_cell(&_u8g2, gas_cell + 3, "Altitude", value, false);
   }
-  if (chart_visible)
+  if (chart_visible) {
     _draw_chart(v);
+  } else if (v.show_pinned_chart_hint()) {
+    u8g2_SetFont(&_u8g2, u8g2_font_helvR08_tr);
+    const int hint_baseline =
+        PLOT_Y + (PLOT_H + u8g2_GetAscent(&_u8g2) + u8g2_GetDescent(&_u8g2)) / 2;
+    draw_centered_text(&_u8g2, SCREEN_W / 2, hint_baseline, "Pin a chart here");
+  }
 }
 
 void DisplayService::_draw_chart_details(const DisplayValues &v) {
