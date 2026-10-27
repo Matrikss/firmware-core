@@ -51,6 +51,7 @@ enum class ConfigFieldId : uint8_t {
   TouchLedIntensity,      // "touchLedIntensity"
   BuzzerEnabled,          // "buzzerEnabled"
   AltitudeUnit,           // "altitudeUnit"
+  PinnedChart,            // "pinnedChart"
 };
 
 enum class ConfigSubmitStatus : uint8_t {

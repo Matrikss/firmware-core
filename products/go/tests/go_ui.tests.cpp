@@ -153,8 +153,8 @@ TEST_CASE("UIManager: agreed menu hierarchy", "[UIManager][nav][redesign]") {
   CHECK(std::string(values.rows[5].text) == "Buzzer: Off");
   double_press(ui);
   open_row(ui, "Display & Touch");
-  check_rows(ui, {"Exit", "Back", "Temperature Unit: C", "Altitude Unit: m", "PM Display: ug/m3",
-                  "Pinned Chart", "Auto Lock: Off", "AQI LED: Off", "Touch LED: Off"});
+  check_rows(ui, {"Exit", "Back", "Pinned Chart", "Temperature Unit: C", "Altitude Unit: m",
+                  "PM Display: ug/m3", "Auto Lock: Off", "AQI LED: Off", "Touch LED: Off"});
   double_press(ui);
   open_row(ui, "Power Saving");
   check_rows(ui, {"Exit", "Back", "Wi-Fi Power Saving"});
@@ -464,7 +464,7 @@ TEST_CASE("UIManager: grouped menus wrap and return to their parent",
   const MenuCase cases[] = {
       {nullptr, Screen::Settings, "Operations", "About Device", 9},
       {"Operations", Screen::Operations, "Measure Int.", "Buzzer: Off", 6},
-      {"Display & Touch", Screen::DisplayTouch, "Temperature Unit: C", "Touch LED: Off", 9},
+      {"Display & Touch", Screen::DisplayTouch, "Pinned Chart", "Touch LED: Off", 9},
       {"Power Saving", Screen::PowerSaving, "Wi-Fi Power Saving", "Wi-Fi Power Saving", 3},
       {"Hardware Test", Screen::HardwareTest, "Peripheral Test", "Play Melody", 7},
   };
@@ -2620,6 +2620,54 @@ TEST_CASE("UIManager: pinned chart is independent of browsing and lock state",
     ctx.locked = false;
     press(ui, InputSource::TouchDown);
     CHECK(ui.build_values(ctx).chart_metric() == Metric::Pm25);
+  }
+}
+
+TEST_CASE("UIManager: pinned chart hint uses only the empty overview row", "[UIManager][chart]") {
+  for (int interval : {30, 299, 300, 600}) {
+    CAPTURE(interval);
+    UIManager ui(DEFAULT_UI_CONFIG);
+    GoSettings settings{};
+    settings.measure_interval_seconds = interval;
+    settings.pinned_chart = Metric::None;
+    ui.sync_settings(settings);
+    auto ctx = make_default_ctx();
+
+    for (bool locked : {false, true}) {
+      ctx.locked = locked;
+      CHECK(ui.build_values(ctx).show_pinned_chart_hint() == (interval < 300));
+    }
+
+    ctx.locked = false;
+    press(ui, InputSource::TouchDown);
+    REQUIRE(ui.build_values(ctx).browsing_chart());
+    CHECK_FALSE(ui.build_values(ctx).show_pinned_chart_hint());
+
+    ctx.locked = true;
+    CHECK(ui.build_values(ctx).show_pinned_chart_hint() == (interval < 300));
+    ui.reset_to_home();
+    ctx.locked = false;
+    CHECK(ui.build_values(ctx).show_pinned_chart_hint() == (interval < 300));
+  }
+}
+
+TEST_CASE("UIManager: selected charts never show the pin hint even without history",
+          "[UIManager][chart]") {
+  UIManager ui(DEFAULT_UI_CONFIG);
+  GoSettings settings{};
+  settings.measure_interval_seconds = 30;
+  auto ctx = make_default_ctx();
+  for (auto metric : {Metric::Pm25, Metric::Co2, Metric::Temp, Metric::Humidity, Metric::Tvoc,
+                      Metric::Nox, Metric::Pressure, Metric::Altitude}) {
+    CAPTURE(static_cast<int>(metric));
+    settings.pinned_chart = metric;
+    ui.sync_settings(settings);
+    for (bool locked : {false, true}) {
+      ctx.locked = locked;
+      const auto v = ui.build_values(ctx);
+      CHECK(v.chart_count == 0);
+      CHECK_FALSE(v.show_pinned_chart_hint());
+    }
   }
 }
 

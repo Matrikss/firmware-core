@@ -47,6 +47,8 @@ def test_invalid_enum(ago_http_client: httpx.Client) -> None:
     [
         pytest.param(("altitudeUnit", "yards"), id="altitudeUnit-enum"),
         pytest.param(("altitudeUnit", True), id="altitudeUnit-type"),
+        pytest.param(("pinnedChart", "PM25"), id="pinnedChart-enum"),
+        pytest.param(("pinnedChart", 1), id="pinnedChart-type"),
         pytest.param(("measurementInterval", 0), id="measurementInterval-range"),
         pytest.param(("measurementInterval", 1.5), id="measurementInterval-type"),
         pytest.param(("gpsMode", "sometimes"), id="gpsMode"),

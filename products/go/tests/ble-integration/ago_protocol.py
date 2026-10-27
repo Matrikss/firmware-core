@@ -120,7 +120,7 @@ CHARGING_STATES = {"none", "trickle", "pre", "fast", "taper", "topoff", "done", 
 
 CONFIG_READ_KEYS = {
     "meas_int",
-    "temp_f", "alt_ft", "pm_aqi",
+    "temp_f", "alt_ft", "pm_aqi", "pchart",
     "gps_mode",
     "auto_lock",
     "op_mode",
@@ -146,6 +146,7 @@ CONFIG_FIELD_TYPES: dict[str, tuple[type, ...]] = {
     "temp_f": (bool,),
     "alt_ft": (bool,),
     "pm_aqi": (bool,),
+    "pchart": (int,),
     "gps_mode": (str,),
     "auto_lock": (int,),
     "op_mode": (str,),

@@ -124,7 +124,8 @@ Covers read, write, delta-notify, and command operations:
   the device sends a Config **delta** notification — `"type": "config"` plus
   only the changed key
 - **Compact device fields** (async): round-trips buzzer, CO2 ABC, TVOC learning,
-  and NOx learning values, verifies exact deltas, then restores each value
+  NOx learning, and Pinned Chart (`pchart`) values, verifies exact deltas, then
+  restores each value
 - **No-op set** (async): writing an unchanged value emits no notification
 - **Correction set** (async): writes a complete temperature correction group,
   verifies the nested Config delta without a Measures notification, then

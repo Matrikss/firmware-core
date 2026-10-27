@@ -1830,6 +1830,9 @@ static void enc_alt_ft(CborEncoder &m, const GoSettings &s) { cbor_encode_boolea
 static void enc_pm_aqi(CborEncoder &m, const GoSettings &s) {
   cbor_encode_boolean(&m, s.pm_use_usaqi);
 }
+static void enc_pinned_chart(CborEncoder &m, const GoSettings &s) {
+  cbor_encode_uint(&m, static_cast<uint64_t>(s.pinned_chart));
+}
 static void enc_gps_mode(CborEncoder &m, const GoSettings &s) {
   cbor_encode_text_stringz(&m, gps_mode_to_wire(s.gps_mode));
 }
@@ -1880,6 +1883,9 @@ static bool dif_alt_ft(const GoSettings &a, const GoSettings &b) {
 static bool dif_pm_aqi(const GoSettings &a, const GoSettings &b) {
   return a.pm_use_usaqi != b.pm_use_usaqi;
 }
+static bool dif_pinned_chart(const GoSettings &a, const GoSettings &b) {
+  return a.pinned_chart != b.pinned_chart;
+}
 static bool dif_gps_mode(const GoSettings &a, const GoSettings &b) {
   return a.gps_mode != b.gps_mode;
 }
@@ -1928,6 +1934,7 @@ static const ConfigField CONFIG_FIELDS[] = {
     {BLE_KEY_TEMP_F, enc_temp_f, dif_temp_f},
     {BLE_KEY_ALT_FT, enc_alt_ft, dif_alt_ft},
     {BLE_KEY_PM_AQI, enc_pm_aqi, dif_pm_aqi},
+    {BLE_KEY_PINNED_CHART, enc_pinned_chart, dif_pinned_chart},
     {BLE_KEY_GPS_MODE, enc_gps_mode, dif_gps_mode},
     {BLE_KEY_AUTO_LOCK, enc_auto_lock, dif_auto_lock},
     {BLE_KEY_OP_MODE, enc_op_mode, dif_op_mode},
@@ -2225,6 +2232,17 @@ BleConfigDecodeResult BleService::decode_config_write(const uint8_t *buf, size_t
     // Deprecated keys — skip value, do not modify settings
     else if (key_is(BLE_KEY_PM_INT) || key_is(BLE_KEY_OTHER_INT) || key_is(BLE_KEY_DISP_INT)) {
       cbor_value_advance(&it);
+      handled = true;
+    } else if (key_is(BLE_KEY_PINNED_CHART)) {
+      cbor_value_advance(&it);
+      result.recognized_config_key_count++;
+      uint64_t v = 0;
+      if (cbor_value_is_unsigned_integer(&it) && cbor_value_get_uint64(&it, &v) == CborNoError &&
+          v <= static_cast<uint64_t>(Metric::Altitude)) {
+        settings.pinned_chart = static_cast<Metric>(v);
+      } else {
+        result.has_invalid_config_values = true;
+      }
       handled = true;
     } else if (key_is(BLE_KEY_AUTO_LOCK)) {
       cbor_value_advance(&it);

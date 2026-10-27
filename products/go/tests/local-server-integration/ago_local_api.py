@@ -48,6 +48,7 @@ CONFIG_KEYS = {
     "pmStandard",
     "temperatureUnit",
     "altitudeUnit",
+    "pinnedChart",
     "cloudConnection",
     "configurationControl",
     "measurementInterval",
@@ -65,6 +66,7 @@ CORRECTION_KEYS = {"pm25", "temperature", "humidity"}
 CONFIG_ROUND_TRIP_VALUES: dict[str, tuple[object, object]] = {
     "temperatureUnit": ("c", "f"),
     "altitudeUnit": ("m", "ft"),
+    "pinnedChart": ("none", "pm25"),
     "measurementInterval": (1, 2),
     "gpsMode": ("off", "tracking"),
     "backLedBrightness": (0, 1),
@@ -224,6 +226,10 @@ def validate_config(payload: dict[str, Any]) -> None:
     assert payload["pmStandard"] in {"ugm3", "us-aqi"}
     assert payload["temperatureUnit"] in {"c", "f"}
     assert payload["altitudeUnit"] in {"m", "ft"}
+    assert payload["pinnedChart"] in {
+        "none", "pm25", "co2", "temperature", "humidity",
+        "tvoc", "nox", "pressure", "altitude",
+    }
     assert isinstance(payload["cloudConnection"], bool)
     assert payload["configurationControl"] in {"cloud", "local", "both"}
     _assert_integer(payload["measurementInterval"], 1, 3600)

@@ -41,7 +41,7 @@ See [`go_settings.h`](../main/go_settings.h) for full signatures.
 | `use_fahrenheit` | `"uf"` | `bool` | `false` | — | Temperature display unit (false=C, true=F) |
 | `use_feet` | `"auf"` | `bool` | `false` | — | Altitude display unit (false=m, true=ft); stored altitude remains meters |
 | `pm_use_usaqi` | `"pmu"` | `bool` | `false` | — | PM display format (false=µg/m³, true=USAQI) |
-| `pinned_chart` | `"pchart"` | `int` (stored) / `Metric` (in struct) | `Pm25` (1) | 0 .. 8 | UI-only Pinned Chart choice; None (0) disables the automatic chart |
+| `pinned_chart` | `"pchart"` | `int` (stored) / `Metric` (in struct) | `Pm25` (1) | 0 .. 8 | Pinned Chart choice shared by UI, BLE, and Local Server; None (0) disables the automatic chart |
 | `gps_mode` | `"gpm"` | `int` (stored) / `GpsMode` (in struct) | `OnWhenTracking` (1) | 0 .. 2 | GPS operating mode: AlwaysOff / OnWhenTracking / AlwaysOn |
 | `operating_mode` | `"opm"` | `int` (stored) / `OperatingMode` (in struct) | `Portable` (0) | 0 .. 2 | Serialized as int; cast to `OperatingMode` on load |
 | `auto_lock_seconds` | `"als"` | `int` | `10` | 0, 10, 30, 60 | Runtime auto-lock timeout; `0` = disabled |
@@ -79,7 +79,9 @@ only the active preference.
 Persisted identifiers are None (0), PM2.5 (1), CO2 (2), Temperature (3), Humidity
 (4), TVOC (5), NOx (6), Pressure (7), and Altitude (8). Missing or invalid values
 load as PM2.5; invalid choices are rejected on save. The UI exposes this setting
-under Display & Touch; remote configuration interfaces do not expose it.
+as the first setting under Display & Touch. BLE uses unsigned `pchart` IDs;
+the Local Server uses `pinnedChart` names. See the [BLE protocol](../go_ble_client.md#72-write-set-config)
+and [local configuration](local_server.md#configuration).
 
 The preference survives interval changes, even when Temperature or Humidity
 cannot be shown below 300 seconds. See [Pinned Charts](ui_manager.md#pinned-charts).

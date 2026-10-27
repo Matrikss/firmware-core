@@ -124,6 +124,33 @@ TEST_CASE("config parse: altitude unit rejects invalid enum and type", "[config]
   }
 }
 
+TEST_CASE("config pinned chart choices round-trip as strings", "[config][parse][serialize]") {
+  for (const char *choice :
+       {"none", "pm25", "co2", "temperature", "humidity", "tvoc", "nox", "pressure", "altitude"}) {
+    CAPTURE(choice);
+    const std::string body = std::string("{\"pinnedChart\":\"") + choice + "\"}";
+    LocalServerConfig cfg;
+    REQUIRE(parse(body, cfg).status == config_json::ParseStatus::Ok);
+    REQUIRE(cfg.pinned_chart.has_value());
+    CHECK(*cfg.pinned_chart == choice);
+    char buf[64]{};
+    REQUIRE(config_json::serialize(cfg, buf, sizeof(buf)) > 0);
+    CHECK(std::string(buf) == body);
+  }
+}
+
+TEST_CASE("config pinned chart rejects invalid names and non-string values", "[config][parse]") {
+  for (const char *value : {"\"unknown\"", "\"PM25\"", "\"\"", "1", "true", "null", "[]", "{}"}) {
+    CAPTURE(value);
+    LocalServerConfig cfg;
+    const auto result = parse(std::string("{\"pinnedChart\":") + value + "}", cfg);
+    REQUIRE(result.status == config_json::ParseStatus::InvalidValue);
+    CHECK(result.field == ConfigFieldId::PinnedChart);
+    CHECK_FALSE(cfg.pinned_chart.has_value());
+    CHECK(std::string(config_json::config_field_wire_key(result.field)) == "pinnedChart");
+  }
+}
+
 TEST_CASE("config parse: non-bool for bool field rejected", "[config][parse]") {
   SECTION("shared field") {
     LocalServerConfig cfg;
@@ -331,6 +358,7 @@ TEST_CASE("config serialize: omits absent altitude unit", "[config][serialize]")
   cJSON *root = cJSON_Parse(buf);
   REQUIRE(root != nullptr);
   REQUIRE(cJSON_GetObjectItem(root, "altitudeUnit") == nullptr);
+  REQUIRE(cJSON_GetObjectItem(root, "pinnedChart") == nullptr);
   cJSON_Delete(root);
 }
 

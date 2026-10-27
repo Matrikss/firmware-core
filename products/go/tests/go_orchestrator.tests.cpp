@@ -5083,6 +5083,41 @@ TEST_CASE("BLE config set: applies altitude display unit", "[Orchestrator][setti
   CHECK(ui_settings.use_feet);
 }
 
+TEST_CASE("BLE config set: persists pinned chart and updates the display",
+          "[Orchestrator][settings][ble][chart]") {
+  TestFixture f;
+  f.settings.measure_interval_seconds = 30;
+  auto orch = f.make_orchestrator();
+
+  test_spy::ble_connected = true;
+  test_spy::ble_pending_config_len = 1;
+  test_spy::ble_config_decode_result.op = BleConfigOp::Set;
+  test_spy::ble_config_decode_result.recognized_config_key_count = 1;
+  test_spy::ble_decode_updates_settings = true;
+  test_spy::ble_decoded_settings = f.settings;
+  test_spy::ble_decoded_settings.pinned_chart = Metric::Humidity;
+
+  ALLOW_CALL(f.mock_config, set_int(trompeloeil::_, trompeloeil::_)).RETURN(ConfigStoreResult::OK);
+  REQUIRE_CALL(f.mock_config, set_int(trompeloeil::_, static_cast<int>(Metric::Humidity)))
+      .WITH(std::string(_1) == "pchart")
+      .RETURN(ConfigStoreResult::OK);
+  ALLOW_CALL(f.mock_config, set_bool(trompeloeil::_, trompeloeil::_)).RETURN(ConfigStoreResult::OK);
+  ALLOW_CALL(f.mock_config, set_string(trompeloeil::_, trompeloeil::_))
+      .RETURN(ConfigStoreResult::OK);
+  REQUIRE_CALL(f.mock_config, commit()).RETURN(ConfigStoreResult::OK);
+
+  Event evt{};
+  evt.type = EventType::BleConfigWrite;
+  A::dispatch(orch, evt);
+
+  CHECK(A::settings(orch).pinned_chart == Metric::Humidity);
+  CHECK(test_spy::ble_notify_config_called);
+  CHECK(DisplayService::spy_update_count > 0);
+  const auto values = f.ui_manager.build_values(A::build_context(orch));
+  CHECK(values.pinned_chart == Metric::Humidity);
+  CHECK(values.chart_metric() == Metric::None);
+}
+
 TEST_CASE("BLE config set: commit failure retains settings and reports save failure",
           "[Orchestrator][settings][ble][failure]") {
   TestFixture f;
@@ -10186,6 +10221,56 @@ TEST_CASE("local altitude activation persists syncs redraws publishes and conver
   CHECK(A::settings(orch).use_feet);
   CHECK(*f.local_api.get_config().altitude_unit == "ft");
   CHECK(DisplayService::spy_update_count == 0);
+}
+
+TEST_CASE("local pinned chart activation persists updates UI and publishes config",
+          "[Orchestrator][local-api][config][chart]") {
+  TestFixture f;
+  f.settings.measure_interval_seconds = 30;
+  auto orch = f.make_orchestrator();
+  test_spy::ble_connected = true;
+  ALLOW_CALL(f.mock_config, set_int(trompeloeil::_, trompeloeil::_)).RETURN(ConfigStoreResult::OK);
+  ALLOW_CALL(f.mock_config, set_bool(trompeloeil::_, trompeloeil::_)).RETURN(ConfigStoreResult::OK);
+  ALLOW_CALL(f.mock_config, set_string(trompeloeil::_, trompeloeil::_))
+      .RETURN(ConfigStoreResult::OK);
+  f.local_api.set_access(ConfigAccess::ReadWrite);
+
+  LocalServerConfig partial{};
+  partial.pinned_chart = "humidity";
+  REQUIRE(f.local_api.submit_config(partial).status == ConfigSubmitStatus::Accepted);
+  CHECK(f.local_api.get_config().pinned_chart == "pm25");
+  DisplayService::spy_update_count = 0;
+  {
+    REQUIRE_CALL(f.mock_config, set_int(trompeloeil::_, static_cast<int>(Metric::Humidity)))
+        .WITH(std::string(_1) == "pchart")
+        .RETURN(ConfigStoreResult::OK);
+    REQUIRE_CALL(f.mock_config, commit()).RETURN(ConfigStoreResult::OK);
+    dispatch_next_local_request(f, orch);
+  }
+  CHECK(A::settings(orch).pinned_chart == Metric::Humidity);
+  CHECK(f.local_api.get_config().pinned_chart == "humidity");
+  CHECK(DisplayService::spy_update_count == 1);
+  CHECK(test_spy::ble_notify_config_called);
+  const auto values = f.ui_manager.build_values(A::build_context(orch));
+  CHECK(values.pinned_chart == Metric::Humidity);
+  CHECK(values.chart_metric() == Metric::None);
+
+  REQUIRE(f.local_api.submit_config(partial).status == ConfigSubmitStatus::Accepted);
+  DisplayService::spy_update_count = 0;
+  {
+    FORBID_CALL(f.mock_config, commit());
+    dispatch_next_local_request(f, orch);
+  }
+  CHECK(DisplayService::spy_update_count == 0);
+
+  partial.pinned_chart = "none";
+  REQUIRE(f.local_api.submit_config(partial).status == ConfigSubmitStatus::Accepted);
+  {
+    REQUIRE_CALL(f.mock_config, commit()).RETURN(ConfigStoreResult::ERROR);
+    dispatch_next_local_request(f, orch);
+  }
+  CHECK(A::settings(orch).pinned_chart == Metric::Humidity);
+  CHECK(f.local_api.get_config().pinned_chart == "humidity");
 }
 
 TEST_CASE("four local requests merge sequentially with last processed value winning",
