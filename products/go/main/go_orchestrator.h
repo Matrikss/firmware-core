@@ -133,8 +133,7 @@ private:
   uint32_t _tracking_status_refresh_deadline_ms = 0; ///< Zero is valid when armed
 
   // --- OTA ---
-  /// Unified OTA poll-timer baseline: 2 s BLE is_ble_active() poll (Portable),
-  /// 1 h WiFi check (Stationary).  Re-armed to now after each poll/check.
+  /// BLE start-edge poll baseline (Portable, 2 s). Cloud owns Wi-Fi check timing.
   uint32_t _last_ota_check_ms = 0;
   /// True once a transfer has committed — the full enter_ota() quiesce +
   /// "Updating firmware…" paint ran (BLE always; WiFi once a download started).
@@ -357,6 +356,8 @@ private:
   static constexpr size_t BLE_WRITE_BUF_SIZE = 256;
 
   // --- OTA ---
+  bool wifi_ota_allowed() const;
+  void on_wifi_ota_available();
   /// Full quiesce around a committed transfer: pause sensitive services
   /// (sensor / GPS / PM rail), stop cloud (Stationary), feed the external
   /// watchdog once.  No display work.  Called up front for BLE, lazily for

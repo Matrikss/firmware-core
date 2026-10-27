@@ -22,6 +22,7 @@
 #include <type_traits>
 
 #include "go_cloud.h"
+#include "go_ota.h"
 #include "go_config_types.h"
 #include "go_events.h"
 #include "go_wifi.h"
@@ -36,6 +37,9 @@
 namespace cloud_spy {
 extern uint32_t post_call_count;
 extern uint32_t fetch_call_count;
+extern uint32_t ota_check_count;
+extern OtaStatus ota_check_result;
+extern std::function<void()> on_ota_check;
 extern MeasuresAGo last_post_snapshot;
 extern int last_post_signal;
 extern uint32_t last_post_boot;
@@ -58,7 +62,10 @@ extern void reset();
 class CloudServiceTestAccess {
 public:
   static uint32_t run_once(CloudService &c, uint32_t now) { return c._run_iteration(now); }
+  static void run(CloudService &c) { c._run(); }
 
+  static uint32_t ota_due(const CloudService &c) { return c._ota_due; }
+  static void set_ota_due(CloudService &c, uint32_t due) { c._ota_due = due; }
   static uint32_t post_due(const CloudService &c) { return c._post_due; }
   static uint32_t fetch_due(const CloudService &c) { return c._fetch_due.load(); }
   static bool was_armed(const CloudService &c) { return c._was_armed; }
@@ -114,6 +121,9 @@ public:
   }
 
   bool queue_send_impl(RtosQueueHandle /*qh*/, const void *item, uint32_t /*timeout_ms*/) override {
+    if (queue_full) {
+      return false;
+    }
     if (item != nullptr) {
       last_event = *static_cast<const Event *>(item);
       events_posted += 1;
@@ -122,6 +132,7 @@ public:
     return false;
   }
 
+  bool queue_full = false;
   Event last_event{};
   uint32_t events_posted = 0;
   uint64_t retained_time_ms = 0;
@@ -136,6 +147,7 @@ struct CloudFixture {
 
   AgClient ag_client;
   WifiService wifi_service;
+  OtaService ota_service;
   CloudService cloud;
 
   // Persistent buffer for fetch_config so _do_fetch has somewhere to
@@ -153,8 +165,10 @@ struct CloudFixture {
                       *reinterpret_cast<HttpServer *>(_stub_buf),
                       *reinterpret_cast<LocalServer *>(_stub_buf)},
                      WifiService::Config{}),
-        cloud(reinterpret_cast<RtosQueueHandle>(0x1), CloudService::Deps{ag_client, wifi_service},
-              CloudService::Config{}) {
+        ota_service(*reinterpret_cast<AgBleServer *>(_stub_buf),
+                    *reinterpret_cast<PowerService *>(_stub_buf), OtaService::Config{}),
+        cloud(reinterpret_cast<RtosQueueHandle>(0x1),
+              CloudService::Deps{ag_client, wifi_service, ota_service}, CloudService::Config{}) {
     cloud_spy::reset();
     RTOS::set_instance(&mock_rtos);
     retained_uptime::reset_state_for_test();
@@ -164,6 +178,8 @@ struct CloudFixture {
 
     // Plant a fetch buffer so _do_fetch has somewhere to write.
     A::set_fetch_buf(cloud, fetch_buf);
+    // Existing POST/FETCH tests start between OTA checks.
+    A::set_ota_due(cloud, CloudService::Config{}.ota_check_interval_ms);
 
     // Done semaphore must exist so the shutdown branch's give() finds
     // a created handle.  In TEST_HOST this is a non-null sentinel.
@@ -1137,4 +1153,131 @@ TEST_CASE("Master disable suppresses POST and Fetch and slides expired deadlines
   REQUIRE(A::fetch_due(f.cloud) == 1000 + 60'000);
   REQUIRE(cloud_spy::post_call_count == 0);
   REQUIRE(cloud_spy::fetch_call_count == 0);
+}
+
+TEST_CASE("Cloud serializes the initial OTA probe after POST and FETCH", "[CloudService][ota]") {
+  CloudFixture f;
+  A::set_ota_due(f.cloud, 0);
+  f.cloud.arm(true);
+  A::run_once(f.cloud, 1000);
+  CHECK(cloud_spy::post_call_count == 1);
+  CHECK(cloud_spy::fetch_call_count == 0);
+  CHECK(cloud_spy::ota_check_count == 0);
+  A::run_once(f.cloud, 1000);
+  CHECK(cloud_spy::fetch_call_count == 1);
+  CHECK(cloud_spy::ota_check_count == 0);
+  const uint32_t events = f.mock_rtos.events_posted;
+  A::run_once(f.cloud, 1000);
+  CHECK(cloud_spy::ota_check_count == 1);
+  CHECK(A::ota_due(f.cloud) == 3'601'000);
+  CHECK(f.mock_rtos.events_posted == events);
+  CHECK(A::run_once(f.cloud, 1001) == 59'999);
+}
+
+TEST_CASE("Cloud OTA respects arming and disable gates independently of FETCH",
+          "[CloudService][ota]") {
+  CloudFixture f;
+  A::set_ota_due(f.cloud, 0);
+  f.cloud.set_config_fetch_enabled(false);
+  SECTION("disarmed") {}
+  SECTION("cloud disabled") {
+    f.cloud.arm(false);
+    f.cloud.set_disable_cloud(true);
+  }
+  A::run_once(f.cloud, 1000);
+  CHECK(cloud_spy::ota_check_count == 0);
+  f.cloud.arm(false);
+  f.cloud.set_disable_cloud(false);
+  A::run_once(f.cloud, 1001);
+  CHECK(cloud_spy::ota_check_count == 1);
+  CHECK(cloud_spy::fetch_call_count == 0);
+}
+
+TEST_CASE("Cloud disarms after an available update until rearmed", "[CloudService][ota]") {
+  CloudFixture f;
+  A::set_ota_due(f.cloud, 0);
+  f.cloud.arm(false);
+  cloud_spy::ota_check_result = OtaStatus::Ok;
+  A::run_once(f.cloud, 0);
+  REQUIRE(f.mock_rtos.last_event.type == EventType::WifiOtaAvailable);
+  CHECK(A::run_once(f.cloud, 70'000) == UINT32_MAX);
+  CHECK(cloud_spy::post_call_count == 0);
+  CHECK(cloud_spy::fetch_call_count == 0);
+  CHECK(f.mock_rtos.events_posted == 1);
+  f.cloud.arm(true);
+  A::run_once(f.cloud, 70'000);
+  CHECK(cloud_spy::post_call_count == 1);
+}
+
+TEST_CASE("Cloud resumes normal requests when the OTA event queue is full", "[CloudService][ota]") {
+  CloudFixture f;
+  A::set_ota_due(f.cloud, 0);
+  f.cloud.arm(false);
+  cloud_spy::ota_check_result = OtaStatus::Ok;
+  f.mock_rtos.queue_full = true;
+  A::run_once(f.cloud, 0);
+  CHECK(f.mock_rtos.events_posted == 0);
+  f.mock_rtos.queue_full = false;
+  A::run_once(f.cloud, 60'000);
+  CHECK(cloud_spy::post_call_count == 1);
+  CHECK(cloud_spy::ota_check_count == 1);
+  CHECK(A::ota_due(f.cloud) == 3'600'000);
+}
+
+TEST_CASE("Cloud drops an available result when disarmed or disabled during the probe",
+          "[CloudService][ota]") {
+  CloudFixture f;
+  A::set_ota_due(f.cloud, 0);
+  f.cloud.arm(false);
+  cloud_spy::ota_check_result = OtaStatus::Ok;
+  SECTION("disconnect") {
+    cloud_spy::on_ota_check = [&] { f.cloud.disarm(); };
+  }
+  SECTION("disable cloud") {
+    cloud_spy::on_ota_check = [&] { f.cloud.set_disable_cloud(true); };
+  }
+  A::run_once(f.cloud, 0);
+  A::run_once(f.cloud, 1);
+  CHECK(f.mock_rtos.events_posted == 0);
+  CHECK(cloud_spy::ota_check_count == 1);
+}
+
+TEST_CASE("Cloud OTA failure leaves normal posting active", "[CloudService][ota]") {
+  CloudFixture f;
+  A::set_ota_due(f.cloud, 0);
+  f.cloud.arm(false);
+  cloud_spy::ota_check_result = OtaStatus::TransportError;
+  A::run_once(f.cloud, 0);
+  CHECK(f.mock_rtos.events_posted == 0);
+  A::run_once(f.cloud, 60'000);
+  CHECK(cloud_spy::post_call_count == 1);
+  CHECK(cloud_spy::ota_check_count == 1);
+}
+
+TEST_CASE("Cloud hourly OTA check repeats across clock wraparound", "[CloudService][ota]") {
+  CloudFixture f;
+  f.cloud.arm(false);
+  f.cloud.set_config_fetch_enabled(false);
+  constexpr uint32_t start = UINT32_MAX - 100;
+  A::set_ota_due(f.cloud, start);
+  A::run_once(f.cloud, start);
+  CHECK(A::ota_due(f.cloud) == start + 3'600'000U);
+  A::run_once(f.cloud, start + 1);
+  CHECK(cloud_spy::ota_check_count == 1);
+  A::run_once(f.cloud, start + 3'600'000U); // due POST
+  A::run_once(f.cloud, start + 3'600'000U); // due hourly check
+  CHECK(cloud_spy::ota_check_count == 2);
+}
+
+TEST_CASE("Cloud acknowledges shutdown arriving during an OTA probe",
+          "[CloudService][ota][shutdown]") {
+  CloudFixture f;
+  A::set_ota_due(f.cloud, 0);
+  f.cloud.arm(false);
+  cloud_spy::ota_check_result = OtaStatus::Ok;
+  cloud_spy::on_ota_check = [&] { A::set_shutdown_pending(f.cloud, true); };
+  A::run(f.cloud);
+  CHECK(cloud_spy::ota_check_count == 1);
+  CHECK(A::done_signal_count(f.cloud) == 1);
+  CHECK(f.mock_rtos.events_posted == 0);
 }

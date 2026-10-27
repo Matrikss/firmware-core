@@ -38,9 +38,6 @@ static constexpr const char *TAG = "Orchestrator";
 
 static constexpr uint32_t MAX_SHAKE_EVENT_AGE_MS = 500;
 
-// --- OTA poll cadences (unified _last_ota_check_ms baseline) ---
-// Stationary WiFi OTA availability-check cadence (1 h).
-static constexpr uint32_t OTA_WIFI_CHECK_INTERVAL_MS = 3600000;
 // Portable BLE is_ble_active() start-edge poll cadence (2 s), gated on an
 // authenticated client or a still-latched is_ble_active().
 static constexpr uint32_t OTA_BLE_POLL_INTERVAL_MS = 2000;
@@ -499,22 +496,10 @@ uint32_t Orchestrator::compute_queue_timeout_ms() const {
     next = std::min(next, prov_deadline - now);
   }
 
-  // Unified OTA poll deadline — mode-selected interval/gate. Candidate only
-  // while eligible: an overdue baseline while ineligible would clamp to 0 and
-  // busy-spin the loop.
-  uint32_t ota_interval = 0;
-  bool ota_eligible = false;
-  if (_mode == OperatingMode::Stationary && _svc.wifi.is_online() && !_setup_session_active &&
-      !_settings.disable_cloud) {
-    ota_interval = OTA_WIFI_CHECK_INTERVAL_MS;
-    ota_eligible = true;
-  } else if (_mode == OperatingMode::Portable &&
-             (_svc.ble_service.is_authenticated() || _svc.ota.is_ble_active())) {
-    ota_interval = OTA_BLE_POLL_INTERVAL_MS;
-    ota_eligible = true;
-  }
-  if (ota_eligible) {
-    uint32_t ota_remaining = (_last_ota_check_ms + ota_interval) - now;
+  // Wi-Fi checks are scheduled by cloud. Only BLE start-edge polling lives here.
+  if (_mode == OperatingMode::Portable &&
+      (_svc.ble_service.is_authenticated() || _svc.ota.is_ble_active())) {
+    const uint32_t ota_remaining = (_last_ota_check_ms + OTA_BLE_POLL_INTERVAL_MS) - now;
     next = std::min(next, ota_remaining);
   }
 
@@ -623,25 +608,9 @@ void Orchestrator::check_timers() {
   // --- Portable provisioning radio-idle tick (drops the radio on timeout) ---
   _svc.portable_provisioner.tick(now);
 
-  // --- Unified OTA poll (mode-selected interval/gate) ---
-  // The blocking run_*()/finish_ota() below own the orchestrator task until the
-  // transfer terminates; the main loop does not iterate meanwhile.
-  if (_mode == OperatingMode::Stationary && _svc.wifi.is_online() && !_setup_session_active &&
-      !_settings.disable_cloud) {
-    if ((now - _last_ota_check_ms) >= OTA_WIFI_CHECK_INTERVAL_MS) {
-      _last_ota_check_ms = now;
-      // Speculative check: don't quiesce yet. Only pause cloud + feed the
-      // watchdog; enter_ota() + paint are deferred to on_ota_download_started().
-      _ota_committed = false;
-      _svc.cloud.disarm();
-      _svc.power_service.reset_ext_watchdog();
-      log_heap(TAG, "ota.wifi-check:enter");
-      const OtaStatus status = _svc.ota.run_wifi_check([this] { on_ota_download_started(); });
-      log_heap(TAG, "ota.wifi-check:return");
-      finish_ota(status);
-    }
-  } else if (_mode == OperatingMode::Portable &&
-             (_svc.ble_service.is_authenticated() || _svc.ota.is_ble_active())) {
+  // BLE transfers still run synchronously from their start-edge poll.
+  if (_mode == OperatingMode::Portable &&
+      (_svc.ble_service.is_authenticated() || _svc.ota.is_ble_active())) {
     if ((now - _last_ota_check_ms) >= OTA_BLE_POLL_INTERVAL_MS) {
       _last_ota_check_ms = now;
       if (_svc.ota.is_ble_active()) {
@@ -855,6 +824,10 @@ void Orchestrator::dispatch(const Event &event) {
 
   case EventType::PortableProvRequest:
     _svc.portable_provisioner.handle_pending_request();
+    break;
+
+  case EventType::WifiOtaAvailable:
+    on_wifi_ota_available();
     break;
 
   case EventType::PostMeasuresResult:
@@ -2779,10 +2752,6 @@ void Orchestrator::enter_stationary() {
   _svc.cloud.set_config_fetch_enabled(_settings.configuration_control !=
                                       ConfigurationControl::Local);
 
-  // Seed the OTA baseline a full interval in the past so the first WiFi check
-  // is due as soon as the connection settles, not one hour after entry.
-  _last_ota_check_ms = static_cast<uint32_t>(RTOS::get_time_ms()) - OTA_WIFI_CHECK_INTERVAL_MS;
-
   if (_manufacturing_mode) {
     AG_LOGI(TAG, "stationary: manufacturing — trying default Wi-Fi");
     _svc.ui_manager.show_info("Trying default Wi-Fi...");
@@ -3226,6 +3195,28 @@ void Orchestrator::resume_provisioning_sensitive_services() {
 // ---------------------------------------------------------------------------
 // OTA
 // ---------------------------------------------------------------------------
+
+bool Orchestrator::wifi_ota_allowed() const {
+  return _mode == OperatingMode::Stationary && _svc.wifi.is_online() && !_setup_session_active &&
+         !_settings.disable_cloud;
+}
+
+void Orchestrator::on_wifi_ota_available() {
+  if (!wifi_ota_allowed()) {
+    if (_mode == OperatingMode::Stationary && _svc.wifi.is_online()) {
+      _svc.cloud.arm(/*fire_now=*/false);
+    }
+    return;
+  }
+
+  // Cloud disarmed itself after the probe. Keep the existing blocking transfer.
+  _ota_committed = false;
+  _svc.power_service.reset_ext_watchdog();
+  log_heap(TAG, "ota.wifi-download:enter");
+  const OtaStatus status = _svc.ota.run_wifi_check([this] { on_ota_download_started(); });
+  log_heap(TAG, "ota.wifi-download:return");
+  finish_ota(status);
+}
 
 void Orchestrator::enter_ota() {
   AG_LOGI(TAG, "enter_ota: quiescing services for OTA");

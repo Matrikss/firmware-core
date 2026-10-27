@@ -17,6 +17,7 @@
 #include "services/ag_client.h"
 #include "types/wifi_types.h"
 #include "go_wifi.h"
+#include "go_ota.h"
 
 // ============================================================================
 // cloud_spy — observable state for go_cloud tests
@@ -27,6 +28,9 @@ namespace cloud_spy {
 // --- AgClient ---
 uint32_t post_call_count = 0;
 uint32_t fetch_call_count = 0;
+uint32_t ota_check_count = 0;
+OtaStatus ota_check_result = OtaStatus::UpToDate;
+std::function<void()> on_ota_check;
 
 // Last POST snapshot (and the RSSI value the cloud task forwarded)
 MeasuresAGo last_post_snapshot{};
@@ -58,6 +62,9 @@ int wifi_rssi = -55;
 void reset() {
   post_call_count = 0;
   fetch_call_count = 0;
+  ota_check_count = 0;
+  ota_check_result = OtaStatus::UpToDate;
+  on_ota_check = nullptr;
   last_post_snapshot = MeasuresAGo{};
   last_post_signal = 0;
   last_post_boot = 0;
@@ -177,3 +184,16 @@ void WifiService::_reset_deadline() {}
 void WifiService::_arm_deadline(uint32_t /*window_ms*/) {}
 void WifiService::_reset_online_latches() {}
 bool WifiService::_post_wifi_disconnected(WifiDisconnectReason /*r*/) { return true; }
+
+// Same inert OtaService construction used by the orchestrator tests. Only the
+// availability wrapper is stubbed here; no HTTP or flash backend is exercised.
+OtaService::OtaService(AgBleServer &server, PowerService &power, const Config &cfg)
+    : _server(server), _power(power), _config(cfg), _writer(), _ble_ota(_server, _writer) {}
+
+OtaStatus OtaService::check_wifi_update() const {
+  ++cloud_spy::ota_check_count;
+  if (cloud_spy::on_ota_check) {
+    cloud_spy::on_ota_check();
+  }
+  return cloud_spy::ota_check_result;
+}

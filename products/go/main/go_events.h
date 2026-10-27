@@ -45,6 +45,7 @@ enum class EventType : uint8_t {
   // --- Cloud transport events ---
   PostMeasuresResult, // payload: uint8_t cloud_result (AgClientResult)
   FetchConfigResult,  // payload: FetchConfigEventPayload fetch_config
+  WifiOtaAvailable,   // no payload
 
   // --- Local API events ---
   LocalApiRequestReady, // payload: uint32_t local_api_epoch
