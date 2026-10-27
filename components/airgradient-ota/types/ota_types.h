@@ -13,9 +13,10 @@
 #include <functional>
 
 // Outcome of an OTA operation. Returned by the writer/source primitives and
-// by OtaUpdater::run(). Only Ok indicates an image was applied.
+// by OtaUpdater::run(). Ok means an image was applied only for an update run;
+// for WifiHttpOtaSource::check_available(), it means an image is available.
 enum class OtaStatus : uint8_t {
-  Ok,              // image downloaded, written, and boot partition set
+  Ok,              // operation succeeded (meaning depends on the calling API)
   UpToDate,        // server returned 304 - current firmware is newest
   Declined,        // server declined to serve an image (e.g. 400/404)
   TransportError,  // connection / DNS / read failure, or truncated download

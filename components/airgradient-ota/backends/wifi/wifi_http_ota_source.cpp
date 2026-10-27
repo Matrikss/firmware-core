@@ -7,6 +7,8 @@
 
 #include "backends/wifi/wifi_http_ota_source.h"
 
+#include <cstdio>
+
 #include "ag_log.h"
 #include "services/ota_url.h"
 
@@ -25,6 +27,7 @@ constexpr int HTTP_OK = 200;
 constexpr int HTTP_NOT_MODIFIED = 304;
 constexpr int HTTP_BAD_REQUEST = 400;
 constexpr int HTTP_NOT_FOUND = 404;
+constexpr const char *AVAILABILITY_QUERY = "&offset=0&length=0";
 } // namespace
 
 WifiHttpOtaSource::WifiHttpOtaSource(const OtaRequest &request) {
@@ -38,6 +41,58 @@ WifiHttpOtaSource::WifiHttpOtaSource(const OtaRequest &request) {
 }
 
 WifiHttpOtaSource::~WifiHttpOtaSource() { close(); }
+
+OtaStatus WifiHttpOtaSource::check_available() const {
+  if (_init_status != OtaStatus::Ok) {
+    return _init_status;
+  }
+
+  char url[CONFIG_AG_OTA_URL_BUFFER_SIZE];
+  const int written = std::snprintf(url, sizeof(url), "%s%s", _url, AVAILABILITY_QUERY);
+  if (written < 0 || static_cast<size_t>(written) >= sizeof(url)) {
+    AG_LOGE(TAG, "availability URL exceeds buffer");
+    return OtaStatus::InvalidArgument;
+  }
+
+#ifndef TEST_HOST
+  esp_http_client_config_t config = {};
+  config.url = url;
+  config.method = HTTP_METHOD_GET;
+  config.timeout_ms = CONFIG_AG_OTA_HTTP_TIMEOUT_MS;
+  // Inspect this endpoint's status; a redirect must not turn the probe into
+  // a request to a different URL without the zero-length query.
+  config.disable_auto_redirect = true;
+
+  esp_http_client_handle_t client = esp_http_client_init(&config);
+  if (client == nullptr) {
+    AG_LOGE(TAG, "availability: esp_http_client_init failed");
+    return OtaStatus::TransportError;
+  }
+
+  const esp_err_t err = esp_http_client_perform(client);
+  const int status_code = esp_http_client_get_status_code(client);
+  esp_http_client_cleanup(client);
+  if (err != ESP_OK) {
+    AG_LOGE(TAG, "availability request failed: %s", esp_err_to_name(err));
+    return OtaStatus::TransportError;
+  }
+
+  AG_LOGI(TAG, "availability status=%d", status_code);
+  switch (status_code) {
+  case HTTP_OK:
+    return OtaStatus::Ok;
+  case HTTP_NOT_MODIFIED:
+    return OtaStatus::UpToDate;
+  case HTTP_BAD_REQUEST:
+  case HTTP_NOT_FOUND:
+    return OtaStatus::Declined;
+  default:
+    return OtaStatus::ServerError;
+  }
+#else
+  return OtaStatus::TransportError; // No HTTP backend in the portable host build.
+#endif
+}
 
 OtaStatus WifiHttpOtaSource::open(size_t *out_total_size) {
   if (out_total_size == nullptr) {
