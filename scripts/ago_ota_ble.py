@@ -4,8 +4,8 @@
 Drives the OtaBleService GATT flow from a host: connect + pair, write the
 ``start`` control command, wait for the device's ready NOTIFY, stream the image
 to the Data characteristic without response (Write-Without-Response; pacing is
-left to the link / controller buffers), write the ``end`` control command, and
-wait for the terminal Done / Failed NOTIFY.
+left to the link / controller buffers), wait for the device to report the full
+byte count, write ``end``, and wait for the terminal Done / Failed NOTIFY.
 
 The OTA Control/Data characteristics require an authenticated, bonded link
 (WRITE_AUTHEN with BOND | MITM | SC, DISPLAY_ONLY on the device). The script
@@ -69,7 +69,7 @@ MAX_CHUNK_SIZE = 512
 
 # Inter-chunk delay (seconds). With Write-Without-Response there is no ATT ACK
 # to pace on, so a small gap keeps the local TX queue from overrunning.
-INTER_CHUNK_DELAY_S = 0.001
+INTER_CHUNK_DELAY_S = 0.03
 
 # OtaState wire values (device -> phone).
 STATE_DOWNLOADING = 0x01
@@ -138,7 +138,7 @@ class _StatusCollector:
     """Async-safe container that accumulates decoded Status notifications."""
 
     def __init__(self) -> None:
-        self._queue: asyncio.Queue[tuple[int, int]] = asyncio.Queue()
+        self._queue: asyncio.Queue[tuple[int, int, int]] = asyncio.Queue()
         # Image size, set after START so device-reported progress can show a %.
         self.total = 0
 
@@ -169,7 +169,7 @@ class _StatusCollector:
                 device_bytes,
                 self.total,
             )
-        self._queue.put_nowait((state, result))
+        self._queue.put_nowait((state, result, device_bytes))
 
     async def wait_for_state(
         self, state: int, timeout: float
@@ -179,7 +179,7 @@ class _StatusCollector:
         Raises RuntimeError if the device reports Failed while waiting.
         """
         while True:
-            got_state, got_result = await asyncio.wait_for(
+            got_state, got_result, _ = await asyncio.wait_for(
                 self._queue.get(), timeout=timeout
             )
             if got_state == state:
@@ -194,10 +194,33 @@ class _StatusCollector:
                 _state_name(state),
             )
 
+    async def wait_for_image(self, timeout: float) -> None:
+        """Wait for all bytes to be flashed; time out if progress stops."""
+        received = 0
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + timeout
+        while received < self.total:
+            try:
+                state, result, device_bytes = await asyncio.wait_for(
+                    self._queue.get(), timeout=max(0, deadline - loop.time())
+                )
+            except asyncio.TimeoutError as exc:
+                raise RuntimeError(
+                    f"Device progress stalled at {received}/{self.total} bytes; "
+                    "END not sent"
+                ) from exc
+            if state == STATE_FAILED:
+                raise RuntimeError(
+                    f"Device reported Failed ({_result_name(result)})"
+                )
+            if state == STATE_DOWNLOADING and device_bytes > received:
+                received = device_bytes
+                deadline = loop.time() + timeout
+
     def drain_failure(self) -> tuple[int, int] | None:
         """Return a pending Failed NOTIFY without blocking, if any."""
         while not self._queue.empty():
-            state, result = self._queue.get_nowait()
+            state, result, _ = self._queue.get_nowait()
             if state == STATE_FAILED:
                 return state, result
         return None
@@ -313,7 +336,7 @@ async def _stream_image(
 
         pct = (sent * 100) // total
         if pct != last_logged_pct:
-            logger.info("Progress: %3d%% (%d/%d bytes)", pct, sent, total)
+            logger.info("Queued: %3d%% (%d/%d bytes)", pct, sent, total)
             last_logged_pct = pct
 
         if sent < total:
@@ -379,6 +402,9 @@ async def _run(args: argparse.Namespace) -> None:
 
         # Stream
         await _stream_image(client, image, chunk_size, collector)
+
+        logger.info("All chunks queued; waiting for device to flash %d bytes ...", total)
+        await collector.wait_for_image(args.notify_timeout)
 
         # END
         logger.info("Sending END ...")
@@ -471,7 +497,7 @@ def main() -> None:
         "--notify-timeout",
         type=float,
         default=30.0,
-        help="Max seconds to wait for a Status NOTIFY (default: 30).",
+        help="Max seconds to wait for a Status NOTIFY or byte-count progress (default: 30).",
     )
 
     xfer_group = parser.add_argument_group("transfer")
