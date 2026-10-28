@@ -782,7 +782,7 @@ Pulse points:
 | Boot (fast + full) | `GoHardwareBoard::power()` on first access | First pulse after wake/power-on |
 | Every 60 s | Orchestrator `check_timers()` | Periodic keep-alive |
 | Before sleep | Orchestrator `prepare_for_sleep()` | Maximize timeout window during sleep |
-| OTA start gap | `enter_ota()` (BLE) / WiFi pre-check | Cover the gap to the first progress tick of a blocking transfer |
+| OTA start gap | `enter_ota()` (BLE) / `on_wifi_ota_available()` (Wi-Fi) | Cover the gap to the first progress tick of a blocking transfer |
 | Every non-terminal OTA progress tick | `OtaService` progress callback | Keep the watchdog fed while the orchestrator loop is blocked in `run_ble()` / `run_wifi_check()` |
 
 During a blocking OTA transfer the orchestrator main loop (and its 60 s pulse) is

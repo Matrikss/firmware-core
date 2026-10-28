@@ -29,7 +29,7 @@ sleep cycle.
 | `BleService` | product (`go_ble.h`) | Portable BLE peripheral; initialised on Portable entry, torn down on leave |
 | `WifiService` | product (`go_wifi.h`) | Stationary Wi-Fi lifecycle: saved-credentials connect, factory fallback, provisioning, disconnect routing |
 | `GoLocalApiService` | product (`go_local_api.h`) | Cached local HTTP snapshots, request admission, and FIFO config/action handoff |
-| `OtaService` | product (`go_ota.h`) | Per-mode OTA: BLE push (Portable) / WiFi pull (Stationary), driven blocking from the OTA poll |
+| `OtaService` | product (`go_ota.h`) | Blocking BLE/Wi-Fi transfers; cloud owns Wi-Fi availability checks |
 | `GoBoard` | product (`go_board.h`) | Borrowed for `init_wifi_subsystem()` on first Stationary entry |
 | `ConfigStore` | `airgradient-config` | Load/save `GoSettings` to NVS |
 | `GoSettings` | product (`go_settings.h`) | Product configuration |
@@ -238,7 +238,7 @@ The orchestrator owns the authoritative application state:
 | `_setup_session_active` | `bool` | `false` | True between first-use guide or Stationary setup entry (`Screen::Info` or pre-online `Screen::Provisioning`) and the leave-to-Home / leave-to-Portable boundary; gates power-button short-press, auto-lock, and background-render suppression |
 | `_bring_up_pending` | `bool` | `false` | True while `Screen::Info` is showing the STA-attempt narration; lets `on_wifi_connected()` distinguish the on-Info success path from the post-online reconnect path |
 | `_boot_splash_active` | `bool` | `false` | Tracks the cold-boot `Getting Ready` splash on `Screen::Info`; cleared when `init()` opens the first-use guide or when first sensor data arrives. Suppresses ButtonPower short-press lock toggles |
-| `_last_ota_check_ms` | `uint32_t` | `0` | Unified OTA poll-timer baseline: 2 s BLE `is_ble_active()` poll (Portable), 1 h WiFi check (Stationary). See [Firmware Update (OTA)](#firmware-update-ota) |
+| `_last_ota_check_ms` | `uint32_t` | `0` | 2 s BLE `is_ble_active()` poll baseline (Portable). Cloud owns Wi-Fi check timing. See [Firmware Update (OTA)](#firmware-update-ota) |
 | `_ota_committed` | `bool` | `false` | True once a transfer committed (full quiesce + "Updating firmware…" paint ran). Gates `exit_ota()`'s full-resume + queue-drain vs the lightweight cloud re-arm |
 
 On fresh boot (`PowerOn`), defaults are used. On wake from deep sleep (`Timer`
@@ -275,7 +275,7 @@ the nearest deadline.
 | Snackbar refresh | `SNACKBAR_DURATION_MS + 200` (one-shot) | Non-persistent snackbar active, sensitive services not paused |
 | Wi-Fi initial-connect / fallback | `WifiService::next_deadline_ms()` | While the service has armed a deadline (Stationary bring-up) |
 | Local endpoint activation retry | `LOCAL_API_ACTIVATION_RETRY_MS` (5000 ms) | Stationary + online after local HTTP or mDNS activation fails |
-| OTA poll | `OTA_BLE_POLL_INTERVAL_MS` (2000 ms) / `OTA_WIFI_CHECK_INTERVAL_MS` (3600000 ms) | Portable + (authenticated client or latched `is_ble_active()`); or Stationary + online + no setup session + cloud enabled. See [Firmware Update (OTA)](#firmware-update-ota) |
+| BLE OTA poll | `OTA_BLE_POLL_INTERVAL_MS` (2000 ms) | Portable + (authenticated client or latched `is_ble_active()`). See [Firmware Update (OTA)](#firmware-update-ota) |
 
 The BMS status poll (`on_bms_status_timer()`) is the fast charging-state check
 between full polls. On a charging-state transition (plug in, unplug, charge
@@ -330,6 +330,7 @@ Events are dispatched by type:
 | `WifiDisconnected` | `on_wifi_disconnected()` — `cloud.disarm()` then disconnect-policy router. Before first online, connectivity failures open provisioning; after first online, every reason except `requested_by_user` requests reconnect. |
 | `ProvisioningStateChanged` | `on_provisioning_state_changed()` — update Provisioning page state, persist connectivity metadata (coercing `Cloud` control to `Local` when cloud is disabled), hand the listener to the local endpoint, then start/arm cloud; fall back to Portable on `Stopped` without prior online |
 | `PostMeasuresResult` | Log-only (result code) |
+| `WifiOtaAvailable` | `on_wifi_ota_available()` — recheck eligibility, run the blocking Wi-Fi download, then reboot or resume |
 | `FetchConfigResult` | Recheck cloud authority, merge supported scalar/correction fields, commit and activate the candidate, then asynchronously request changed CO2 ABC periods or TVOC/NOx learning offsets through `SensorProducer` |
 | `LocalApiRequestReady` | Pop one epoch-matched local FIFO entry; apply its config update or request CO2 calibration |
 
@@ -904,33 +905,24 @@ Stationary IP transition. See [`cloud_service.md`](cloud_service.md).
 
 ## Firmware Update (OTA)
 
-OTA is a foreground, exclusive activity wired through
-[`OtaService`](ota_service.md). The orchestrator owns the trigger, quiesce,
-paint, and reboot decision; the component owns the transfer. There is **no
-dedicated OTA task**. The blocking `run_ble()` / `run_wifi_check()` run on the
-orchestrator task; a speculative WiFi check pauses cloud only, while a committed
-transfer quiesces the other services.
+OTA transfers run through [`OtaService`](ota_service.md) on the orchestrator
+task. Cloud owns Wi-Fi availability checks; the orchestrator owns transfer
+eligibility, quiescing, display updates, and reboot or resume.
 
-### Unified OTA Poll
+### Transfer Triggers
 
-The tail of `check_timers()` runs one mode-selected OTA poll off the shared
-`_last_ota_check_ms` baseline; `compute_queue_timeout_ms()` adds the matching
-deadline candidate **only while the gate holds** (an overdue baseline while
-ineligible would otherwise clamp the timeout to 0 and busy-spin the loop):
+BLE retains the 2 s poll in `check_timers()` using `_last_ota_check_ms`. It runs
+only in Portable with an authenticated client or a latched `is_ble_active()`.
+The latch keeps a START-then-disconnect transfer from being stranded after
+authentication clears. An active transfer runs `run_ble()` after quiescing and
+painting.
 
-| Mode + gate | Interval | Action when due |
-|---|---|---|
-| `Portable && (ble.is_authenticated() \|\| ota.is_ble_active())` | 2 s | If `is_ble_active()`: `enter_ota()` + `paint_updating_firmware()`, then `finish_ota(ota.run_ble())` |
-| `Stationary && wifi.is_online() && !_setup_session_active && !disable_cloud` | 1 h | Pre-check (`cloud.disarm()` + `reset_ext_watchdog()`), then `finish_ota(ota.run_wifi_check(...))` |
-| Offline, or gate false | — | No candidate, no poll |
-
-The Stationary baseline is seeded a full interval in the past on
-`enter_stationary()` so the first check is due as soon as the connection
-settles, then re-armed 1 h after each check. The Portable gate's
-`is_ble_active()` term is required for correctness: a disconnect clears
-`is_authenticated()` immediately while the component's latch only clears inside
-`run()`, so without it a `START`-then-disconnect would strand the transfer
-active.
+Wi-Fi uses `WifiOtaAvailable` from cloud, which has finished its probe and
+already disarmed itself. `on_wifi_ota_available()` requires Stationary, online,
+no setup session, and cloud enabled. If eligible, it feeds the watchdog and
+calls `run_wifi_check()` with the lazy download-start callback. Otherwise it
+re-arms cloud when still Stationary and online. Cloud owns the initial and
+hourly check deadlines; see [Cloud Service](cloud_service.md#ota-interaction).
 
 ### Blocking, Exclusive Model
 
@@ -952,11 +944,9 @@ depth-16 queue (every `queue_send` is non-blocking, drop-on-full); a committed
 | `finish_ota(status)` | Terminal dispatcher (see table below) |
 | `exit_ota(snackbar)` | Non-rebooting resume; branches on `_ota_committed` |
 
-The speculative WiFi check does **not** quiesce up front — most hourly checks
-find nothing. The pre-check only `cloud.disarm()`s + feeds the watchdog; the full
-`enter_ota()` + paint are deferred to the first `Downloading` tick (a real image
-pull) via `on_ota_download_started()`. A BLE `START` is always committed, so it
-quiesces + paints before `run_ble()`.
+The Wi-Fi download attempt defers `enter_ota()` and painting until its first
+`Downloading` tick: the image GET can still be declined after the availability
+probe. A BLE `START` quiesces and paints before `run_ble()`.
 
 On a committed Stationary download, an already-active local HTTP listener and
 mDNS remain active while STA stays connected, but mutating providers are gated

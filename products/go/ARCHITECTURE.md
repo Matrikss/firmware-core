@@ -48,9 +48,9 @@ Set rarely — typically only via UI menu.
 | Offline | Brief, non-connectable BLE measurement broadcasts on timer wakes | Battery | None |
 
 OTA runs in Portable or Stationary mode over the corresponding radio. BLE OTA starts after
-sensitive services are paused. A Stationary check starts after cloud is
-disarmed; sensing, GPS, and PM are paused only if downloading begins, and an
-already in-flight cloud request can drain concurrently. See
+sensitive services are paused. Stationary availability checks run sequentially
+with cloud POST/FETCH. Cloud disarms before requesting a download; sensing, GPS,
+and PM pause only when downloading begins. See
 [`docs/ota_service.md`](docs/ota_service.md) and
 [`docs/orchestrator.md` → OTA](docs/orchestrator.md#firmware-update-ota).
 During a committed Stationary OTA, an already-active local listener and mDNS
@@ -126,7 +126,7 @@ flowchart TD
         Storage["Storage Service"]
         BLE["BLE Service"]
         PortableProv["Portable Wi-Fi Provisioner"]
-        Ota["OTA Service<br/>(blocking on orchestrator task)"]
+        Ota["OTA Service<br/>(transfers block orchestrator)"]
         Cloud["Cloud Service<br/>(dedicated task)"]
         LocalApi["Local API<br/>cached snapshots"]
         PowerMgmt["Power Mgmt"]
@@ -146,6 +146,8 @@ flowchart TD
     Orch --> PortableProv
     Orch --> Ota
     Orch --> Cloud
+    Cloud -->|availability probe| Ota
+    Cloud --> Queue
     Orch --> LocalApi
     Orch --> PowerMgmt
     Orch --> UI
@@ -161,9 +163,9 @@ scan/connect and dropped again. See
 The **OTA Service** also co-registers its GATT service on that same BLE server
 (Portable). It has **no task of its own**: the orchestrator runs the blocking
 `OtaBleService::run()` / `OtaUpdater::run()` on its own task. BLE OTA pauses
-sensitive services before the call. Stationary OTA initially disarms cloud and
-pauses sensing, GPS, and PM only when a download starts; an in-flight cloud
-request may still drain. See
+sensitive services before the call. Cloud runs `check_wifi_update()` on its own
+task and sends `WifiOtaAvailable` after disarming. Stationary pauses sensing,
+GPS, and PM only when a download starts. See
 [`docs/ota_service.md`](docs/ota_service.md).
 
 In Stationary mode, the existing ESP-IDF HTTP listener serves the local v1 API
@@ -329,7 +331,7 @@ orchestrator-level state changes.
 | Accelerometer Worker | Interrupt-burst motion capture and Hardware Test access | Yes | `ShakeDetected` | No idle XYZ polling; stops burst on shake, then waits through a 1 s cooldown |
 | GPS Producer | UART NMEA read loop | Yes | `GpsFixUpdate` | Product-specific, uses `airgradient-gps` (`GpsSensor` / `NmeaGps`) |
 | Input Producer | Classifies raw ISR events | Yes | `InputPress` | Debounce + long-press detection |
-| Cloud Task | HTTP POST + FETCH via AgClient | Yes | `PostMeasuresResult`, `FetchConfigResult` | Stationary + online only; heap deferred to `start()` |
+| Cloud Task | POST, FETCH, and OTA availability | Yes | `PostMeasuresResult`, `FetchConfigResult`, `WifiOtaAvailable` | Stationary + online only; heap deferred to `start()` |
 | HTTP Server | Serves captive provisioning or Local Server routes | Yes | `LocalApiRequestReady` | One httpd task; no dedicated Go local-server task |
 | Display Worker | Drives e-paper refresh | Yes | -- | Receives render commands from orchestrator |
 
@@ -338,8 +340,8 @@ fast and non-blocking). No dedicated task. On V1 boards, `poll_bms()` also
 reads FG telemetry from the BQ27427.
 
 OTA likewise has **no dedicated task**: the blocking `OtaBleService::run()` /
-`OtaUpdater::run()` run on the orchestrator task itself, gated by the OTA poll at
-the tail of `check_timers()`. While a transfer runs the main loop does not
+`OtaUpdater::run()` run on the orchestrator task itself, triggered by the BLE
+poll or `WifiOtaAvailable` event. While a transfer runs the main loop does not
 iterate, so OTA is mutually exclusive with every queue-driven activity. See
 [`docs/ota_service.md`](docs/ota_service.md).
 
@@ -887,7 +889,9 @@ snapshot ownership, queue semantics, and lifecycle details.
 - Stationary cloud transport: periodic POST of `MeasuresAGo` and FETCH of
   device configuration every 60 s via `AgClient` on a dedicated task
   (priority 4, 8 KB stack)
-- POST takes priority each cycle; deadlines are start-anchored
+- Requests run sequentially in POST, FETCH, OTA order; deadlines are start-anchored
+- OTA availability is checked initially and hourly through `OtaService`; an
+  available image disarms cloud and queues `WifiOtaAvailable`
 - Heap is claimed lazily by `start()` (called only when Stationary +
   online); Portable / Offline boots pay zero heap cost
 - `stop()` drains in-flight HTTP before Wi-Fi teardown (bounded ~15 s)
@@ -946,7 +950,8 @@ defaults.
   WiFi pull (Stationary) via a per-call `OtaUpdater` + `WifiHttpOtaSource`;
   both terminate at the owned `EspOtaImageWriter`
 - **No task of its own** — the orchestrator runs the blocking `run_ble()` /
-  `run_wifi_check()` from the OTA poll; BLE pauses sensitive services first,
+  `run_wifi_check()` from the BLE poll or Wi-Fi availability event; BLE pauses
+  sensitive services first,
   while Stationary pauses them only on the download-start commit edge
 - Feeds the external GPIO2 watchdog from the component progress callback while
   the loop is blocked; never reboots (the orchestrator decides from `OtaStatus`)
