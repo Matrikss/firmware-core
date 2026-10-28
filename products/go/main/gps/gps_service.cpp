@@ -10,6 +10,7 @@
 #include "gps/gps_service.h"
 
 #include "ag_log.h"
+#include "decimal64.h"
 #include "go_events.h"
 #include "rtos.h"
 
@@ -268,9 +269,10 @@ void GpsService::run_acquisition() {
       }
       _mutex.unlock();
       if (inject) {
-        AG_LOGI(TAG, "Inject aiding: lat=%.6f lon=%.6f alt=%.1f acc=%.0f epoch=%lld tacc=%u",
+        char epoch_text[DECIMAL64_BUFFER_SIZE];
+        AG_LOGI(TAG, "Inject aiding: lat=%.6f lon=%.6f alt=%.1f acc=%.0f epoch=%s tacc=%u",
                 aid_local.latitude, aid_local.longitude, aid_local.altitude_m, aid_local.pos_acc_m,
-                static_cast<long long>(aid_local.epoch_s),
+                format_int64_decimal(aid_local.epoch_s, epoch_text),
                 static_cast<unsigned>(aid_local.time_acc_ms));
         if (!_clock_synced && has_aiding_time(aid_local)) {
           RTOS::set_system_time_from_epoch(aid_local.epoch_s);
