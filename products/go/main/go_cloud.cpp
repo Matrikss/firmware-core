@@ -27,6 +27,7 @@
 #include "go_cloud_types.h"
 #include "go_config_types.h"
 #include "go_events.h"
+#include "go_ota.h"
 #include "go_wifi.h"
 #include "retained_uptime.h"
 #include "services/ag_client.h"
@@ -428,7 +429,7 @@ FetchConfigEventPayload parse_cloud_config(const char *buffer, size_t bytes) {
 // ---------------------------------------------------------------------------
 
 CloudService::CloudService(RtosQueueHandle event_queue, const Deps &deps, const Config &cfg)
-    : _event_queue(event_queue), _client(deps.client), _wifi(deps.wifi), _cfg(cfg),
+    : _event_queue(event_queue), _client(deps.client), _wifi(deps.wifi), _ota(deps.ota), _cfg(cfg),
       _disable_cloud(cfg.disable_cloud), _config_fetch_enabled(cfg.config_fetch_enabled) {}
 
 CloudService::~CloudService() { stop(); }
@@ -444,10 +445,12 @@ bool CloudService::start() {
 
   log_heap(TAG, "cloud.start:enter");
   _shutdown_pending.store(false);
+  _ota_due = static_cast<uint32_t>(RTOS::get_time_ms()); // First check is due on startup.
 
   _fetch_buf = static_cast<char *>(std::malloc(FETCH_BUFFER_BYTES));
   if (_fetch_buf == nullptr) {
-    AG_LOGE(TAG, "start: fetch buffer alloc failed (%zu bytes)", FETCH_BUFFER_BYTES);
+    AG_LOGE(TAG, "start: fetch buffer alloc failed (%u bytes)",
+            static_cast<unsigned>(FETCH_BUFFER_BYTES));
     return false;
   }
 
@@ -470,9 +473,10 @@ bool CloudService::start() {
     return false;
   }
 
-  AG_LOGI(TAG, "start: task spawned (stack=%lu, prio=%lu, fetch_buf=%zu)",
+  AG_LOGI(TAG, "start: task spawned (stack=%lu, prio=%lu, fetch_buf=%u)",
           static_cast<unsigned long>(CLOUD_TASK_STACK_SIZE),
-          static_cast<unsigned long>(CLOUD_TASK_PRIORITY), FETCH_BUFFER_BYTES);
+          static_cast<unsigned long>(CLOUD_TASK_PRIORITY),
+          static_cast<unsigned>(FETCH_BUFFER_BYTES));
   log_heap(TAG, "cloud.start:exit");
   return true;
 }
@@ -558,12 +562,13 @@ void CloudService::_task_entry(void *arg) {
 
 void CloudService::_run() {
   for (;;) {
+    const bool shutting_down = _shutdown_pending.load();
     const uint32_t now = static_cast<uint32_t>(RTOS::get_time_ms());
     const uint32_t wake_ms = _run_iteration(now);
 
-    if (_shutdown_pending.load()) {
-      // Park until stop() calls task_delete (avoids double-delete race).
-      RTOS::task_notify_take(UINT32_MAX);
+    if (shutting_down) {
+      // This iteration acknowledged stop(). _task_entry parks until deletion.
+      // A stop arriving during HTTP needs another iteration to signal _done_sem.
       return;
     }
 
@@ -617,26 +622,54 @@ uint32_t CloudService::_run_iteration(uint32_t now) {
     return config_fetch_enabled ? std::min(post_wait, fetch_wait) : post_wait;
   }
 
-  // POST priority: fire POST first; return 0 to re-sample state before
-  // considering FETCH (gates out disarm/disable arriving mid-POST).
-  if (static_cast<int32_t>(now - _post_due) >= 0) {
+  const uint32_t post_wait = deadline_wait_ms(now, _post_due);
+  const uint32_t fetch_wait =
+      config_fetch_enabled ? deadline_wait_ms(now, _fetch_due.load()) : UINT32_MAX;
+  const uint32_t ota_wait = deadline_wait_ms(now, _ota_due);
+
+  // Run one request per iteration in POST, FETCH, OTA order, then re-sample
+  // state so disarm/disable changes take effect before the next request.
+  if (post_wait == 0) {
     _do_post(now);
     return 0;
   }
 
-  if (config_fetch_enabled && static_cast<int32_t>(now - _fetch_due.load()) >= 0) {
+  if (fetch_wait == 0) {
     _do_fetch(now);
     return 0;
   }
 
-  const uint32_t post_wait = deadline_wait_ms(now, _post_due);
-  return config_fetch_enabled ? std::min(post_wait, deadline_wait_ms(now, _fetch_due.load()))
-                              : post_wait;
+  if (ota_wait == 0) {
+    _check_ota(now);
+    return 0;
+  }
+
+  return std::min({post_wait, fetch_wait, ota_wait});
 }
 
 // ---------------------------------------------------------------------------
 // HTTP legs
 // ---------------------------------------------------------------------------
+
+void CloudService::_check_ota(uint32_t now_ms) {
+  _ota_due = now_ms + _cfg.ota_check_interval_ms;
+  log_heap(TAG, "ota.availability:enter");
+  const OtaStatus status = _ota.check_wifi_update();
+  log_heap(TAG, "ota.availability:return");
+  AG_LOGI(TAG, "OTA availability result=%u", static_cast<unsigned>(status));
+  if (status != OtaStatus::Ok || _shutdown_pending.load() || !_armed.load() ||
+      _disable_cloud.load()) {
+    return;
+  }
+  // This worker has finished HTTP; disarm before notifying the orchestrator.
+  disarm();
+  Event event{};
+  event.type = EventType::WifiOtaAvailable;
+  if (!RTOS::queue_send(_event_queue, &event, 0)) {
+    AG_LOGW(TAG, "OTA notification queue full; retry at next check");
+    arm(false);
+  }
+}
 
 void CloudService::_do_post(uint32_t now_ms) {
   const uint32_t post_started_at = now_ms;
@@ -669,8 +702,9 @@ void CloudService::_do_fetch(uint32_t now_ms) {
   log_heap(TAG, "cloud.fetch:post-tls");
 
   const size_t logged = bytes < FETCH_BUFFER_BYTES ? bytes : FETCH_BUFFER_BYTES;
-  AG_LOGI(TAG, "fetch_config result=%d bytes=%zu body=%.*s", static_cast<int>(result), bytes,
-          static_cast<int>(logged), _fetch_buf != nullptr ? _fetch_buf : "");
+  AG_LOGI(TAG, "fetch_config result=%d bytes=%u body=%.*s", static_cast<int>(result),
+          static_cast<unsigned>(bytes), static_cast<int>(logged),
+          _fetch_buf != nullptr ? _fetch_buf : "");
 
   FetchConfigEventPayload payload{};
   if (result == AgClientResult::Ok && _fetch_buf != nullptr && bytes < FETCH_BUFFER_BYTES) {
@@ -701,5 +735,5 @@ void CloudService::_wake() {
   if (_task_handle == nullptr) {
     return;
   }
-  RTOS::task_notify_send(_task_handle, 0);
+  RTOS::task_notify_give(_task_handle);
 }

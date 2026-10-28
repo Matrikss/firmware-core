@@ -12,6 +12,7 @@
 #include <cbor.h>
 
 #include "ag_log.h"
+#include "decimal64.h"
 #include "hal/ble_server.h"
 #include "services/ota_ble_protocol.h"
 
@@ -232,7 +233,8 @@ void OtaBleService::_handle_start(const void *map_ptr) {
   uint64_t total = 0;
   cbor_value_get_uint64(&total_val, &total);
   if (total == 0 || total > UINT32_MAX) {
-    AG_LOGW(TAG, "START rejected: total=%llu", static_cast<unsigned long long>(total));
+    char total_text[DECIMAL64_BUFFER_SIZE];
+    AG_LOGW(TAG, "START rejected: total=%s", format_uint64_decimal(total, total_text));
     _reject_start(OtaStatus::InvalidArgument);
     return;
   }

@@ -1,10 +1,10 @@
 # Cloud Service
 
 Product service that owns the Stationary cloud transport for AirGradient Go:
-periodic POST of the latest `MeasuresAGo` snapshot and periodic FETCH of
-device configuration via `AgClient` on a dedicated low-priority task. The
+measurement POST, configuration FETCH, and Wi-Fi OTA availability checks on a
+single low-priority task. The
 orchestrator owns mode policy and event dispatch; `CloudService` owns the
-HTTP cadence, snapshot lifetime, and `AgClient` interactions. Active only in
+HTTP cadence and snapshot lifetime. Active only in
 `OperatingMode::Stationary` while Wi-Fi is online.
 
 ## Files
@@ -21,8 +21,9 @@ HTTP cadence, snapshot lifetime, and `AgClient` interactions. Active only in
 |---|---|---|
 | `AgClient` | `airgradient-client` (`services/ag_client.h`) | `http_post_measures()`, `http_fetch_config()` |
 | `WifiService` | product (`go_wifi.h`) | `rssi()` at post time |
+| `OtaService` | product (`go_ota.h`) | `check_wifi_update()` availability probe |
 | `retained_uptime` | `airgradient-common` (`retained_uptime.h`) | Retained whole-minute uptime sampled at POST time |
-| `Event`, `EventType` | product (`go_events.h`) | Posts `PostMeasuresResult`, `FetchConfigResult` to the orchestrator queue |
+| `Event`, `EventType` | product (`go_events.h`) | Posts `PostMeasuresResult`, `FetchConfigResult`, and `WifiOtaAvailable` |
 | `RTOS` | `airgradient-common` (`rtos.h`) | Task create/delete, mutex, semaphore, queue send, notify, time |
 | `GoBoard::ag_client()` | product (`go_board.h`) | Lazy accessor; runs `AgClient::begin(serial, Wifi)` on first call |
 
@@ -34,11 +35,11 @@ orchestrator task at any time, including before `start()` or after `stop()`.
 
 | Method | Purpose |
 |---|---|
-| `CloudService(queue, deps, cfg)` | Construct with event queue, borrowed `AgClient` and `WifiService`, and cadence config. No heap claimed. |
+| `CloudService(queue, deps, cfg)` | Construct with event queue, borrowed `AgClient`, `WifiService`, and `OtaService`, and cadence config. No heap claimed. |
 | `start()` | Allocate fetch buffer + semaphore, spawn task. Idempotent. Returns false on failure (self-cleans). |
 | `stop()` | Drain in-flight HTTP, delete task, free heap. Bounded by ~15 s. Idempotent. |
 | `arm(fire_now)` | Enable periodic ticks. `fire_now` makes the first cycle immediate (consumed on Disarmed→Armed transition only). |
-| `disarm()` | Disable periodic ticks. In-flight HTTP still drains and posts its result event. |
+| `disarm()` | Disable periodic requests; in-flight HTTP still drains. |
 | `set_disable_cloud(disable)` | Push the `disable_cloud` flag; sampled on the next iteration. |
 | `set_config_fetch_enabled(enabled)` | Gate config FETCH independently of POST. Enabling while armed and cloud-enabled makes FETCH immediately due without changing POST cadence. |
 | `update_measures_snapshot(m)` | Replace the cached `MeasuresAGo` under a mutex (~µs hold). |
@@ -51,6 +52,7 @@ See [`go_cloud.h`](../main/go_cloud.h) for full signatures.
 |---|---|---|
 | `post_interval_ms` | `60'000` | POST cadence (start-anchored) |
 | `fetch_interval_ms` | `60'000` | FETCH cadence (start-anchored) |
+| `ota_check_interval_ms` | `3'600'000` | OTA availability cadence; first check due at task startup |
 | `disable_cloud` | `false` | Initial value; runtime changes via `set_disable_cloud()` |
 | `config_fetch_enabled` | `true` | Initial independent FETCH gate; runtime follows `configuration_control != Local` |
 
@@ -92,22 +94,23 @@ stateDiagram-v2
     CheckPOST --> CheckFETCH: POST not due
     DoPOST --> CheckShutdown: re-sample state
     CheckFETCH --> DoFETCH: fetch enabled and due
-    CheckFETCH --> Sleep: fetch disabled or not due
+    CheckFETCH --> CheckOTA: fetch disabled or not due
     DoFETCH --> CheckShutdown: re-sample state
+    CheckOTA --> DoOTA: ota_due
+    CheckOTA --> Sleep: OTA not due
+    DoOTA --> CheckShutdown: re-sample state
     Idle --> CheckShutdown: wake or timeout
     Sleep --> CheckShutdown: wake or timeout
     Done --> [*]
 ```
 
-POST is checked before FETCH on every iteration. After each HTTP call,
-the loop re-samples `_armed`, `_disable_cloud`, and
-`_config_fetch_enabled` before considering the next leg. This guarantees a
-disarm, cloud disable, or FETCH disable arriving during a POST gates the FETCH
-out.
+Due requests run one at a time in POST, FETCH, OTA order. After each request,
+the loop rechecks arming and configuration gates before starting the next.
+This keeps the availability probe from overlapping cloud TLS requests.
 
-`disable_cloud` is the global transport gate and suppresses both POST and
-FETCH. `config_fetch_enabled` affects only FETCH, so `ConfigurationControl::Local`
-stops cloud configuration changes while measurement POST continues. Enabling
+`disable_cloud` suppresses POST, FETCH, and OTA availability checks.
+`config_fetch_enabled` affects only FETCH, so `ConfigurationControl::Local`
+stops cloud configuration changes while POST and OTA checks continue. Enabling
 FETCH sets its deadline to the current time and wakes the task. While the task
 is already armed and cloud transport is enabled, the next eligible iteration
 fetches immediately without moving `_post_due`. While disarmed, the next
@@ -135,9 +138,8 @@ resets start at `0`, and the wire value saturates at `UINT32_MAX`.
 ### Shutdown
 
 `stop()` sets the shutdown latch, wakes the task, and waits on the
-done-semaphore. The task gives the semaphore and parks on an infinite
-notify-wait (avoids a FreeRTOS double-delete race). `stop()` then
-deletes the task and frees resources. Worst-case latency is one HTTP
+done-semaphore. After the current request drains, the task acknowledges
+shutdown and parks until `stop()` deletes it and frees resources. Worst-case latency is one HTTP
 timeout (~15 s).
 
 ## Orchestrator Wiring
@@ -151,7 +153,7 @@ timeout (~15 s).
 | `change_mode(→ non-Stationary)` | `disarm()` + `stop()` (before `wifi.shutdown()`) |
 | Any activated settings candidate | Update `disable_cloud` and/or `configuration_control` runtime gates when changed |
 | `on_sensor_data()` | `update_measures_snapshot()` (unconditional, all modes) |
-| Speculative WiFi OTA check (`check_timers()` tail) | `disarm()` up front; `arm(false)` on a no-op resume (still online) |
+| `on_wifi_ota_available()` | Cloud has already disarmed; run the blocking download if eligible, otherwise re-arm when Stationary and online |
 | Committed OTA (`enter_ota()` / `exit_ota()`) | `disarm()` on commit; `arm(false)` on resume when `wifi.is_online()` |
 
 The cloud task is torn down **before** Wi-Fi so in-flight HTTP drains
@@ -228,24 +230,20 @@ task is armed and cloud transport is enabled.
 
 ### OTA Interaction
 
-A Stationary WiFi OTA check shares the radio with cloud transport, so the
-orchestrator pauses cloud around it with `disarm()` only — never `stop()` (see
-[`orchestrator.md` → OTA](orchestrator.md#firmware-update-ota)):
+The first availability check is due at task startup, after any due POST/FETCH;
+subsequent checks use `ota_check_interval_ms`. `OtaService::check_wifi_update()`
+uses the firmware endpoint's zero-length probe. No-image and error results are
+logged without interrupting normal cloud traffic.
 
-- `disarm()` parks the cloud task (no new POST/FETCH) while the task + heap stay
-  alive. Because the OTA transfer blocks the orchestrator and `enter_ota()`
-  stops the sensor producer, the cloud task is never re-woken — it stays dormant
-  for the whole transfer with no new HTTPS.
-- The same handling covers both the **speculative hourly check** (no image) and
-  a **committed download**: pause with `disarm()`, resume with `arm(false)` when
-  `wifi.is_online()`. If Wi-Fi dropped mid-OTA, cloud is left disarmed and the
-  device stays Stationary-but-offline.
-- `stop()` is intentionally avoided: a committed download reboots on success (so
-  freed heap is moot), and a `stop()` + `start()` round-trip would only churn /
-  fragment the heap on the failure path. The one residual case — a cloud request
-  already in-flight when `disarm()` is called — drains naturally during the OTA
-  `open()` + partition-erase window and, in the worst case, degrades gracefully
-  (a failed cloud POST is logged and retried).
+When an image is available, cloud disarms itself after the probe completes and
+sends `WifiOtaAvailable`. Its task and buffers stay allocated. The orchestrator
+rechecks eligibility and runs the existing blocking download; a non-rebooting
+result re-arms cloud when still Stationary and online. A full event queue causes
+cloud to re-arm immediately and retry availability at the next scheduled check.
+See [orchestrator OTA handling](orchestrator.md#firmware-update-ota).
+
+The handoff uses the existing armed state: a queued reconnect can re-arm cloud
+before the OTA event is handled. It is not an exclusive transport lock.
 
 ## Events
 
@@ -253,6 +251,7 @@ orchestrator pauses cloud around it with `disarm()` only — never `stop()` (see
 |---|---|---|
 | `PostMeasuresResult` | `CloudResultByte` (`AgClientResult`) | Cloud task after each POST |
 | `FetchConfigResult` | `FetchConfigEventPayload` | Cloud task after each FETCH |
+| `WifiOtaAvailable` | None | Cloud task after an available result and self-disarm |
 
 `PostMeasuresResult` remains result-byte-only. `FetchConfigResult` carries the
 result byte, the fixed `GoConfigUpdate`, and transient action-request flags. The
@@ -273,12 +272,11 @@ for this:
 
 The 4 KB TLS input buffer is sufficient for the Go product's small
 payloads (POST response < 256 bytes, FETCH config < 1 KB). The reduced
-Wi-Fi buffers are adequate for the infrequent HTTP workload (two requests
-per minute).
+Wi-Fi buffers serve the regular POST/FETCH workload plus the hourly OTA probe.
 
 Lifecycle and HTTP paths emit `log_heap()` probes around `start()`,
-`stop()`, POST, and FETCH. These probes track whether cloud task stack
-allocation and TLS handshakes still leave enough contiguous heap for the
+`stop()`, POST, FETCH, and OTA availability. These probes track whether task
+stack allocation and TLS handshakes leave enough contiguous heap for the
 Stationary Wi-Fi / provisioning flows.
 
 ## Edge Cases / Errors
@@ -289,11 +287,11 @@ Stationary Wi-Fi / provisioning flows.
 - **`start()` failure.** Self-cleans on partial allocation failure. The
   orchestrator logs the error; the next `on_wifi_connected()` retries.
 - **Reconnect after AP outage.** `disarm()` on disconnect, `arm(false)`
-  on reconnect — cadence resumes at the next interval, no fire-immediate.
+  on reconnect — POST/FETCH resume at the next interval; OTA keeps its deadline.
 - **Mode change during in-flight HTTP.** `stop()` drains the call
   (bounded ~15 s), then Wi-Fi shuts down.
-- **`set_disable_cloud(true)` while armed.** Expired deadlines are slid
-  forward so re-enabling doesn't catch up on missed intervals.
+- **`set_disable_cloud(true)` while armed.** Expired POST/FETCH deadlines slide
+  forward; an overdue OTA probe runs after cloud is re-enabled.
 - **Config FETCH disabled while POST is armed.** POST keeps its cadence; the
   disabled FETCH deadline is excluded from wake calculations.
 - **Config FETCH re-enabled.** While armed and cloud-enabled, FETCH becomes
@@ -309,14 +307,15 @@ Stationary Wi-Fi / provisioning flows.
 
 `CloudService` is host-testable via friend-class access
 (`CloudServiceTestAccess`) and link-time stubs for `AgClient` (concrete
-class, no virtuals) and `WifiService`. Tests drive the task body
+class, no virtuals), `WifiService`, and `OtaService`. Tests drive the task body
 deterministically via `_run_iteration(now)` with injected clock values.
 
 Host tests live in `products/go/tests/go_cloud.tests.cpp` and cover:
 transition handling, snapshot round-trip, POST/FETCH forwarding, POST
 priority, scalar/correction FETCH mapping, independent FETCH gating,
 start-time anchoring, overrun, disarm/disable mid-POST, RSSI translation,
-shutdown latch, deadline clamp, and first-POST sentinels.
+shutdown latch, deadline clamp, first-POST sentinels, and OTA ordering, cadence,
+self-disarm, and full-queue recovery.
 
 Orchestrator-level wiring is tested through the stubbed `CloudService` in
 `products/go/tests/go_orchestrator.tests.cpp`.

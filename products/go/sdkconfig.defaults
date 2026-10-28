@@ -56,6 +56,17 @@ CONFIG_SGP41_INDEX_SAMPLING_INTERVAL_10S=y
 CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=6
 CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=10
 
+# Go uses IPv4 DHCP/static addressing; no IPv6 address setup is wired.
+CONFIG_LWIP_IPV6=n
+
+# Go provisions SSID/password station connections and an open/WPA2 portal AP.
+# Keep station WPA3 support; enterprise authentication and WPA3 SoftAP are unused.
+CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT=n
+CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT=n
+
+# Cloud connections use TLS as a client; the local server uses plain HTTP.
+CONFIG_MBEDTLS_TLS_CLIENT_ONLY=y
+
 
 # Allows the BLE controller to turn off its PHY between radio events
 CONFIG_BT_LE_SLEEP_ENABLE=y

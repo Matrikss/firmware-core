@@ -226,10 +226,10 @@ via GoBoard lazy accessors:
 | 6 | Sensors | `_board.sensors()` |
 | 7 | GPS + touch | `_board.new_gps_driver()`, `_board.new_touch_sensor()` |
 | 8 | Storage | `_board.display().flush()` → `_board.storage()`; waits for the early display refresh before NAND uses SPI |
-| 9 | Event queue, BLE, Wi-Fi, Cloud | `BleService` borrows `_board.ble_server()`; `WifiService` borrows `_board.wifi_manager()`, `_board.ble_server()`, `_board.http_server()`; `CloudService` borrows `_board.ag_client()` + `WifiService` |
+| 9 | Event queue, BLE, Wi-Fi | `BleService` borrows `_board.ble_server()`; `WifiService` borrows `_board.wifi_manager()`, `_board.ble_server()`, `_board.http_server()` |
 | 10 | Producer services | SensorProducer, GpsService, InputService |
 | 11 | Power | Reuses the `PowerService` constructed before sensor initialization |
-| 12 | UIManager | Always constructed |
+| 12 | UIManager, OTA, Cloud | Construct `OtaService` before `CloudService`, which borrows `_board.ag_client()`, `WifiService`, and `OtaService` |
 | 13 | Start tasks + Orchestrator | `orchestrator->init()` + `run()` |
 
 ## Fast-Path Boot (GoApp::execute_fast_path)
@@ -317,7 +317,7 @@ Phase 2:  _board.init_core() → _board.init_fuel_gauge() → BMS retry
           → start producer tasks
 Phase 3:  _board.storage() → BleService (borrows _board.ble_server())
           → WifiService (borrows wifi_manager / ble_server / http_server)
-          → CloudService (borrows _board.ag_client() + WifiService)
+          → CloudService (borrows _board.ag_client() + WifiService + OtaService)
 Phase 4:  Orchestrator::init() → Orchestrator::run()
 ```
 

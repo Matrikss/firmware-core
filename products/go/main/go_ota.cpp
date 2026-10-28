@@ -35,6 +35,12 @@ OtaStatus OtaService::run_ble() {
   return _ble_ota.run(0);
 }
 
+OtaStatus OtaService::check_wifi_update() const {
+  const OtaRequest request{_config.serial_number, _config.firmware_version, _config.http_domain};
+  WifiHttpOtaSource source(request);
+  return source.check_available();
+}
+
 OtaStatus OtaService::run_wifi_check(const std::function<void()> &on_download_started) {
   _wifi_download_painted = false;             // re-arm the one-shot lazy paint
   _on_download_started = on_download_started; // store for the named handler

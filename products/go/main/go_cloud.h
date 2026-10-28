@@ -25,12 +25,14 @@
 
 class AgClient;
 class WifiService;
+class OtaService;
 
 class CloudService {
 public:
   struct Deps {
     AgClient &client;
     WifiService &wifi;
+    OtaService &ota;
   };
 
   struct Config {
@@ -38,6 +40,7 @@ public:
     uint32_t fetch_interval_ms = 60'000;
     bool disable_cloud = false;
     bool config_fetch_enabled = true;
+    uint32_t ota_check_interval_ms = 60 * 60 * 1000;
   };
 
   CloudService(RtosQueueHandle event_queue, const Deps &deps, const Config &cfg);
@@ -96,11 +99,13 @@ private:
   void _wake();
   void _do_post(uint32_t now_ms);
   void _do_fetch(uint32_t now_ms);
+  void _check_ota(uint32_t now_ms);
   MeasuresAGo _snapshot_copy();
 
   RtosQueueHandle _event_queue;
   AgClient &_client;
   WifiService &_wifi;
+  OtaService &_ota;
   Config _cfg;
 
   // Orchestrator-writable state (no locks needed)
@@ -118,6 +123,7 @@ private:
   uint32_t _post_due = 0;
   std::atomic<uint32_t> _fetch_due{0};
   bool _was_armed = false;
+  uint32_t _ota_due = 0;
 
   // Task lifecycle (heap-allocated only by start())
   RtosTaskHandle _task_handle = nullptr;

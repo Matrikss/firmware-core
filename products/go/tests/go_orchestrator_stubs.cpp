@@ -1257,7 +1257,7 @@ AgClientResult AgClient::http_post_measures(const MeasuresAGo & /*measures*/, in
 // ============================================================================
 
 CloudService::CloudService(RtosQueueHandle event_queue, const Deps &deps, const Config &cfg)
-    : _event_queue(event_queue), _client(deps.client), _wifi(deps.wifi), _cfg(cfg),
+    : _event_queue(event_queue), _client(deps.client), _wifi(deps.wifi), _ota(deps.ota), _cfg(cfg),
       _disable_cloud(cfg.disable_cloud), _config_fetch_enabled(cfg.config_fetch_enabled) {}
 
 CloudService::~CloudService() = default;
@@ -1326,6 +1326,8 @@ OtaStatus OtaService::run_ble() {
   ++test_spy::ota_run_ble_count;
   return test_spy::ota_run_ble_result;
 }
+
+OtaStatus OtaService::check_wifi_update() const { return OtaStatus::UpToDate; }
 
 OtaStatus OtaService::run_wifi_check(const std::function<void()> &on_download_started) {
   ++test_spy::ota_run_wifi_count;

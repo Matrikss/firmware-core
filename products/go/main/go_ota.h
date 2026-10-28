@@ -66,6 +66,10 @@ public:
   /// caller (orchestrator) task.  Returns the result.
   OtaStatus run_ble();
 
+  /// Lightweight availability probe. Called by the cloud worker; never
+  /// touches the writer, display, or watchdog. Ok means an image is offered.
+  OtaStatus check_wifi_update() const;
+
   /// Run one device-initiated WiFi availability check + download.  Blocks on
   /// the caller task.  Returns UpToDate when no update.  on_download_started is
   /// invoked exactly once, on the first Downloading tick (only when an image is

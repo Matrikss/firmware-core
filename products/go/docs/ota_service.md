@@ -3,9 +3,9 @@
 `OtaService` is the product-side glue around the `airgradient-ota` component.
 It owns the per-mode OTA wiring — **BLE push** while Portable, **WiFi pull**
 while Stationary, nothing while Offline — and the borrowed-server BLE
-registration. It never spawns a task and never reboots: the orchestrator drives
-every entry point on its own task and decides reboot-vs-resume from the returned
-`OtaStatus`. Both transports terminate at the same owned `EspOtaImageWriter`.
+registration. It never spawns a task or reboots. Cloud calls the Wi-Fi
+availability probe; the orchestrator runs transfers and decides reboot or resume
+from `OtaStatus`. Both transfers use the same owned `EspOtaImageWriter`.
 
 ## Files
 
@@ -13,7 +13,6 @@ every entry point on its own task and decides reboot-vs-resume from the returned
 |---|---|
 | `products/go/main/go_ota.h` | `OtaService` declaration |
 | `products/go/main/go_ota.cpp` | Implementation |
-| `products/go/specs/ota.md` | Feature spec (temporary) |
 
 ## Dependencies
 
@@ -36,6 +35,7 @@ every entry point on its own task and decides reboot-vs-resume from the returned
 | `handle_disconnect()` | `void` | Forward a central disconnect so an in-flight `run_ble()` aborts. Runs synchronously in the NimBLE host-task callback. |
 | `is_ble_active()` | `bool` | Start-edge probe: `true` from the moment a valid `START` latches (before `begin()`) until the terminal. |
 | `run_ble()` | `OtaStatus` | Drive a phone-initiated BLE transfer to its terminal (wraps `run(0)`). Blocks on the caller (orchestrator) task. |
+| `check_wifi_update() const` | `OtaStatus` | Zero-length Wi-Fi probe on the cloud task; `Ok` means an image is available. Does not touch flash, display, or watchdog. |
 | `run_wifi_check(on_download_started)` | `OtaStatus` | Run one device-initiated WiFi availability check + download. Blocks; returns `UpToDate` when no update. `on_download_started` fires once, on the first `Downloading` tick. |
 
 See [`go_ota.h`](../main/go_ota.h) for full signatures.
@@ -54,9 +54,11 @@ See [`go_ota.h`](../main/go_ota.h) for full signatures.
 
 There is **no dedicated OTA task**. `OtaBleService::run()` and `OtaUpdater::run()`
 are single blocking calls that the orchestrator runs on its own task. BLE OTA
-pauses sensitive services before the call. A Stationary check starts after cloud
-is disarmed, while sensing, GPS, and PM are paused only on the first
-`Downloading` tick; an already in-flight cloud request may drain concurrently.
+pauses sensitive services before the call. In Stationary, cloud runs the
+availability probe sequentially with POST/FETCH, then disarms itself and sends
+`WifiOtaAvailable` if an image is offered. The orchestrator rechecks eligibility
+before calling `run_wifi_check()`; sensing, GPS, and PM pause only on its first
+`Downloading` tick.
 Between `enter_ota()` and the transfer's terminal the orchestrator main loop
 never iterates, so mode switches and shutdown are implicitly deferred. The
 orchestrator owns the trigger, quiesce, paint, and reboot decision — see
@@ -83,12 +85,13 @@ watchdog is disabled at BMS init). `OtaService` feeds it from the component's
 `Checking` / `Downloading` / `Applying`) via the borrowed `PowerService`. Logic
 lives in the named handlers `_on_ble_progress()` / `_on_wifi_progress()`, wired
 through thin forwarders. The pre-transfer start-gap feed is the orchestrator's
-concern (`enter_ota()` for BLE; the WiFi pre-check for the periodic check).
+concern (`enter_ota()` for BLE; `on_wifi_ota_available()` for Wi-Fi).
 
 ### Lazy WiFi Commit
 
-Most hourly Stationary checks find nothing, so `run_wifi_check()` does **not**
-quiesce up front. `_on_wifi_progress()` invokes the stored `on_download_started`
+The cloud probe uses `&offset=0&length=0` and closes before the separate image
+GET. The server can decline that later GET, so `run_wifi_check()` still defers
+quiescing until download starts. `_on_wifi_progress()` invokes the stored `on_download_started`
 exactly once, on the first `OtaState::Downloading` tick (one-shot guarded by
 `_wifi_download_painted`) — i.e. only when an image is really being pulled. The
 orchestrator uses that callback to commit the full quiesce + "Updating firmware…"
@@ -97,11 +100,9 @@ stops sensing or touches the e-paper.
 
 ### Local HTTP During Stationary OTA
 
-The Stationary OTA source opens one outgoing streaming HTTP GET through
-`esp_http_client`; it does not use the borrowed inbound `HttpServer`. The hourly
-check runs only while cloud transport is enabled. During the speculative check,
-the local API keeps its current access and queued requests because no transfer
-has committed yet.
+The availability probe and subsequent streaming GET use separate outgoing
+`esp_http_client` requests, not the inbound `HttpServer`. Before download
+commits, local API access and queued requests are unchanged.
 
 On the first `Downloading` tick, the orchestrator stores the current local API
 access, changes `ReadWrite` to `ReadOnly`, and clears queued local mutations. An
@@ -120,8 +121,7 @@ clears its FIFO. Successful OTA reboots instead of restoring services.
 
 `OtaService` never reboots. On `OtaStatus::Ok` the orchestrator reboots via the
 shared `reboot()` free function. `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` is off,
-so a flashed image boots directly with no mark-valid step and no automatic revert
-(captured as an Open Question in the spec).
+so a flashed image boots directly with no mark-valid step or automatic revert.
 
 ## Edge Cases / Errors
 
@@ -144,15 +144,16 @@ as-is (timeouts, buffer sizes, BLE Data/Control limits — see
 [`airgradient-ota`](../../../components/airgradient-ota/README.md)). The product
 sets `CONFIG_BT_NIMBLE_ATT_PREFERRED_MTU = 512` and provisions the NimBLE mbuf
 pool in `sdkconfig.defaults` for the larger MTU (at MTU 512 the BLE Data
-Write-Command payload is `MTU − 3 = 509` bytes). The OTA poll cadences live in
-the orchestrator (`OTA_WIFI_CHECK_INTERVAL_MS`, `OTA_BLE_POLL_INTERVAL_MS`) — see
-[`orchestrator.md`](orchestrator.md#firmware-update-ota).
+Write-Command payload is `MTU − 3 = 509` bytes). Wi-Fi check timing lives in
+[`CloudService::Config`](cloud_service.md#config); the orchestrator retains the
+2 s BLE poll (`OTA_BLE_POLL_INTERVAL_MS`).
 
 ## Testability
 
-The host-testable surface is the **trigger, quiesce, and outcome handling in the
-orchestrator**, exercised against a stubbed `OtaService` (the same boundary at
-which `WifiService` / `BleService` are stubbed). `run_ble()` / `run_wifi_check()`
+Cloud scheduling and event delivery are tested in
+[`go_cloud.tests.cpp`](../tests/go_cloud.tests.cpp). The **trigger, quiesce, and
+outcome handling in the orchestrator** are exercised against a stubbed
+`OtaService`, at the same boundary as `WifiService` / `BleService`. `run_ble()` / `run_wifi_check()`
 are thin shells over NimBLE / ESP-IDF (compiled out under `TEST_HOST`) and are
 HIL-verified. The by-value `EspOtaImageWriter` + `OtaBleService` members
 construct from their host shells, which the orchestrator/app test targets link.
