@@ -447,7 +447,8 @@ bool CloudService::start() {
 
   _fetch_buf = static_cast<char *>(std::malloc(FETCH_BUFFER_BYTES));
   if (_fetch_buf == nullptr) {
-    AG_LOGE(TAG, "start: fetch buffer alloc failed (%zu bytes)", FETCH_BUFFER_BYTES);
+    AG_LOGE(TAG, "start: fetch buffer alloc failed (%u bytes)",
+            static_cast<unsigned>(FETCH_BUFFER_BYTES));
     return false;
   }
 
@@ -470,9 +471,10 @@ bool CloudService::start() {
     return false;
   }
 
-  AG_LOGI(TAG, "start: task spawned (stack=%lu, prio=%lu, fetch_buf=%zu)",
+  AG_LOGI(TAG, "start: task spawned (stack=%lu, prio=%lu, fetch_buf=%u)",
           static_cast<unsigned long>(CLOUD_TASK_STACK_SIZE),
-          static_cast<unsigned long>(CLOUD_TASK_PRIORITY), FETCH_BUFFER_BYTES);
+          static_cast<unsigned long>(CLOUD_TASK_PRIORITY),
+          static_cast<unsigned>(FETCH_BUFFER_BYTES));
   log_heap(TAG, "cloud.start:exit");
   return true;
 }
@@ -669,8 +671,9 @@ void CloudService::_do_fetch(uint32_t now_ms) {
   log_heap(TAG, "cloud.fetch:post-tls");
 
   const size_t logged = bytes < FETCH_BUFFER_BYTES ? bytes : FETCH_BUFFER_BYTES;
-  AG_LOGI(TAG, "fetch_config result=%d bytes=%zu body=%.*s", static_cast<int>(result), bytes,
-          static_cast<int>(logged), _fetch_buf != nullptr ? _fetch_buf : "");
+  AG_LOGI(TAG, "fetch_config result=%d bytes=%u body=%.*s", static_cast<int>(result),
+          static_cast<unsigned>(bytes), static_cast<int>(logged),
+          _fetch_buf != nullptr ? _fetch_buf : "");
 
   FetchConfigEventPayload payload{};
   if (result == AgClientResult::Ok && _fetch_buf != nullptr && bytes < FETCH_BUFFER_BYTES) {
