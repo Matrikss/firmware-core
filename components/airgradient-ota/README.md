@@ -111,6 +111,31 @@ error and always closes the source. The URL builder centralises the AirGradient
 URL conventions, mapping the Kconfig-selected device model to the path segment
 and serial format at build time.
 
+### Wi-Fi Availability Check
+
+`WifiHttpOtaSource::check_available() const` performs a separate blocking GET
+against the firmware URL with `&offset=0&length=0`. The endpoint returns an
+empty response, and the method completes the HTTP request with
+`esp_http_client_perform()` before releasing the client. It does not open an
+image writer, modify the download URL, or invoke `OtaUpdater`.
+
+| Response | Result |
+|---|---|
+| HTTP 200 | `OtaStatus::Ok`: an image is available; nothing has been installed |
+| HTTP 304 | `OtaStatus::UpToDate` |
+| HTTP 400 / 404 | `OtaStatus::Declined` |
+| Other HTTP status, including redirects | `OtaStatus::ServerError` |
+| Client initialization or request failure | `OtaStatus::TransportError` |
+| Invalid request or URL exceeding the configured buffer after appending the query | `OtaStatus::InvalidArgument` |
+
+Redirects are not followed, preserving the zero-length request semantics.
+The check uses `CONFIG_AG_OTA_HTTP_TIMEOUT_MS` and
+`CONFIG_AG_OTA_URL_BUFFER_SIZE`. Callers own scheduling and serialization with
+other network work. A successful check does not reserve an image; a later
+download still handles its own response normally. Existing `open()` and
+`OtaUpdater::run()` behavior is unchanged, including rejecting an empty HTTP
+200 response when downloading an image.
+
 ### BLE push (`OtaBleService`)
 
 BLE inverts the control flow: the phone drives and the device receives, so there
@@ -259,9 +284,9 @@ NOTIFY-only Status emission, rejection rules, the progress callback, the
 connection-interval bracketing (fast request on `begin()`, relaxed restore only
 on a non-success terminal), and the `run()` / `is_active` lifecycle) against a
 mock `AgBleServer` and the host fake writer.
-`EspOtaImageWriter` and `WifiHttpOtaSource` wrap ESP-IDF APIs behind
-`#ifndef TEST_HOST` and are verified by HIL; so are the blocking `run()` loop
-and the live silent-phone stall watchdog.
+`EspOtaImageWriter` and `WifiHttpOtaSource`, including the availability check,
+are verified by HIL rather than host tests; so are the blocking BLE `run()`
+loop and the live silent-phone stall watchdog.
 
 ## Notes
 

@@ -33,9 +33,15 @@ public:
   // Copies the bounded request fields into internal buffers and builds the URL
   // at construction; the OtaRequest (and its strings) need not outlive this
   // call. If the URL build fails (missing field / truncation / unknown model),
-  // construction stores the failure and open() reports it.
+  // construction stores the failure and open()/check_available() report it.
   explicit WifiHttpOtaSource(const OtaRequest &request);
   ~WifiHttpOtaSource() override;
+
+  // Blocking availability probe using &offset=0&length=0. Completes the HTTP
+  // request and releases its client before returning; never opens the writer.
+  // Ok means an image is available (not installed); UpToDate/Declined mean no
+  // image offered. Uses a separate client and leaves the download URL intact.
+  OtaStatus check_available() const;
 
   OtaStatus open(size_t *out_total_size) override;  // returns _init_status on failure
   int read(uint8_t *buf, size_t buf_size) override; // esp_http_client_read

@@ -707,6 +707,8 @@ catch_discover_tests(go_sensor_producer_tests)
 # ---------------------------------------------------------------------------
 
 add_library(go_cloud_test_support
+    "${AIRGRADIENT_REPO_ROOT}/components/airgradient-ota/backends/esp/esp_ota_image_writer.cpp"
+    "${AIRGRADIENT_REPO_ROOT}/components/airgradient-ota/services/ota_ble_service.cpp"
     "${AIRGRADIENT_REPO_ROOT}/products/go/main/go_cloud.cpp"
     "${AIRGRADIENT_REPO_ROOT}/components/airgradient-common/retained_uptime.cpp"
     "${AIRGRADIENT_REPO_ROOT}/components/airgradient-common/rtos.cpp"
@@ -714,6 +716,7 @@ add_library(go_cloud_test_support
 )
 
 target_include_directories(go_cloud_test_support PUBLIC
+    "${AIRGRADIENT_REPO_ROOT}/components/airgradient-ota"
     "${AIRGRADIENT_REPO_ROOT}/products/go/main"
     "${AIRGRADIENT_REPO_ROOT}/components/airgradient-common/include"
     "${AIRGRADIENT_REPO_ROOT}/components/airgradient-gpio/hal"
@@ -725,7 +728,7 @@ target_include_directories(go_cloud_test_support PUBLIC
 )
 
 target_compile_definitions(go_cloud_test_support PUBLIC TEST_HOST)
-target_link_libraries(go_cloud_test_support PUBLIC cjson)
+target_link_libraries(go_cloud_test_support PUBLIC cjson tinycbor)
 
 add_executable(go_cloud_tests
     go_cloud.tests.cpp

@@ -935,8 +935,8 @@ void GoApp::run_button_wake_path(const RtcAppState &state) {
                                   make_portable_prov_config(serial.c_str(), firmware_version));
 
   // Inert until start(); heap claimed only when Stationary + online.
-  auto *cloud_service =
-      new CloudService(event_queue, {_board.ag_client(), *wifi_service}, CloudService::Config{});
+  auto *cloud_service = new CloudService(
+      event_queue, {_board.ag_client(), *wifi_service, *ota_service}, CloudService::Config{});
   auto *serial_command_channel = new UsbSerialCommandChannel();
   auto *serial_command_service = new SerialCommandService(event_queue, *serial_command_channel);
   if (!settings.onboarding_done && !serial_command_service->start()) {
@@ -1095,9 +1095,6 @@ void GoApp::run_interactive(WakeCause cause, RtcAppState boot_state, BootHandoff
       new PortableWifiProvisioner(event_queue, {_board.wifi_manager(), _board.ble_server(), _board},
                                   make_portable_prov_config(serial.c_str(), firmware_version));
 
-  // --- CloudService (inert until start()) ---
-  auto *cloud_service =
-      new CloudService(event_queue, {_board.ag_client(), *wifi_service}, CloudService::Config{});
   auto *serial_command_channel = new UsbSerialCommandChannel();
   auto *serial_command_service = new SerialCommandService(event_queue, *serial_command_channel);
   if (!settings.onboarding_done && !serial_command_service->start()) {
@@ -1149,6 +1146,10 @@ void GoApp::run_interactive(WakeCause cause, RtcAppState boot_state, BootHandoff
                                          .firmware_version = firmware_version,
                                          .http_domain = OTA_HTTP_DOMAIN,
                                      });
+
+  // --- CloudService (inert until start()) ---
+  auto *cloud_service = new CloudService(
+      event_queue, {_board.ag_client(), *wifi_service, *ota_service}, CloudService::Config{});
 
   // Boot animation — runs after the splash refresh is scheduled so the screen
   // can update in parallel with the chime/LED.

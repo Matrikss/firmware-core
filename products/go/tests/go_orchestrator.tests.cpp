@@ -760,13 +760,13 @@ struct TestFixture {
   BleService ble_service;
   WifiService wifi_service;
   AgClient ag_client;
+  OtaService ota_service;
   CloudService cloud_service;
   GoLocalApiService local_api;
   StubSerialCommandChannel serial_command_channel;
   SerialCommandService serial_command;
   StubGoBoard stub_board;
   PortableWifiProvisioner portable_provisioner;
-  OtaService ota_service;
   AccelService accel_service;
 
   Orchestrator::Services services;
@@ -794,15 +794,15 @@ struct TestFixture {
                       *reinterpret_cast<HttpServer *>(_stub_buf),
                       *reinterpret_cast<LocalServer *>(_stub_buf)},
                      WifiService::Config{}),
-        ag_client(),
-        cloud_service(nullptr, CloudService::Deps{ag_client, wifi_service}, CloudService::Config{}),
+        ag_client(), ota_service(stub_ble_server, power_service, OtaService::Config{}),
+        cloud_service(nullptr, CloudService::Deps{ag_client, wifi_service, ota_service},
+                      CloudService::Config{}),
         local_api(event_queue, {.serial_number = "TEST00", .firmware_version = "test"}),
         serial_command(event_queue, serial_command_channel),
         portable_provisioner(nullptr,
                              {*reinterpret_cast<WifiManager *>(_stub_buf),
                               *reinterpret_cast<AgBleServer *>(_stub_buf), stub_board},
                              PortableWifiProvisioner::Config{}),
-        ota_service(stub_ble_server, power_service, OtaService::Config{}),
         accel_service(accel_sensor, test_gpio_hal, event_queue, {.pin_int = 3}),
         services{sensor_producer,   gps_service,          input_service,        display_service,
                  led_service_inert, buzzer_service_inert, storage_service,      power_service,
@@ -7637,13 +7637,13 @@ struct PmSleepFixture {
   BleService ble_service;
   WifiService wifi_service;
   AgClient ag_client;
+  OtaService ota_service;
   CloudService cloud_service;
   GoLocalApiService local_api;
   StubSerialCommandChannel serial_command_channel;
   SerialCommandService serial_command;
   StubGoBoard stub_board;
   PortableWifiProvisioner portable_provisioner;
-  OtaService ota_service;
   AccelService accel_service;
 
   MockRTOS mock_rtos;
@@ -7681,15 +7681,15 @@ struct PmSleepFixture {
                       *reinterpret_cast<HttpServer *>(_stub_buf),
                       *reinterpret_cast<LocalServer *>(_stub_buf)},
                      WifiService::Config{}),
-        ag_client(),
-        cloud_service(nullptr, CloudService::Deps{ag_client, wifi_service}, CloudService::Config{}),
+        ag_client(), ota_service(stub_ble_server, power_service, OtaService::Config{}),
+        cloud_service(nullptr, CloudService::Deps{ag_client, wifi_service, ota_service},
+                      CloudService::Config{}),
         local_api(nullptr, {.serial_number = "TEST00", .firmware_version = "test"}),
         serial_command(nullptr, serial_command_channel),
         portable_provisioner(nullptr,
                              {*reinterpret_cast<WifiManager *>(_stub_buf),
                               *reinterpret_cast<AgBleServer *>(_stub_buf), stub_board},
                              PortableWifiProvisioner::Config{}),
-        ota_service(stub_ble_server, power_service, OtaService::Config{}),
         accel_service(nullptr, test_gpio_hal, nullptr, {}),
         services{sensor_producer,   gps_service,          input_service,        display_service,
                  led_service_inert, buzzer_service_inert, storage_service,      power_service,
@@ -9766,54 +9766,62 @@ TEST_CASE("OTA: compute_queue_timeout_ms includes the BLE poll candidate when Po
   CHECK(A::compute_queue_timeout_ms(orch) <= 2000);
 }
 
-TEST_CASE("OTA: disabled cloud excludes the Stationary Wi-Fi deadline candidate",
+TEST_CASE("OTA: Stationary timer delegates Wi-Fi scheduling to cloud",
           "[Orchestrator][ota][stationary]") {
   TestFixture f;
   auto orch = f.make_orchestrator();
   A::set_mode(orch, OperatingMode::Stationary);
-  A::settings(orch).disable_cloud = true;
   test_spy::wifi_is_online = true;
   A::set_last_ota_check_ms(orch, 1U - TEST_OTA_WIFI_CHECK_INTERVAL_MS);
   ALLOW_CALL(f.mock_rtos, get_time_ms_impl()).RETURN(0);
-
   CHECK(A::compute_queue_timeout_ms(orch) > 1);
-}
-
-TEST_CASE("OTA: disabled cloud prevents an overdue Stationary Wi-Fi check",
-          "[Orchestrator][ota][stationary]") {
-  TestFixture f;
-  auto orch = f.make_orchestrator();
-  A::set_mode(orch, OperatingMode::Stationary);
-  A::settings(orch).disable_cloud = true;
-  test_spy::wifi_is_online = true;
-  A::set_last_ota_check_ms(orch, 0);
-  ALLOW_CALL(f.mock_rtos, get_time_ms_impl()).RETURN(TEST_OTA_WIFI_CHECK_INTERVAL_MS + 1);
 
   A::check_timers(orch);
-
   CHECK(test_spy::ota_run_wifi_count == 0);
-  CHECK(A::last_ota_check_ms(orch) == 0);
+
+  A::settings(orch).disable_cloud = true;
+  A::check_timers(orch);
+  A::settings(orch).disable_cloud = false;
+  A::check_timers(orch);
+  CHECK(test_spy::ota_run_wifi_count == 0);
 }
 
-TEST_CASE("OTA: cloud re-enable preserves the overdue Stationary Wi-Fi baseline",
+TEST_CASE("OTA: available event runs the blocking transfer and rearms cloud",
           "[Orchestrator][ota][stationary]") {
   TestFixture f;
-  f.settings.operating_mode = OperatingMode::Stationary;
-  f.settings.disable_cloud = true;
+  auto orch = f.make_orchestrator();
+  CP2_ALLOW_CONFIG_WRITES(f);
+  A::set_mode(orch, OperatingMode::Stationary);
+  test_spy::wifi_is_online = true;
+  SECTION("image no longer available") { test_spy::ota_run_wifi_result = OtaStatus::UpToDate; }
+  SECTION("transport failure") { test_spy::ota_run_wifi_result = OtaStatus::TransportError; }
+  SECTION("committed transfer fails") {
+    test_spy::ota_run_wifi_invoke_download_started = true;
+    test_spy::ota_run_wifi_result = OtaStatus::FlashError;
+  }
+  Event event{};
+  event.type = EventType::WifiOtaAvailable;
+  A::dispatch(orch, event);
+  CHECK(test_spy::ota_run_wifi_count == 1);
+  CHECK(test_spy::cloud_arm_count >= 1);
+  CHECK(test_spy::cloud_stop_count == 0);
+}
+
+TEST_CASE("OTA: available event rechecks eligibility", "[Orchestrator][ota][stationary]") {
+  TestFixture f;
   auto orch = f.make_orchestrator();
   A::set_mode(orch, OperatingMode::Stationary);
   test_spy::wifi_is_online = true;
-  A::set_last_ota_check_ms(orch, 0);
-  ALLOW_CALL(f.mock_rtos, get_time_ms_impl()).RETURN(TEST_OTA_WIFI_CHECK_INTERVAL_MS + 1);
-  CP2_ALLOW_CONFIG_WRITES(f);
-
-  GoSettings enabled = A::settings(orch);
-  enabled.disable_cloud = false;
-  REQUIRE(A::activate_settings_candidate(orch, enabled));
-  CHECK(A::last_ota_check_ms(orch) == 0);
-
-  A::check_timers(orch);
-  CHECK(test_spy::ota_run_wifi_count == 1);
+  Event event{};
+  event.type = EventType::WifiOtaAvailable;
+  SECTION("mode changed") { A::set_mode(orch, OperatingMode::Offline); }
+  SECTION("offline") { test_spy::wifi_is_online = false; }
+  SECTION("setup") { A::set_setup_session_active(orch, true); }
+  SECTION("cloud disabled") { A::settings(orch).disable_cloud = true; }
+  A::dispatch(orch, event);
+  CHECK(test_spy::ota_run_wifi_count == 0);
+  CHECK(test_spy::cloud_arm_count ==
+        ((A::mode(orch) == OperatingMode::Stationary && test_spy::wifi_is_online) ? 1 : 0));
 }
 
 TEST_CASE("OTA: check_timers BLE poll runs run_ble when Portable+authenticated+latched",
