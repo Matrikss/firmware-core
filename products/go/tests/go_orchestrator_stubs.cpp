@@ -486,6 +486,7 @@ void reset() {
   DisplayService::spy_flush_count = 0;
   DisplayService::spy_last_screen = Screen::Home;
   DisplayService::spy_last_update_wait = false;
+  DisplayService::spy_last_update_has_snackbar = false;
   DisplayService::spy_worker_busy = false;
 }
 

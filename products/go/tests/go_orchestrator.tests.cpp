@@ -6854,6 +6854,23 @@ TEST_CASE("Co2CalibrationDone Unsupported shows snackbar", "[Orchestrator][calib
 // 23. prepare_for_sleep
 // ============================================================================
 
+TEST_CASE("prepare_for_sleep: clears unexpired Locked snackbar", "[Orchestrator][sleep][snackbar]") {
+  TestFixture f;
+  f.settings.operating_mode = OperatingMode::Offline;
+  auto orch = f.make_orchestrator();
+
+  A::lock(orch);
+  REQUIRE(DisplayService::spy_last_update_has_snackbar);
+  REQUIRE(A::snackbar_refresh_deadline_ms(orch) != 0);
+
+  const auto updates_before = DisplayService::spy_update_count;
+  A::prepare_for_sleep(orch);
+
+  CHECK(DisplayService::spy_update_count == updates_before + 1);
+  CHECK_FALSE(DisplayService::spy_last_update_has_snackbar);
+  CHECK(A::snackbar_refresh_deadline_ms(orch) == 0);
+}
+
 TEST_CASE("prepare_for_sleep: reconciles tracking navigation before its final render",
           "[Orchestrator][sleep][tracking]") {
   TestFixture f;
