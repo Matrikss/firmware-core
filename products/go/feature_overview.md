@@ -312,7 +312,7 @@ hardware may not include every indicator supported by V1 hardware.
 ## First-Time Setup
 
 On a fresh device, the Go shows Getting Started after initialization while
-sensors warm up. Holding Enter opens Home immediately; readings show dashes
+sensors warm up. Holding Menu opens Home immediately; readings show dashes
 until the first measurement arrives.
 This flow includes a QR code labeled `Scan for guide` that points users to the
 Go usage guide. The device can be used without following the guide.
@@ -320,7 +320,7 @@ Go usage guide. The device can be used without following the guide.
 The Getting Started screen is shown until the user completes a first meaningful
 engagement, such as:
 
-- holding Enter on `Hold Enter to start`,
+- holding Menu on `Hold menu to start`,
 - successfully pairing with the phone app, or
 - changing the operating mode.
 

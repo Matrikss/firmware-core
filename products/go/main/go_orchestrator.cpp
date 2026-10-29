@@ -1482,7 +1482,7 @@ void Orchestrator::on_input(const InputEventData &input) {
     break;
   }
   case UIAction::AckOnboarding:
-    // Enter held on the first-boot guide: persist the flag and leave to Home.
+    // Menu held on the first-boot guide: persist the flag and leave to Home.
     if (mark_onboarding_done()) {
       leave_session_to_home();
     } else {
@@ -2460,7 +2460,7 @@ void Orchestrator::on_ble_auth_complete(bool success) {
       leave_session_to_home();
     } else {
       // Back to the first-boot guide (session is boot-originated); keep the
-      // session so a retry can succeed or an Enter hold can dismiss.
+      // session so a retry can succeed or a Menu hold can dismiss.
       _svc.ui_manager.show_getting_started(/*from_boot=*/true);
       update_display(/*wait=*/true);
     }

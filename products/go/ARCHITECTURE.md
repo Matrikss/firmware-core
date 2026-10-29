@@ -253,7 +253,7 @@ stateDiagram-v2
 | State | Touch Pads | Display | Sleep | Button 1 Short |
 |---|---|---|---|---|
 | Locked | Ignored | Static dashboard (periodic refresh) | Eligible | Unlock, except during cold-boot splash |
-| Unlocked | Active (Up / Down / Enter) | Interactive menus | Never | Lock |
+| Unlocked | Active (Up / Down / Menu) | Interactive menus | Never | Lock |
 
 Both states: Button 1 long press → Shutdown. Releasing after the long
 press powers off; keeping the button held re-wakes the BQ25629 through
@@ -432,7 +432,7 @@ Input mapping:
 |---|---|---|
 | Touch Pad 1 | Capacitive | Navigate Up |
 | Touch Pad 2 | Capacitive | Navigate Down |
-| Touch Pad 3 | Capacitive | Enter / Select |
+| Touch Pad 3 | Capacitive | Menu / Select |
 | Button 1 | Physical | Short: lock / unlock. Long + release: shutdown. Long + keep holding: power-cycle restart (battery-only, via `/QON`) |
 | Button Boot | Physical | Short: unused. Long: factory reset |
 
@@ -627,16 +627,16 @@ active so it is not replaced by an unlock / lock transition.
 non-blocking — sensor warmup and measurements continue, and Portable BLE is
 discoverable while it shows. The boot-gate entry reuses the setup-session machinery
 (`begin_session_if_needed()` silent-unlock so the cold-boot Locked device
-can hold Enter). Leaving the guide requires the default one-second Enter long
+can hold Menu). Leaving the guide requires the default one-second Menu long
 press; short presses and double taps leave the guide open. The QR caption reads
-`Scan for guide`, and a single bold `Hold Enter to start` instruction appears
+`Scan for guide`, and a single bold `Hold menu to start` instruction appears
 inside the highlighted action, below `Or just use it right now`. The screen
 does not display a hold duration. `onboarding_done` flips `true` via the idempotent
-`mark_onboarding_done()` on the first real engagement (the Enter hold,
+`mark_onboarding_done()` on the first real engagement (the Menu hold,
 a BLE pairing/bond, or any `change_mode()`), and the guide auto-shows
 only once. Factory reset clears the flag so refurbished units re-show it.
 
-The Enter hold works before the first measurement. Home shows dashes until
+The Menu hold works before the first measurement. Home shows dashes until
 readings arrive, and `_first_measurement_done` stays false until then, preserving
 the sleep gate. A measurement updates cached data without dismissing the guide
 or replacing a menu or pairing screen the user has opened.

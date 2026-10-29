@@ -132,7 +132,7 @@ When `GoApp` already painted `Screen::Info` with `Getting Ready` and the boot
 handoff does not contain a completed measurement, `init()` arms
 `_boot_splash_active`. After the initial power checks and service initialization,
 an un-onboarded device clears that flag and opens `GettingStarted` through a
-silently unlocked session. Sensor warmup continues independently, and Enter
+silently unlocked session. Sensor warmup continues independently, and Menu
 can open Home before readings are available; Home shows dashes until they arrive.
 `_first_measurement_done` remains false until actual sensor data is received.
 
