@@ -3484,7 +3484,9 @@ void Orchestrator::prepare_for_sleep(uint32_t sleep_duration_ms) {
 
   // Ensure pending display refresh completes before stopping worker
   _svc.ui_manager.sync_tracking_state(_tracking_state);
-  _svc.ui_manager.clear_expired_snackbar(static_cast<uint32_t>(RTOS::get_time_ms()));
+  // The e-paper retains this frame throughout sleep, when expiry cannot run.
+  _svc.ui_manager.show_snackbar(nullptr, /*persistent=*/true);
+  _snackbar_refresh_deadline_ms = 0;
   BuildContext ctx = build_context();
   DisplayValues values = _svc.ui_manager.build_values(ctx);
   _svc.display_service.update(values, true); // wait = true

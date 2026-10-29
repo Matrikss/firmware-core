@@ -872,6 +872,9 @@ void UIManager::navigate_back() {
 }
 
 void UIManager::open_main_menu() {
+  if (strcmp(_snackbar_text, "Unlocked") == 0) {
+    show_snackbar(nullptr);
+  }
   _active_metric = Metric::None; // clear selection behind the overlay
   _screen = Screen::MainMenu;
   _menu_index = 0;

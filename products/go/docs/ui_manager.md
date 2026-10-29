@@ -371,6 +371,9 @@ an unrelated UI setting therefore preserves an active custom interval.
    call, then clears when expired
 3. `build_values()` sets `v.snackbar_text` if the snackbar is active
 
+Opening Main Menu from Home clears the transient `Unlocked` snackbar before
+rendering the menu. Other snackbars retain their existing lifecycle.
+
 `show_snackbar(text, true)` creates a persistent message with no expiry.
 While it is active, ordinary `show_snackbar(text)` calls, including
 `show_snackbar(nullptr)`, are ignored rather than queued. Another persistent
