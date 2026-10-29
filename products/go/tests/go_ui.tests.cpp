@@ -1376,6 +1376,34 @@ TEST_CASE("UIManager: snackbar lifecycle", "[UIManager][snackbar]") {
     CHECK(v.snackbar_text == nullptr);
   }
 
+  SECTION("opening Main Menu dismisses Unlocked before expiry") {
+    const auto ctx = make_default_ctx();
+    ui.show_snackbar("Unlocked");
+    ui.clear_expired_snackbar(ctx.now_ms);
+    REQUIRE(ui.build_values(ctx).snackbar_text != nullptr);
+
+    press(ui, InputSource::TouchEnter);
+    REQUIRE(ui.current_screen() == Screen::MainMenu);
+    CHECK(ui.build_values(ctx).snackbar_text == nullptr);
+    press(ui, InputSource::TouchEnter); // Exit Menu before expiry.
+    REQUIRE(ui.current_screen() == Screen::Home);
+    CHECK(ui.build_values(ctx).snackbar_text == nullptr);
+  }
+
+  SECTION("opening Main Menu preserves a message that replaced Unlocked") {
+    const auto ctx = make_default_ctx();
+    ui.show_snackbar("Unlocked");
+    ui.show_snackbar("Tag saved");
+    ui.clear_expired_snackbar(ctx.now_ms);
+
+    press(ui, InputSource::TouchEnter);
+    REQUIRE(ui.current_screen() == Screen::MainMenu);
+    REQUIRE(ui.build_values(ctx).snackbar_text != nullptr);
+    CHECK(std::string(ui.build_values(ctx).snackbar_text) == "Tag saved");
+    ui.clear_expired_snackbar(ctx.now_ms + SNACKBAR_DURATION_MS);
+    CHECK(ui.build_values(ctx).snackbar_text == nullptr);
+  }
+
   SECTION("persistent progress stays on Home and menus until explicitly cleared") {
     ui.show_snackbar("Preparing...", true);
     ui.clear_expired_snackbar(1000);
