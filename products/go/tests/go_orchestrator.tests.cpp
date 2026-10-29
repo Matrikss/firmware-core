@@ -6854,7 +6854,8 @@ TEST_CASE("Co2CalibrationDone Unsupported shows snackbar", "[Orchestrator][calib
 // 23. prepare_for_sleep
 // ============================================================================
 
-TEST_CASE("prepare_for_sleep: clears unexpired Locked snackbar", "[Orchestrator][sleep][snackbar]") {
+TEST_CASE("prepare_for_sleep: clears unexpired Locked snackbar",
+          "[Orchestrator][sleep][snackbar]") {
   TestFixture f;
   f.settings.operating_mode = OperatingMode::Offline;
   auto orch = f.make_orchestrator();
