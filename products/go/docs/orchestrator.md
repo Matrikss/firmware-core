@@ -132,7 +132,7 @@ When `GoApp` already painted `Screen::Info` with `Getting Ready` and the boot
 handoff does not contain a completed measurement, `init()` arms
 `_boot_splash_active`. After the initial power checks and service initialization,
 an un-onboarded device clears that flag and opens `GettingStarted` through a
-silently unlocked session. Sensor warmup continues independently, and Enter
+silently unlocked session. Sensor warmup continues independently, and Menu
 can open Home before readings are available; Home shows dashes until they arrive.
 `_first_measurement_done` remains false until actual sensor data is received.
 
@@ -1016,8 +1016,8 @@ function. Frame preparation uses a `BuildContext` and `DisplayValues` snapshot:
 3. `UIManager::build_values(ctx)` — produce `DisplayValues`
 4. `DisplayService::update(values)` — non-blocking render submission
 5. If a non-persistent snackbar is active and no refresh timer is pending,
-   schedule a one-shot `_snackbar_refresh_deadline_ms` to guarantee the snackbar is
-   visually cleared even if no other events trigger `update_display()`
+   schedule a one-shot `_snackbar_refresh_deadline_ms` to request visual clearing
+   through the background-update path, subject to its screen suppression
 
 The `BuildContext` requires a `const Measures &` reference. The orchestrator
 maintains a `mutable Measures _display_measures` member that is populated
@@ -1105,7 +1105,8 @@ device is locked and the first measurement is complete:
 ### `prepare_for_sleep()`
 
 ```text
-1. Final display update with wait=true (waits for framebuffer ownership)
+1. Clear all snackbars and their refresh timer, then submit the final display
+   update with wait=true (waits for framebuffer ownership)
 2. save_rtc_display_snapshot(values) — persist sensor values, battery,
    status flags, rendering settings to RTC memory for next button wake
 3. Stop services: BLE, sensor producer, GPS, input, display worker

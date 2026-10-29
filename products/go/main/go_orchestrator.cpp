@@ -1482,7 +1482,7 @@ void Orchestrator::on_input(const InputEventData &input) {
     break;
   }
   case UIAction::AckOnboarding:
-    // Enter held on the first-boot guide: persist the flag and leave to Home.
+    // Menu held on the first-boot guide: persist the flag and leave to Home.
     if (mark_onboarding_done()) {
       leave_session_to_home();
     } else {
@@ -2460,7 +2460,7 @@ void Orchestrator::on_ble_auth_complete(bool success) {
       leave_session_to_home();
     } else {
       // Back to the first-boot guide (session is boot-originated); keep the
-      // session so a retry can succeed or an Enter hold can dismiss.
+      // session so a retry can succeed or a Menu hold can dismiss.
       _svc.ui_manager.show_getting_started(/*from_boot=*/true);
       update_display(/*wait=*/true);
     }
@@ -3484,7 +3484,9 @@ void Orchestrator::prepare_for_sleep(uint32_t sleep_duration_ms) {
 
   // Ensure pending display refresh completes before stopping worker
   _svc.ui_manager.sync_tracking_state(_tracking_state);
-  _svc.ui_manager.clear_expired_snackbar(static_cast<uint32_t>(RTOS::get_time_ms()));
+  // The e-paper retains this frame throughout sleep, when expiry cannot run.
+  _svc.ui_manager.show_snackbar(nullptr, /*persistent=*/true);
+  _snackbar_refresh_deadline_ms = 0;
   BuildContext ctx = build_context();
   DisplayValues values = _svc.ui_manager.build_values(ctx);
   _svc.display_service.update(values, true); // wait = true

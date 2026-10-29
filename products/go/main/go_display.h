@@ -215,7 +215,7 @@ struct DisplayValues {
   /// Borrowed; UIManager re-encodes on entry. Null/empty skips the QR area.
   const AirgradientProvisioning::QrCode *qr = nullptr;
 
-  /// First-boot guide shows a single bold Enter-hold instruction.
+  /// First-boot guide shows a single bold Menu-hold instruction.
   bool getting_started_from_boot = false;
 
   // --- Fuel-gauge learning dashboard (factory path) ---
@@ -439,6 +439,7 @@ public:
     }
     spy_worker_busy = false;
     spy_last_screen = values.screen;
+    spy_last_update_has_snackbar = values.snackbar_text != nullptr;
     return true;
   }
 
@@ -461,6 +462,7 @@ public:
   inline static Screen spy_last_screen = Screen::Home;
   inline static bool spy_last_init_deferred = false;
   inline static bool spy_last_update_wait = false;
+  inline static bool spy_last_update_has_snackbar = false;
   inline static bool spy_worker_busy = false;
   inline static void (*spy_on_init)(const DisplayValues &) = nullptr;
 };

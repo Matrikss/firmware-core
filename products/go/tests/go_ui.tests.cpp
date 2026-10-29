@@ -431,7 +431,7 @@ TEST_CASE("UIManager: Getting Started boot entry emits AckOnboarding", "[UIManag
   auto ctx = make_default_ctx();
   DisplayValues v = ui.build_values(ctx);
   REQUIRE(v.row_count == 1);
-  CHECK(std::string(v.rows[0].text) == "Hold Enter to start");
+  CHECK(std::string(v.rows[0].text) == "Hold menu to start");
   CHECK(v.getting_started_from_boot);
   REQUIRE(v.qr != nullptr);
 
@@ -441,7 +441,7 @@ TEST_CASE("UIManager: Getting Started boot entry emits AckOnboarding", "[UIManag
   CHECK(press(ui, InputSource::TouchDown).action == UIAction::None);
   CHECK(ui.current_screen() == Screen::GettingStarted);
 
-  // Enter hold returns AckOnboarding; the orchestrator owns the
+  // Menu hold returns AckOnboarding; the orchestrator owns the
   // subsequent screen transition, so the screen stays put here.
   UIActionResult result = long_press(ui);
   CHECK(result.action == UIAction::AckOnboarding);
@@ -740,7 +740,7 @@ TEST_CASE("UIManager: Tracking Status navigation and entry reset",
       press(ui, InputSource::TouchUp); // Back for next cycle.
     }
   }
-  SECTION("Back and double Enter restore Status and reset on reopening") {
+  SECTION("Back and double Menu restore Status and reset on reopening") {
     for (bool gesture : {false, true}) {
       open_row(ui, "GPS details", ctx);
       if (gesture)
@@ -755,7 +755,7 @@ TEST_CASE("UIManager: Tracking Status navigation and entry reset",
       CHECK(std::string(values.rows[2].text) == "GPS details > (1/2)");
     }
   }
-  SECTION("Exit and long Enter return Home from either view") {
+  SECTION("Exit and long Menu return Home from either view") {
     for (bool gps_view : {false, true}) {
       for (bool gesture : {false, true}) {
         if (ui.current_screen() == Screen::Home)
@@ -1374,6 +1374,34 @@ TEST_CASE("UIManager: snackbar lifecycle", "[UIManager][snackbar]") {
     auto ctx = make_default_ctx();
     DisplayValues v = ui.build_values(ctx);
     CHECK(v.snackbar_text == nullptr);
+  }
+
+  SECTION("opening Main Menu dismisses Unlocked before expiry") {
+    const auto ctx = make_default_ctx();
+    ui.show_snackbar("Unlocked");
+    ui.clear_expired_snackbar(ctx.now_ms);
+    REQUIRE(ui.build_values(ctx).snackbar_text != nullptr);
+
+    press(ui, InputSource::TouchEnter);
+    REQUIRE(ui.current_screen() == Screen::MainMenu);
+    CHECK(ui.build_values(ctx).snackbar_text == nullptr);
+    press(ui, InputSource::TouchEnter); // Exit Menu before expiry.
+    REQUIRE(ui.current_screen() == Screen::Home);
+    CHECK(ui.build_values(ctx).snackbar_text == nullptr);
+  }
+
+  SECTION("opening Main Menu preserves a message that replaced Unlocked") {
+    const auto ctx = make_default_ctx();
+    ui.show_snackbar("Unlocked");
+    ui.show_snackbar("Tag saved");
+    ui.clear_expired_snackbar(ctx.now_ms);
+
+    press(ui, InputSource::TouchEnter);
+    REQUIRE(ui.current_screen() == Screen::MainMenu);
+    REQUIRE(ui.build_values(ctx).snackbar_text != nullptr);
+    CHECK(std::string(ui.build_values(ctx).snackbar_text) == "Tag saved");
+    ui.clear_expired_snackbar(ctx.now_ms + SNACKBAR_DURATION_MS);
+    CHECK(ui.build_values(ctx).snackbar_text == nullptr);
   }
 
   SECTION("persistent progress stays on Home and menus until explicitly cleared") {
