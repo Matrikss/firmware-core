@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "rev": "e5d6b7c",
+  "rev": "81851ad",
   "product": {
     "slug": "airgradient-go",
     "name": "AirGradient Go",
@@ -48,7 +48,7 @@
     },
     {
       "id": "go.onboarding.enter-hold",
-      "title": "Only a full Enter hold completes onboarding and persists",
+      "title": "Only a full Menu hold completes onboarding and persists",
       "objective": "Verify physical touch gestures reject incomplete acknowledgement and a full hold durably completes onboarding.",
       "category": "Boot & Onboarding",
       "sub_category": "First Use",
@@ -68,7 +68,7 @@
           "expected_result": "Getting Started is visible after restart."
         },
         {
-          "action": "On Getting Started, tap Enter once, double-tap within 250 ms, then hold for about half a second and release. Let each screen refresh finish before the next gesture.",
+          "action": "On Getting Started, tap Menu once, double-tap within 250 ms, then hold for about half a second and release. Let each screen refresh finish before the next gesture.",
           "expected_result": "Getting Started remains open after each gesture; none completes onboarding."
         },
         {
@@ -76,7 +76,7 @@
           "expected_result": "Getting Started returns: the incomplete gestures did not save onboarding."
         },
         {
-          "action": "Hold Enter for at least one second, keeping it held until Home paints; then release.",
+          "action": "Hold Menu for at least one second, keeping it held until Home paints; then release.",
           "expected_result": "Home opens while held, unlocked; release causes no extra navigation. Warmup fields may still be dashes."
         },
         {
@@ -155,11 +155,11 @@
         },
         {
           "action": "Factory-reset and inspect Getting Started. Scan the QR.",
-          "expected_result": "The QR opens https://l.airgradient.net/GO. Scan for guide, Or just use it right now and one highlighted Hold Enter to start action fit without clipping; no hold duration is printed."
+          "expected_result": "The QR opens https://l.airgradient.net/GO. Scan for guide, Or just use it right now and one highlighted Hold menu to start action fit without clipping; no hold duration is printed."
         }
       ],
       "cleanup": [
-        "Hold Enter for one second to finish onboarding.",
+        "Hold Menu for one second to finish onboarding.",
         "Restore the recorded USB connection state. The factory-reset data is intentionally not restored."
       ],
       "references": [
@@ -241,8 +241,8 @@
     },
     {
       "id": "go.ui.back-gesture",
-      "title": "Double Enter goes back once",
-      "objective": "Verify double Enter goes back once.",
+      "title": "Double Menu goes back once",
+      "objective": "Verify double Menu goes back once.",
       "category": "Display & Controls",
       "sub_category": "Navigation",
       "applicability": [
@@ -259,7 +259,7 @@
           "expected_result": "Portable is selected."
         },
         {
-          "action": "Set Auto Lock Off. Open Settings > Operations > Buzzer and double-tap Enter within 250 ms.",
+          "action": "Set Auto Lock Off. Open Settings > Operations > Buzzer and double-tap Menu within 250 ms.",
           "expected_result": "Operations returns with Buzzer selected; no second Back or setting application occurs."
         }
       ],
@@ -275,8 +275,8 @@
     },
     {
       "id": "go.ui.home-gesture",
-      "title": "Holding Enter exits a nested menu once",
-      "objective": "Verify holding Enter exits a nested menu once.",
+      "title": "Holding Menu exits a nested menu once",
+      "objective": "Verify holding Menu exits a nested menu once.",
       "category": "Display & Controls",
       "sub_category": "Navigation",
       "applicability": [
@@ -293,7 +293,7 @@
           "expected_result": "Portable is selected."
         },
         {
-          "action": "Set Auto Lock Off. Open Settings > Operations > Buzzer. Hold Enter at least one second and keep holding until Home paints, then release.",
+          "action": "Set Auto Lock Off. Open Settings > Operations > Buzzer. Hold Menu at least one second and keep holding until Home paints, then release.",
           "expected_result": "Home appears while held; release does not reopen a menu."
         }
       ],
@@ -327,7 +327,7 @@
           "expected_result": "Portable is selected."
         },
         {
-          "action": "Record Buzzer. Open Operations > Buzzer and move selection to its opposite without applying it; double Enter to go Back, then reopen.",
+          "action": "Record Buzzer. Open Operations > Buzzer and move selection to its opposite without applying it; double Menu to go Back, then reopen.",
           "expected_result": "The original Buzzer value remains active and selected; Back returns to the Buzzer parent row."
         }
       ],
@@ -615,8 +615,8 @@
           "expected_result": "The QR targets https://l.airgradient.net/GO and the sole action is Back."
         },
         {
-          "action": "Touch Up and Down, then Enter.",
-          "expected_result": "Up/Down do not navigate the guide; Enter returns to Settings on Setup Guide."
+          "action": "Touch Up and Down, then Menu.",
+          "expected_result": "Up/Down do not navigate the guide; Menu returns to Settings on Setup Guide."
         },
         {
           "action": "Disconnect USB, hold Power until Powered off is painted, release Power, wait 10 seconds, then press Power to start.",
@@ -2353,7 +2353,7 @@
       ],
       "cleanup": [
         "If interrupted, short-press Power to abort learning and return to normal operation. The dedicated unit’s user state may be reset.",
-        "If Getting Started is displayed after aborting, complete onboarding with a one-second Enter hold.",
+        "If Getting Started is displayed after aborting, complete onboarding with a one-second Menu hold.",
         "Return to Home and restore the recorded USB connection and lock state, including after interruption."
       ],
       "references": [
@@ -2911,7 +2911,7 @@
         }
       ],
       "cleanup": [
-        "Complete onboarding with a one-second Enter hold and close BLE tools.",
+        "Complete onboarding with a one-second Menu hold and close BLE tools.",
         "Restore the recorded USB connection state. The factory-reset data is intentionally not restored."
       ],
       "references": [
@@ -4001,7 +4001,7 @@
           "expected_result": "The original computer network is recorded for cleanup."
         },
         {
-          "action": "Factory-reset with a BOOT hold of at least two seconds, complete onboarding with a one-second Enter hold, then select Main Menu > Operating Mode > Stationary. On app setup choose Switch to Wi-Fi and confirm Yes. Join the airgradient- network whose exact name is shown on Go, using password cleanair and open http://192.168.4.1/.",
+          "action": "Factory-reset with a BOOT hold of at least two seconds, complete onboarding with a one-second Menu hold, then select Main Menu > Operating Mode > Stationary. On app setup choose Switch to Wi-Fi and confirm Yes. Join the airgradient- network whose exact name is shown on Go, using password cleanair and open http://192.168.4.1/.",
           "expected_result": "The Go displays portal setup and the browser shows the credential form."
         },
         {
@@ -4051,7 +4051,7 @@
           "expected_result": "The original computer network is recorded for cleanup."
         },
         {
-          "action": "Factory-reset with a BOOT hold of at least two seconds, complete onboarding with a one-second Enter hold, then select Main Menu > Operating Mode > Stationary. On app setup choose Switch to Wi-Fi and confirm Yes. Join the airgradient- network whose exact name is shown on Go, using password cleanair and open http://192.168.4.1/.",
+          "action": "Factory-reset with a BOOT hold of at least two seconds, complete onboarding with a one-second Menu hold, then select Main Menu > Operating Mode > Stationary. On app setup choose Switch to Wi-Fi and confirm Yes. Join the airgradient- network whose exact name is shown on Go, using password cleanair and open http://192.168.4.1/.",
           "expected_result": "The Go displays portal setup and the browser shows the credential form."
         },
         {
@@ -4094,7 +4094,7 @@
           "expected_result": "The original computer network is recorded for cleanup."
         },
         {
-          "action": "Factory-reset with a BOOT hold of at least two seconds, complete onboarding with a one-second Enter hold, then select Main Menu > Operating Mode > Stationary. On app setup choose Switch to Wi-Fi and confirm Yes. Join the airgradient- network whose exact name is shown on Go, using password cleanair and open http://192.168.4.1/.",
+          "action": "Factory-reset with a BOOT hold of at least two seconds, complete onboarding with a one-second Menu hold, then select Main Menu > Operating Mode > Stationary. On app setup choose Switch to Wi-Fi and confirm Yes. Join the airgradient- network whose exact name is shown on Go, using password cleanair and open http://192.168.4.1/.",
           "expected_result": "The Go displays portal setup and the browser shows the credential form."
         },
         {
@@ -4134,7 +4134,7 @@
           "expected_result": "The original computer network is recorded for cleanup."
         },
         {
-          "action": "Factory-reset with a BOOT hold of at least two seconds, complete onboarding with a one-second Enter hold, then select Main Menu > Operating Mode > Stationary. On app setup choose Switch to Wi-Fi and confirm Yes. Join the airgradient- network whose exact name is shown on Go, using password cleanair and open http://192.168.4.1/.",
+          "action": "Factory-reset with a BOOT hold of at least two seconds, complete onboarding with a one-second Menu hold, then select Main Menu > Operating Mode > Stationary. On app setup choose Switch to Wi-Fi and confirm Yes. Join the airgradient- network whose exact name is shown on Go, using password cleanair and open http://192.168.4.1/.",
           "expected_result": "The Go displays portal setup and the browser shows the credential form."
         },
         {
@@ -4356,7 +4356,7 @@
           "expected_result": "The access point baseline is available for cleanup."
         },
         {
-          "action": "Factory-reset with a BOOT hold of at least two seconds, complete onboarding with a one-second Enter hold, then select Main Menu > Operating Mode > Stationary. On app setup choose Switch to Wi-Fi and confirm Yes. Join the airgradient- network whose exact name is shown on Go, using password cleanair and open http://192.168.4.1/.",
+          "action": "Factory-reset with a BOOT hold of at least two seconds, complete onboarding with a one-second Menu hold, then select Main Menu > Operating Mode > Stationary. On app setup choose Switch to Wi-Fi and confirm Yes. Join the airgradient- network whose exact name is shown on Go, using password cleanair and open http://192.168.4.1/.",
           "expected_result": "The Go displays portal setup and the browser shows the credential form."
         },
         {
@@ -4397,7 +4397,7 @@
       ],
       "steps": [
         {
-          "action": "Keep factory Wi-Fi available. Factory-reset, finish onboarding by holding Enter, then select Stationary.",
+          "action": "Keep factory Wi-Fi available. Factory-reset, finish onboarding by holding Menu, then select Stationary.",
           "expected_result": "With no saved networks, normal app setup opens directly; Trying default Wi-Fi... never appears."
         },
         {
@@ -6393,7 +6393,7 @@
           "expected_result": "Both are recorded for cleanup."
         },
         {
-          "action": "Hold BOOT for at least two seconds. After restart, complete Getting Started with a one-second Enter hold. Record the factory Temperature Unit and Portable measurement interval through Settings. Select Energy Saving and record its measurement interval, then return to Portable.",
+          "action": "Hold BOOT for at least two seconds. After restart, complete Getting Started with a one-second Menu hold. Record the factory Temperature Unit and Portable measurement interval through Settings. Select Energy Saving and record its measurement interval, then return to Portable.",
           "expected_result": "The dedicated unit is onboarded. The factory Temperature Unit and both intervals are recorded; Energy Saving defaults to 5m."
         },
         {

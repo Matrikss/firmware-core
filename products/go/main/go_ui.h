@@ -40,7 +40,7 @@ enum class UIAction : uint8_t {
   PlayMelody,                         ///< Accompanied by UIActionResult::melody.
   ConfirmSwitchProvisioningTransport, ///< User confirmed Yes on switch-transport overlay.
   ConfirmCancelProvisioning,          ///< User confirmed Yes on cancel-setup overlay.
-  AckOnboarding,                      ///< Enter held on first-boot Getting Started.
+  AckOnboarding,                      ///< Menu held on first-boot Getting Started.
   ArmFgLearning,      ///< Confirmed: write factory state and reboot into FG learning.
   RunPeripheralTest,  ///< Start the guided actuator + AQ peripheral test flow.
   PeripheralStepPass, ///< Operator confirmed the current actuator step.
@@ -271,7 +271,7 @@ public:
   void set_provisioning_ui_state(ProvisioningUiState s);
 
   /// Enter the Getting Started guide. Encodes the setup QR; from_boot
-  /// selects Enter hold -> AckOnboarding vs tap "Back" -> Settings.
+  /// selects Menu hold -> AckOnboarding vs tap "Back" -> Settings.
   void show_getting_started(bool from_boot);
 
   /// Push the current peripheral-test view snapshot for Screen::PeripheralTest.
@@ -417,7 +417,7 @@ private:
   /// Re-encoded on screen entry / transport switch.
   AirgradientProvisioning::QrCode _qr = {};
 
-  // true = boot gate (Enter hold -> Home); false = Settings -> Setup Guide (Back).
+  // true = boot gate (Menu hold -> Home); false = Settings -> Setup Guide (Back).
   bool _getting_started_from_boot = false;
 
   // Info screen text (UIManager owns the storage; the renderer borrows

@@ -58,7 +58,7 @@ See [`go_settings.h`](../main/go_settings.h) for full signatures.
 | `static_ip.dns_secondary` | `"sd2"` | `uint32_t` (stored as `int`) | `0` | — | Loaded only when `static_ip.ip != 0`. |
 | `back_led_brightness` | `"blb"` | `int` (stored) / `LedBrightness` (in struct) | `Off` (0) | 0 .. 3 | Back AQI LED brightness: Off / Dim / Mid / Bright |
 | `touch_led_intensity` | `"tlb"` | `int` (stored) / `TouchLedIntensity` (in struct) | `Off` (0) | 0 .. 2 | Touch feedback LED intensity: Off / Dim / Bright |
-| `onboarding_done` | `"obd"` | `bool` | `false` | — | First-boot guide latch. `false` shows the one-time Getting Started screen after the boot splash; flips `true` on first real engagement (Enter hold on the guide, BLE pair/bond, or any operating-mode change). Cleared by factory reset. |
+| `onboarding_done` | `"obd"` | `bool` | `false` | — | First-boot guide latch. `false` shows the one-time Getting Started screen after the boot splash; flips `true` on first real engagement (Menu hold on the guide, BLE pair/bond, or any operating-mode change). Cleared by factory reset. |
 
 ### Measurement Interval Presentation
 
@@ -231,7 +231,7 @@ orchestrator initialization finishes, while sensors warm up. The orchestrator
 flips it to `true` through the idempotent `mark_onboarding_done()` helper on
 the first real engagement:
 
-- an Enter hold on `Screen::GettingStarted` (boot-gate entry),
+- a Menu hold on `Screen::GettingStarted` (boot-gate entry),
 - a successful (encrypted) BLE pairing/bond (`on_ble_auth_complete(true)`);
   a failed pair leaves the flag untouched, or
 - any operating-mode change (`change_mode()`).
