@@ -1113,7 +1113,7 @@ TEST_CASE("init(PowerOn): Getting Started is usable before the first measurement
   REQUIRE_FALSE(A::first_measurement_done(orch));
   REQUIRE_FALSE(A::boot_splash_active(orch));
   // Gate diverts to the one-time guide; the boot-gate session silent-unlocks
-  // so Enter can be held on the cold-boot Locked device.
+  // so Menu can be held on the cold-boot Locked device.
   REQUIRE(f.ui_manager.current_screen() == Screen::GettingStarted);
   REQUIRE(A::setup_session_active(orch));
   REQUIRE(A::lock_state(orch) == LockState::Unlocked);
@@ -2146,8 +2146,8 @@ TEST_CASE("Tracking Status refresh: exits cancel and reentry starts a fresh dead
   bool shutdown = false;
   SECTION("Back") { A::on_input(orch, {InputSource::TouchEnter, InputType::ShortPress}); }
   SECTION("Exit") { open_ui_row(f, orch, "Exit"); }
-  SECTION("Double Enter") { A::on_input(orch, {InputSource::TouchEnter, InputType::DoublePress}); }
-  SECTION("Long Enter") { A::on_input(orch, {InputSource::TouchEnter, InputType::LongPress}); }
+  SECTION("Double Menu") { A::on_input(orch, {InputSource::TouchEnter, InputType::DoublePress}); }
+  SECTION("Long Menu") { A::on_input(orch, {InputSource::TouchEnter, InputType::LongPress}); }
   SECTION("Manual Lock") { A::on_input(orch, {InputSource::ButtonPower, InputType::ShortPress}); }
   SECTION("Remote Stop") {
     test_spy::ble_pending_config_len = 1;
@@ -2495,7 +2495,7 @@ TEST_CASE("Tracking Status: leaving for Home reliably paints with a busy worker"
     A::on_input(orch, {InputSource::ButtonPower, InputType::ShortPress});
     CHECK(A::lock_state(orch) == LockState::Locked);
   }
-  SECTION("long Enter returns Home") {
+  SECTION("long Menu returns Home") {
     A::on_input(orch, {InputSource::TouchEnter, InputType::LongPress});
     CHECK(A::lock_state(orch) == LockState::Unlocked);
   }
@@ -2610,8 +2610,8 @@ TEST_CASE("Tracking Status: every ordinary exit starts one fresh inactivity wind
     A::on_input(orch, {InputSource::TouchEnter, InputType::ShortPress});
     destination = Screen::Home;
   }
-  SECTION("Double Enter") { A::on_input(orch, {InputSource::TouchEnter, InputType::DoublePress}); }
-  SECTION("Long Enter") {
+  SECTION("Double Menu") { A::on_input(orch, {InputSource::TouchEnter, InputType::DoublePress}); }
+  SECTION("Long Menu") {
     A::on_input(orch, {InputSource::TouchEnter, InputType::LongPress});
     destination = Screen::Home;
   }
@@ -6098,7 +6098,7 @@ TEST_CASE("dispatch: BleAuthComplete failure in setup session returns to boot gu
   // Boot variant: action row names the hold gesture (not "Back").
   DisplayValues v = f.ui_manager.build_values(A::build_context(orch));
   REQUIRE(v.row_count == 1);
-  CHECK(std::string(v.rows[0].text) == "Hold Enter to start");
+  CHECK(std::string(v.rows[0].text) == "Hold menu to start");
 }
 
 TEST_CASE("dispatch: BleAuthComplete is no-op when not on passkey screen", "[Orchestrator][ble]") {
