@@ -234,7 +234,7 @@ void SerialCommandService::_handle_line(const char *line, size_t line_size) {
       _write_error("INVALID_ARGUMENT");
       return;
     }
-    _submit_request({SerialCommandKind::GetSerial});
+    _submit_request({SerialCommandKind::GetSerial, {}});
     return;
   }
 
@@ -243,7 +243,7 @@ void SerialCommandService::_handle_line(const char *line, size_t line_size) {
       _write_error("INVALID_ARGUMENT");
       return;
     }
-    _submit_request({SerialCommandKind::FactoryReset});
+    _submit_request({SerialCommandKind::FactoryReset, {}});
     return;
   }
 
@@ -253,11 +253,11 @@ void SerialCommandService::_handle_line(const char *line, size_t line_size) {
       return;
     }
     if (token_equals(tokens[1], "PM")) {
-      _submit_request({SerialCommandKind::GetPmSlr});
+      _submit_request({SerialCommandKind::GetPmSlr, {}});
     } else if (token_equals(tokens[1], "TEMP")) {
-      _submit_request({SerialCommandKind::GetTemperatureSlr});
+      _submit_request({SerialCommandKind::GetTemperatureSlr, {}});
     } else if (token_equals(tokens[1], "HUM")) {
-      _submit_request({SerialCommandKind::GetHumiditySlr});
+      _submit_request({SerialCommandKind::GetHumiditySlr, {}});
     } else {
       _write_error("INVALID_ARGUMENT");
     }

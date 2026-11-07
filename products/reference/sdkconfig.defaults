@@ -32,7 +32,6 @@ CONFIG_BT_NIMBLE_SM_SC=y
 
 # Reference firmware advertises mDNS but does not use service browsing,
 # the interactive mdns console CLI, or multiple mDNS instances.
-CONFIG_MDNS_ENABLE_BROWSE=n
 CONFIG_MDNS_ENABLE_CONSOLE_CLI=n
 CONFIG_MDNS_MULTIPLE_INSTANCE=n
 

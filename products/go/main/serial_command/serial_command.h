@@ -32,7 +32,7 @@ enum class SerialCommandKind : uint8_t {
 struct SerialCommandRequest {
   SerialCommandKind kind = SerialCommandKind::GetSerial;
   union {
-    Pm25Correction pm25_correction;
+    Pm25Correction pm25_correction = Pm25Correction{};
     LinearCorrection linear_correction;
   };
 };

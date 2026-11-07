@@ -150,7 +150,9 @@ bool NimbleBleGattService::start() {
     return false;
   }
 
-  return _service->start();
+  // NimBLE starts services automatically when the server starts, so calling
+  // NimBLEService::start() here is no longer needed (and is deprecated).
+  return true;
 }
 
 // NimbleBleServer

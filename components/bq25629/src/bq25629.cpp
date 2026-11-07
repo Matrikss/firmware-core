@@ -245,10 +245,15 @@ esp_err_t BQ25629::init(const BQ25629_Config &config) {
   }
 
   // Configure minimum system voltage
-  uint16_t vsysmin_value = (config.min_system_voltage_mv - 2560) / 80;
-  vsysmin_value = vsysmin_value > 0x10 ? 0x10 : vsysmin_value;
-  vsysmin_value = vsysmin_value < 0x00 ? 0x00 : vsysmin_value;
-  ret = write_register_16(BQ25629_REG::MIN_SYSTEM_VOLTAGE, vsysmin_value << 6);
+  int vsysmin_value = (static_cast<int>(config.min_system_voltage_mv) - 2560) / 80;
+  if (vsysmin_value > 0x10) {
+    vsysmin_value = 0x10;
+  }
+  if (vsysmin_value < 0) {
+    vsysmin_value = 0;
+  }
+  uint16_t vsysmin_clamped = static_cast<uint16_t>(vsysmin_value);
+  ret = write_register_16(BQ25629_REG::MIN_SYSTEM_VOLTAGE, vsysmin_clamped << 6);
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "Failed to set minimum system voltage");
     return ret;

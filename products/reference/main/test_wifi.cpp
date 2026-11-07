@@ -200,17 +200,19 @@ volatile bool _scan_done = false;
 volatile uint32_t _expected_static_ip = 0;
 #endif
 
+#ifdef TEST_WIFI_STATIC_IP
 // Parse a dotted-decimal IPv4 string into a uint32_t in network byte order
 // (matches WifiStaticIpConfig field layout and esp_netif_ip_info_t).
-uint32_t _parse_ip4(const char *str) {
+[[maybe_unused]] uint32_t _parse_ip4(const char *str) {
   esp_ip4_addr_t addr = {};
   esp_netif_str_to_ip4(str, &addr);
   return addr.addr;
 }
+#endif
 
 #ifndef TEST_WIFI_RUN_AP
 
-bool _wait_for_scan_complete(uint32_t timeout_ms) {
+[[maybe_unused]] bool _wait_for_scan_complete(uint32_t timeout_ms) {
   const uint64_t deadline = RTOS::get_time_ms() + timeout_ms;
   while (RTOS::get_time_ms() < deadline) {
     if (_scan_done) {
@@ -221,7 +223,8 @@ bool _wait_for_scan_complete(uint32_t timeout_ms) {
   return false;
 }
 
-WifiApConfig _build_ap_config() {
+#ifdef TEST_WIFI_MODE_SWITCH
+[[maybe_unused]] WifiApConfig _build_ap_config() {
   WifiApConfig ap = {};
   std::strncpy(ap.ssid, TEST_WIFI_AP_SSID, sizeof(ap.ssid) - 1);
   std::strncpy(ap.password, TEST_WIFI_AP_PASSWORD, sizeof(ap.password) - 1);
@@ -229,6 +232,7 @@ WifiApConfig _build_ap_config() {
   ap.max_connections = 4;
   return ap;
 }
+#endif
 
 #ifdef TEST_WIFI_MODE_SWITCH
 void _log_step(const char *name, const WifiManager &mgr) {
@@ -300,7 +304,8 @@ void _run_multi_ssid_test(WifiManager &mgr) {
 }
 #endif // TEST_WIFI_MULTI_SSID
 
-void _run_sta_test(WifiManager &mgr) {
+#ifndef TEST_WIFI_MULTI_SSID
+[[maybe_unused]] void _run_sta_test(WifiManager &mgr) {
   static constexpr const char *kSsid = TEST_WIFI_SSID;
   static constexpr const char *kPassword = TEST_WIFI_PASSWORD;
 
@@ -436,7 +441,7 @@ void _run_sta_test(WifiManager &mgr) {
 
 #else // TEST_WIFI_RUN_AP
 
-void _run_ap_test(WifiManager &mgr) {
+[[maybe_unused]] void _run_ap_test(WifiManager &mgr) {
   static constexpr const char *kSsid = TEST_WIFI_AP_SSID;
   static constexpr const char *kPassword = TEST_WIFI_AP_PASSWORD;
 
@@ -462,6 +467,7 @@ void _run_ap_test(WifiManager &mgr) {
     _log_snapshot(mgr.status_snapshot());
   }
 }
+#endif // !TEST_WIFI_MULTI_SSID
 
 #endif // TEST_WIFI_RUN_AP
 
