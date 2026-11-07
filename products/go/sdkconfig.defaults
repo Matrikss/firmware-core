@@ -67,6 +67,16 @@ CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT=n
 # Cloud connections use TLS as a client; the local server uses plain HTTP.
 CONFIG_MBEDTLS_TLS_CLIENT_ONLY=y
 
+# mDNS is used to advertise the local device/service endpoint only.  The
+# browser API (service discovery), interactive console CLI, and multiple
+# service instances are not used by the firmware.
+CONFIG_MDNS_ENABLE_BROWSE=n
+CONFIG_MDNS_ENABLE_CONSOLE_CLI=n
+CONFIG_MDNS_MULTIPLE_INSTANCE=n
+
+# No ICMP/ping functionality is emitted or consumed by the firmware; all
+# network traffic is HTTP, HTTPS, TLS, DHCP and mDNS.
+CONFIG_LWIP_ICMP=n
 
 # Allows the BLE controller to turn off its PHY between radio events
 CONFIG_BT_LE_SLEEP_ENABLE=y
