@@ -14,24 +14,16 @@ NOx, temperature, humidity), logs routes with GPS coordinates, and streams
 data over BLE. In Stationary mode it also posts raw measurements to the cloud
 and serves corrected snapshots and selected controls over the local network.
 
-A single firmware binary supports both the **Prototype** board and the
-**v1** board. The board variant is detected at runtime by probing the
-BQ27427 fuel gauge at I2C address `0x55` during `init_buses()`. All
-variant-conditional behavior is gated on `board.variant()`. See
-[Hardware Variants](#hardware-variants) for details.
+The firmware supports the **V1** board.
 
-## Hardware Variants
+## Hardware Configuration
 
-| Variant | Detection | PM Enable Polarity | Fuel Gauge | I2C Differences |
-|---|---|---|---|---|
-| **Prototype** | BQ27427 NACK at `0x55` (or fail-safe default) | Active-high (level 1) | None — SOC from BQ25629 voltage-curve | Baseline |
-| **V1** | BQ27427 ACK at `0x55` | Active-low (level 0) | BQ27427 Impedance Track — SOC, capacity, temp | BQ27427 at `0x55` |
-
-Detection runs once at boot inside `GoHardwareBoard::init_buses()`. The
-result is cached in `_variant` and exposed via `GoBoard::variant()`. A
-probe failure (NACK or transport error) falls back to `Prototype` — the
-shipping default. See [Hardware Init](docs/hardware_init.md) for the full
-`init_buses()` sequence.
+GPIO26 (EN_PM) provides active-low SPS30 I2C bus isolation. The BQ27427 fuel
+gauge at I2C address `0x55` provides SOC, capacity, and temperature telemetry.
+Peripheral availability does not change the board configuration or GPIO
+polarity. When gauge data is unavailable, battery estimation falls back to
+the BQ25629. See [Hardware Init](docs/hardware_init.md) for initialization
+ordering and failure handling.
 
 ## Modes and Behaviors
 
@@ -100,8 +92,8 @@ flowchart TD
 |---|---|---|---|
 | **main.cpp** | `main.cpp` | Construct `GoHardwareBoard`, construct `GoApp`, call `run()` | No (hardware entry point) |
 | **GoApp** | `go_app.h/cpp` | Boot path selection, fast-path logic, service construction, orchestrator launch, pure data transforms | **Yes** (via MockBoard + link-time stubs) |
-| **GoBoard** | `go_board.h` | Abstract interface for hardware object creation, platform operations, `variant()` accessor, inline `evaluate_fg_state` helper | N/A (interface) |
-| **GoHardwareBoard** | `go_hardware_board.h/cpp` | All ESP-IDF init calls, driver creation, bus management, ISR setup, variant detection, FG bring-up | No (hardware-specific) |
+| **GoBoard** | `go_board.h` | Abstract interface for hardware object creation, platform operations, inline `evaluate_fg_state` helper | N/A (interface) |
+| **GoHardwareBoard** | `go_hardware_board.h/cpp` | All ESP-IDF init calls, driver creation, bus management, ISR setup, FG bring-up | No (hardware-specific) |
 
 ### Runtime Layout
 
@@ -336,7 +328,7 @@ orchestrator-level state changes.
 | Display Worker | Drives e-paper refresh | Yes | -- | Receives render commands from orchestrator |
 
 BMS is polled directly by the orchestrator on a 30-second timer (I2C read,
-fast and non-blocking). No dedicated task. On V1 boards, `poll_bms()` also
+fast and non-blocking). No dedicated task. `poll_bms()` also
 reads FG telemetry from the BQ27427.
 
 OTA likewise has **no dedicated task**: the blocking `OtaBleService::run()` /
@@ -475,7 +467,7 @@ priority; see [wake initialization](docs/measurement_corrections.md#button-wake-
 | Sensor health and recovery | Raw | User correction cannot change hardware diagnostics |
 | Current display | Corrected | Fahrenheit conversion, when selected, happens afterward |
 | Display charts | Corrected | Raw cached samples use the correction active at render time |
-| PM AQI LED | Corrected PM2.5 | AQI conversion happens after PM correction |
+| Back LED indicator | Corrected PM2.5 or unchanged CO2 | Selected by `back_led_indicator`; see [LED Service](docs/led_service.md#selected-indicator) |
 | Local Server measures GET | Corrected | The synchronized API snapshot exposes the common corrected fields |
 | RTC display snapshot | Corrected display state | It never seeds raw cloud or storage state |
 
@@ -484,7 +476,7 @@ receive raw values, while the display receives a copy with PM2.5 correction
 and raw temperature and humidity. See
 [`docs/measurement_corrections.md`](docs/measurement_corrections.md).
 
-Manual refresh results update the current readings, BLE, local API, AQI LEDs,
+Manual refresh results update the current readings, BLE, local API, back LED indicator,
 and cloud snapshot. Only scheduled results enter the RTC chart cache and route
 files. A regular measurement already requested when a shake is accepted serves
 the refresh and retains its scheduled origin. Manual refresh does not reset
@@ -586,9 +578,8 @@ init_core() → init_fuel_gauge() → retry init_bms() → power() → sensors()
 ```
 
 After the BMS attempt, `release_gpio_holds()` and `set_pm_power(true)` drive the
-EN_PM GPIO to the variant-appropriate level (Prototype: SPS30 VDD load switch;
-V1: SPS30 I2C bus isolation). A successful `init_bms()` arms PMID (`EN_OTG`)
-once, and the chip handles buck↔boost transitions autonomously thereafter.
+EN_PM GPIO LOW to connect the SPS30 I2C bus. A successful `init_bms()` arms
+PMID (`EN_OTG`) once, and the chip handles buck↔boost transitions autonomously thereafter.
 Interactive, button-wake, factory-learning, and promoted fast-path boots
 restart after both BMS attempts fail. A fast path that is returning directly to
 sleep continues without the charger; `PowerService` remains usable with the
@@ -759,7 +750,7 @@ Two tiers of storage:
 - **Session-armed PMID:** `BQ25629Bms::init()` arms `EN_OTG=1` once
   during BMS bring-up and the chip handles VBUS pass-through ↔ boost
   transitions autonomously. `set_pm_power()` drives only the EN_PM GPIO
-  (load switch on Prototype; I2C bus isolation on V1) and never touches
+  for SPS30 I2C bus isolation and never touches
   `EN_OTG`; this avoids the per-measurement boost cold-start inrush that
   can exceed 1S cell-protection OCP. Between measurements the SPS30 is
   power-managed via its native Sleep command. See
@@ -770,7 +761,7 @@ Two tiers of storage:
   charging without shutdown. Discharge is permitted from -10 °C through 60 °C;
   crossing either limit requests the corresponding cold- or hot-temperature
   ship-mode shutdown
-- **Fuel gauge (V1 only):** `PowerService::set_fuel_gauge()` attaches an
+- **Fuel gauge:** `PowerService::set_fuel_gauge()` attaches an
   already-initialised `FuelGaugeDevice` for runtime SOC reads. `poll_bms()`
   prefers FG-derived SOC and tags the log line with `src=FG|BMS`
 - Sleep cycle management (deep sleep entry, wake source config)
@@ -780,7 +771,7 @@ Two tiers of storage:
   before sleep
 - `PowerSnapshot` aggregates battery voltage, percentage (with source
   marker), charging state, critical flag, charger status, telemetry, and
-  FG telemetry fields (V1 only)
+  FG telemetry fields
 
 ### Settings
 
@@ -800,6 +791,7 @@ Settings fields:
 - Operating mode (Portable / Stationary / Offline; default: Portable)
 - Auto-lock timeout (0 = disabled, 10 s / 30 s / 60 s)
 - GPS interval
+- Back LED indicator (AQI / CO2, default AQI) and independent brightness
 
 ### Display Service (E-Paper)
 

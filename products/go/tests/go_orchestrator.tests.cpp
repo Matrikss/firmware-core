@@ -100,6 +100,9 @@ extern uint32_t led_back_play_count;
 extern BackStep led_last_back_steps[LedService::MAX_SEQUENCE_STEPS];
 extern uint8_t led_last_back_step_count;
 extern uint32_t led_back_update_aqi_count;
+extern uint32_t led_back_update_co2_count;
+extern int led_last_co2_ppm;
+extern uint32_t led_back_off_count;
 extern float led_last_aqi_pm25;
 extern uint32_t led_back_clear_aqi_count;
 extern uint32_t led_touch_set_all_count;
@@ -476,8 +479,6 @@ public:
     ++new_accel_sensor_calls;
     return accel_to_return;
   }
-  BoardVariant variant_value = BoardVariant::Prototype;
-  BoardVariant variant() const override { return variant_value; }
   std::string serial_number() override { return "TEST00"; }
   const char *firmware_version() override { return "test"; }
   const gpio::Hal &gpio_hal() override { return *reinterpret_cast<gpio::Hal *>(_buf); }
@@ -522,15 +523,17 @@ public:
 static StubAgBleServer stub_ble_server;
 
 // GPIO HAL stub (function-pointer table — never called by stubs)
-static bool gpio_configure(int, gpio::Mode, gpio::PullMode, gpio::InterruptType) { return true; }
-static int gpio_get_level(int) { return 0; }
-static bool gpio_set_level(int, int) { return true; }
-static bool gpio_add_interrupt_handler(int, gpio::InterruptHandler, void *) { return true; }
-static bool gpio_remove_interrupt_handler(int) { return true; }
-static bool gpio_enable_interrupt(int) { return true; }
-static bool gpio_disable_interrupt(int) { return true; }
+static bool gpio_configure(void *, int, gpio::Mode, gpio::PullMode, gpio::InterruptType, int) {
+  return true;
+}
+static int gpio_get_level(void *, int) { return 0; }
+static bool gpio_set_level(void *, int, int) { return true; }
+static bool gpio_add_interrupt_handler(void *, int, gpio::InterruptHandler, void *) { return true; }
+static bool gpio_remove_interrupt_handler(void *, int) { return true; }
+static bool gpio_enable_interrupt(void *, int) { return true; }
+static bool gpio_disable_interrupt(void *, int) { return true; }
 
-static const gpio::Hal test_gpio_hal = {
+static const gpio::Operations test_gpio_hal_operations{
     gpio_configure,
     gpio_get_level,
     gpio_set_level,
@@ -539,6 +542,7 @@ static const gpio::Hal test_gpio_hal = {
     gpio_enable_interrupt,
     gpio_disable_interrupt,
 };
+static const gpio::Hal test_gpio_hal{test_gpio_hal_operations};
 
 // ============================================================================
 // OrchestratorTestAccess — friend class for private member access
@@ -628,6 +632,7 @@ public:
   static void start_accel_test(Orchestrator &o) { o.start_accel_test(); }
   static void poll_accel_test(Orchestrator &o) { o.poll_accel_test(); }
   static void finish_accel_test(Orchestrator &o) { o.finish_accel_test(); }
+  static void finish_gps_test(Orchestrator &o) { o.finish_gps_test(); }
   static uint8_t accel_who_am_i(const Orchestrator &o) { return o._accel_who_am_i; }
   static bool accel_id_ok(const Orchestrator &o) { return o._accel_id_ok; }
   static bool accel_read_ok(const Orchestrator &o) { return o._accel_read_ok; }
@@ -654,6 +659,9 @@ public:
   static void shutdown(Orchestrator &o, ShipModeRequest reason) { o.shutdown(reason); }
   static void on_bms_status_timer(Orchestrator &o) { o.on_bms_status_timer(); }
   static void apply_settings_change(Orchestrator &o) { o.apply_settings_change(); }
+  static void apply_config_update(Orchestrator &o, const GoConfigUpdate &update) {
+    o.apply_config_update(update, GoConfigSource::Ui);
+  }
   static void prepare_for_sleep(Orchestrator &o, uint32_t sleep_ms = 60000) {
     o.prepare_for_sleep(sleep_ms);
   }
@@ -7790,13 +7798,12 @@ TEST_CASE("on_bms_status_timer: charging transition to plugged calls ensure_pmid
 }
 
 // ============================================================================
-// PM sensor recovery: time-based trigger on persistent PM failure (V1 only)
+// PM sensor recovery: time-based trigger on persistent PM failure
 // ============================================================================
 
 TEST_CASE("on_sensor_data: persistent PM failure triggers recover_pm_sensor on V1",
           "[Orchestrator][pmid][pm_recovery]") {
   TestFixture f;
-  f.stub_board.variant_value = BoardVariant::V1;
   auto orch = f.make_orchestrator();
   A::set_first_measurement_done(orch, true);
 
@@ -7824,7 +7831,6 @@ TEST_CASE("on_sensor_data: persistent PM failure triggers recover_pm_sensor on V
 TEST_CASE("on_sensor_data: valid PM resets the failure timer",
           "[Orchestrator][pmid][pm_recovery]") {
   TestFixture f;
-  f.stub_board.variant_value = BoardVariant::V1;
   auto orch = f.make_orchestrator();
   A::set_first_measurement_done(orch, true);
 
@@ -7857,30 +7863,9 @@ TEST_CASE("on_sensor_data: valid PM resets the failure timer",
   CHECK(test_spy::recover_pm_sensor_called);
 }
 
-TEST_CASE("on_sensor_data: PM recovery does not fire on Prototype",
-          "[Orchestrator][pmid][pm_recovery]") {
-  TestFixture f;
-  f.stub_board.variant_value = BoardVariant::Prototype;
-  auto orch = f.make_orchestrator();
-  A::set_first_measurement_done(orch, true);
-
-  MeasuresAGo bad{};
-  bad.pm_a.pm_25 = -1.0f;
-
-  // Fail at t=0, then well past threshold.
-  ALLOW_CALL(f.mock_rtos, get_time_ms_impl()).RETURN(1000);
-  A::on_sensor_data(orch, bad);
-
-  ALLOW_CALL(f.mock_rtos, get_time_ms_impl()).RETURN(60000);
-  A::on_sensor_data(orch, bad);
-
-  CHECK_FALSE(test_spy::recover_pm_sensor_called);
-}
-
 TEST_CASE("on_sensor_data: PM recovery does not fire before first measurement done",
           "[Orchestrator][pmid][pm_recovery]") {
   TestFixture f;
-  f.stub_board.variant_value = BoardVariant::V1;
   auto orch = f.make_orchestrator();
   // _first_measurement_done is false by default
 
@@ -8146,8 +8131,11 @@ TEST_CASE("Peripheral Test: holds PM awake until any test exit",
   f.ui_manager.set_screen(Screen::PeripheralTest);
   A::start_peripheral_test(orch);
 
+  MeasuresAGo measures{};
+  measures.pm_a.pm_25 = 10.0f;
+
   // A normal measurement or an interval update cannot sleep PM during the test.
-  A::on_sensor_data(orch, MeasuresAGo{});
+  A::on_sensor_data(orch, measures);
   CHECK_FALSE(test_spy::pm_sleep_requested);
   const GoSettings previous = A::settings(orch);
   A::settings(orch).measure_interval_seconds = 120;
@@ -8162,13 +8150,14 @@ TEST_CASE("Peripheral Test: holds PM awake until any test exit",
     Event done{};
     done.type = EventType::SensorTestDone;
     A::dispatch(orch, done);
-    A::on_sensor_data(orch, MeasuresAGo{});
+    A::on_sensor_data(orch, measures);
     CHECK_FALSE(test_spy::pm_sleep_requested);
     exit = InputType::ShortPress;
   }
   A::on_input(orch, {InputSource::TouchEnter, exit});
   CHECK(f.ui_manager.current_screen() != Screen::PeripheralTest);
   CHECK(test_spy::pm_sleep_requested);
+  CHECK_FALSE(test_spy::recover_pm_sensor_called);
   CHECK(A::settings(orch).measure_interval_seconds == 120);
 }
 
@@ -12596,4 +12585,478 @@ TEST_CASE("Disabled Local Server releases provisioning listener and allows cloud
   CHECK(f.local_api.access() == ConfigAccess::Disabled);
   CHECK(test_spy::cloud_start_count == 1);
   CHECK(A::local_api_activation_retry_deadline_ms(orch) == 0);
+}
+
+TEST_CASE("LED indicator UI change persists and switches using the latest measurement",
+          "[Orchestrator][settings][led]") {
+  TestFixture f;
+  f.settings.back_led_brightness = LedBrightness::Mid;
+  auto orch = f.make_orchestrator();
+  CP2_ALLOW_CONFIG_WRITES(f);
+  MeasuresAGo sample{};
+  sample.pm_a.pm_25 = 12.5f;
+  sample.co2.co2 = 1501;
+  A::on_sensor_data(orch, sample);
+  f.ui_manager.sync_settings(f.settings);
+  A::unlock(orch);
+  A::on_input(orch, {InputSource::TouchEnter, InputType::ShortPress});
+  open_ui_row(f, orch, "Settings");
+  open_ui_row(f, orch, "Display & Touch");
+  open_ui_row(f, orch, "LED Indicator");
+  test_spy::reset();
+  REQUIRE_CALL(f.mock_config, set_int(trompeloeil::_, static_cast<int>(BackLedIndicator::Co2)))
+      .WITH(std::string(_1) == "bli")
+      .RETURN(ConfigStoreResult::OK);
+  open_ui_row(f, orch, "CO2");
+  CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Co2);
+  CHECK(A::settings(orch).back_led_brightness == LedBrightness::Mid);
+  CHECK(test_spy::led_back_update_co2_count == 1);
+  CHECK(test_spy::led_last_co2_ppm == 1501);
+  CHECK(test_spy::led_back_update_aqi_count == 0);
+  CHECK(test_spy::led_back_brightness_count == 0);
+  CHECK_FALSE(test_spy::measurement_requested);
+
+  open_ui_row(f, orch, "LED Indicator");
+  test_spy::reset();
+  open_ui_row(f, orch, "AQI");
+  CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Aqi);
+  CHECK(test_spy::led_back_update_aqi_count == 1);
+  CHECK(test_spy::led_last_aqi_pm25 == 12.5f);
+  CHECK(test_spy::led_back_update_co2_count == 0);
+}
+
+TEST_CASE("CO2 indicator validates its own field and never falls back to PM",
+          "[Orchestrator][led]") {
+  TestFixture f;
+  f.settings.back_led_indicator = BackLedIndicator::Co2;
+  auto orch = f.make_orchestrator();
+  MeasuresAGo sample{};
+  sample.co2.co2 = 801;
+  A::on_sensor_data(orch, sample); // Invalid PM must not suppress valid CO2.
+  CHECK(test_spy::led_last_co2_ppm == 801);
+  CHECK(test_spy::led_back_update_aqi_count == 0);
+  CHECK(test_spy::led_back_off_count == 0);
+  sample.co2.co2 = 3001;
+  A::on_sensor_data(orch, sample);
+  CHECK(test_spy::led_last_co2_ppm == 3001);
+  for (const int invalid : {MeasuresInvalid::CO2, MeasuresRange::MAX_VALID_CO2 + 1}) {
+    sample.co2.co2 = invalid;
+    sample.pm_a.pm_25 = 12.5f;
+    test_spy::reset();
+    A::on_sensor_data(orch, sample);
+    CHECK(test_spy::led_back_off_count == 1);
+    CHECK(test_spy::led_back_update_co2_count == 0);
+    CHECK(test_spy::led_back_update_aqi_count == 0);
+  }
+}
+
+TEST_CASE("switching indicator clears unavailable data without changing brightness Off",
+          "[Orchestrator][settings][led]") {
+  TestFixture f;
+  auto orch = f.make_orchestrator();
+  auto settings = f.settings;
+  settings.back_led_indicator = BackLedIndicator::Co2;
+  REQUIRE(A::activate_settings_candidate(orch, settings, false));
+  CHECK(test_spy::led_back_off_count == 1);
+  CHECK(test_spy::led_back_update_co2_count == 0);
+  CHECK(A::settings(orch).back_led_brightness == LedBrightness::Off);
+  CHECK(test_spy::led_back_brightness_count == 0);
+  settings.back_led_indicator = BackLedIndicator::Aqi;
+  REQUIRE(A::activate_settings_candidate(orch, settings, false));
+  CHECK(test_spy::led_back_clear_aqi_count == 1);
+  CHECK(test_spy::led_back_update_aqi_count == 0);
+}
+
+TEST_CASE("rejected indicator changes retain the authoritative setting and LED",
+          "[Orchestrator][settings][led]") {
+  TestFixture f;
+  auto orch = f.make_orchestrator();
+  f.ui_manager.sync_settings(f.settings);
+  auto settings = f.settings;
+  settings.back_led_indicator = BackLedIndicator::Co2;
+  f.ui_manager.sync_settings(settings);
+  REQUIRE_CALL(f.mock_config, set_int(trompeloeil::_, trompeloeil::_))
+      .RETURN(ConfigStoreResult::ERROR);
+  A::apply_settings_change(orch);
+  CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Aqi);
+  f.ui_manager.apply_to_settings(settings);
+  CHECK(settings.back_led_indicator == BackLedIndicator::Aqi);
+  CHECK(test_spy::led_back_update_co2_count == 0);
+  CHECK(test_spy::led_back_off_count == 0);
+}
+
+TEST_CASE("CO2 indicator ignores PM corrections and AQI uses corrected PM on selection",
+          "[Orchestrator][settings][correction][led]") {
+  TestFixture f;
+  f.settings.operating_mode = OperatingMode::Stationary;
+  f.settings.back_led_indicator = BackLedIndicator::Co2;
+  auto orch = f.make_orchestrator();
+  A::set_mode(orch, OperatingMode::Stationary);
+  MeasuresAGo sample{};
+  sample.co2.co2 = 1200;
+  sample.pm_a.pm_25 = 10.0f;
+  A::on_sensor_data(orch, sample);
+  auto settings = f.settings;
+  settings.corrections.pm25.algorithm = Pm25CorrectionAlgorithm::CustomViaPm25Raw;
+  settings.corrections.pm25.scaling_factor = 2.0f;
+  settings.corrections.pm25.intercept = 0.0f;
+  test_spy::reset();
+  REQUIRE(A::activate_settings_candidate(orch, settings, false));
+  CHECK(test_spy::led_back_update_aqi_count == 0);
+  CHECK(test_spy::led_last_co2_ppm == 1200);
+  settings.back_led_indicator = BackLedIndicator::Aqi;
+  REQUIRE(A::activate_settings_candidate(orch, settings, false));
+  CHECK(test_spy::led_last_aqi_pm25 == 20.0f);
+}
+
+TEST_CASE("diagnostic exits restore the selected CO2 indicator", "[Orchestrator][led][hwtest]") {
+  TestFixture f;
+  f.settings.back_led_indicator = BackLedIndicator::Co2;
+  f.settings.back_led_brightness = LedBrightness::Dim;
+  auto orch = f.make_orchestrator();
+  MeasuresAGo sample{};
+  sample.co2.co2 = 2001;
+  sample.pm_a.pm_25 = 12.5f;
+  A::on_sensor_data(orch, sample);
+  test_spy::reset();
+  SECTION("LED test") {
+    REQUIRE_CALL(f.mock_rtos, delay_ms_impl(3000));
+    A::run_led_test(orch);
+  }
+  SECTION("GPS test") { A::finish_gps_test(orch); }
+  SECTION("accelerometer test") { A::finish_accel_test(orch); }
+  SECTION("peripheral test") {
+    A::start_peripheral_test(orch);
+    test_spy::reset();
+    A::finish_peripheral_test(orch);
+  }
+  SECTION("melody preview") {
+    f.ui_manager.sync_settings(f.settings);
+    A::unlock(orch);
+    enter_hardware_test(f, orch);
+    open_ui_row(f, orch, "Play Melody");
+    ALLOW_CALL(f.mock_rtos, delay_ms_impl(trompeloeil::_));
+    test_spy::reset();
+    open_ui_row(f, orch, "Chime");
+  }
+  CHECK(test_spy::led_last_back_brightness == LedBrightness::Dim);
+  CHECK(test_spy::led_back_update_co2_count == 1);
+  CHECK(test_spy::led_last_co2_ppm == 2001);
+  CHECK(test_spy::led_back_update_aqi_count == 0);
+}
+
+TEST_CASE("diagnostics keep LED ownership until the selected indicator is restored",
+          "[Orchestrator][settings][led][hwtest]") {
+  TestFixture f;
+  auto orch = f.make_orchestrator();
+  bool peripheral = false;
+  SECTION("peripheral") {
+    peripheral = true;
+    A::start_peripheral_test(orch);
+  }
+  SECTION("accelerometer") { f.ui_manager.set_screen(Screen::AccelTest); }
+  test_spy::reset();
+  auto settings = f.settings;
+  settings.back_led_indicator = BackLedIndicator::Co2;
+  REQUIRE(A::activate_settings_candidate(orch, settings, false));
+  MeasuresAGo sample{};
+  sample.co2.co2 = 1800;
+  sample.pm_a.pm_25 = 12.5f;
+  A::on_sensor_data(orch, sample);
+  CHECK(test_spy::led_back_update_co2_count == 0);
+  CHECK(test_spy::led_back_update_aqi_count == 0);
+  CHECK(test_spy::led_back_off_count == 0);
+  f.ui_manager.set_screen(Screen::Home);
+  if (peripheral) {
+    A::finish_peripheral_test(orch);
+  } else {
+    A::finish_accel_test(orch);
+  }
+  CHECK(test_spy::led_back_update_co2_count == 1);
+  CHECK(test_spy::led_last_co2_ppm == 1800);
+}
+
+TEST_CASE("indicator config updates honor the field mask and reject invalid choices",
+          "[Orchestrator][settings][led]") {
+  TestFixture f;
+  auto orch = f.make_orchestrator();
+  CP2_ALLOW_CONFIG_WRITES(f);
+  GoConfigUpdate update{};
+  update.update_mask = static_cast<uint32_t>(GoConfigField::BackLedIndicator);
+  update.back_led_indicator = BackLedIndicator::Co2;
+  A::apply_config_update(orch, update);
+  CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Co2);
+  CHECK(test_spy::led_back_off_count == 1);
+  test_spy::reset();
+  update = GoConfigUpdate{};
+  update.update_mask = static_cast<uint32_t>(GoConfigField::TemperatureUnit);
+  update.use_fahrenheit = true;
+  A::apply_config_update(orch, update);
+  CHECK(A::settings(orch).use_fahrenheit);
+  CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Co2);
+  CHECK(test_spy::led_back_off_count == 0);
+  update.update_mask = static_cast<uint32_t>(GoConfigField::BackLedIndicator);
+  update.back_led_indicator = static_cast<BackLedIndicator>(255);
+  A::apply_config_update(orch, update);
+  CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Co2);
+  CHECK(test_spy::led_back_off_count == 0);
+}
+
+TEST_CASE("local indicator update persists and publishes only after activation",
+          "[Orchestrator][local-api][led]") {
+  TestFixture f;
+  f.settings.back_led_brightness = LedBrightness::Mid;
+  auto orch = f.make_orchestrator();
+  A::set_mode(orch, OperatingMode::Stationary);
+  f.local_api.publish_config_snapshot(A::settings(orch));
+  f.local_api.set_access(ConfigAccess::ReadWrite);
+  CP2_ALLOW_CONFIG_WRITES(f);
+  MeasuresAGo sample{};
+  sample.co2.co2 = 1800;
+  sample.pm_a.pm_25 = 12.5f;
+  A::on_sensor_data(orch, sample);
+  test_spy::reset();
+
+  LocalServerConfig partial{};
+  partial.back_led_indicator = "co2";
+  REQUIRE(f.local_api.submit_config(partial).status == ConfigSubmitStatus::Accepted);
+  CHECK(f.local_api.get_config().back_led_indicator == "aqi");
+  CHECK(test_spy::led_back_update_co2_count == 0);
+
+  SECTION("successful persistence activates and reports CO2") {
+    REQUIRE_CALL(f.mock_config, set_int(trompeloeil::_, static_cast<int>(BackLedIndicator::Co2)))
+        .WITH(std::string(_1) == "bli")
+        .RETURN(ConfigStoreResult::OK);
+    dispatch_next_local_request(f, orch);
+    CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Co2);
+    CHECK(f.local_api.get_config().back_led_indicator == "co2");
+    CHECK(f.local_api.get_config().back_led_brightness == 2);
+    CHECK(test_spy::led_last_co2_ppm == 1800);
+    CHECK(test_spy::led_back_update_co2_count == 1);
+    CHECK(test_spy::led_back_update_aqi_count == 0);
+  }
+  SECTION("failed persistence retains AQI and its current output") {
+    REQUIRE_CALL(f.mock_config, commit()).RETURN(ConfigStoreResult::ERROR);
+    dispatch_next_local_request(f, orch);
+    CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Aqi);
+    CHECK(f.local_api.get_config().back_led_indicator == "aqi");
+    CHECK(test_spy::led_back_update_co2_count == 0);
+    CHECK(test_spy::led_back_update_aqi_count == 0);
+  }
+}
+
+TEST_CASE(
+    "local brightness-only update preserves CO2 and indicator-only update preserves brightness",
+    "[Orchestrator][local-api][led]") {
+  TestFixture f;
+  f.settings.back_led_indicator = BackLedIndicator::Co2;
+  auto orch = f.make_orchestrator();
+  A::set_mode(orch, OperatingMode::Stationary);
+  f.local_api.publish_config_snapshot(A::settings(orch));
+  f.local_api.set_access(ConfigAccess::ReadWrite);
+  CP2_ALLOW_CONFIG_WRITES(f);
+  MeasuresAGo sample{};
+  sample.co2.co2 = 1200;
+  sample.pm_a.pm_25 = 12.5f;
+  A::on_sensor_data(orch, sample);
+  test_spy::reset();
+
+  LocalServerConfig partial{};
+  partial.back_led_brightness = 3;
+  REQUIRE(f.local_api.submit_config(partial).status == ConfigSubmitStatus::Accepted);
+  dispatch_next_local_request(f, orch);
+  CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Co2);
+  CHECK(f.local_api.get_config().back_led_indicator == "co2");
+  CHECK(f.local_api.get_config().back_led_brightness == 3);
+  CHECK(test_spy::led_last_back_brightness == LedBrightness::Bright);
+  CHECK(test_spy::led_back_update_aqi_count == 0);
+
+  partial = LocalServerConfig{};
+  partial.back_led_indicator = "aqi";
+  REQUIRE(f.local_api.submit_config(partial).status == ConfigSubmitStatus::Accepted);
+  dispatch_next_local_request(f, orch);
+  CHECK(f.local_api.get_config().back_led_indicator == "aqi");
+  CHECK(f.local_api.get_config().back_led_brightness == 3);
+  CHECK(test_spy::led_back_update_aqi_count == 1);
+  CHECK(test_spy::led_last_aqi_pm25 == 12.5f);
+}
+
+TEST_CASE("BLE LED indicator activates only after successful persistence",
+          "[Orchestrator][settings][ble][led]") {
+  TestFixture f;
+  f.settings.back_led_brightness = LedBrightness::Mid;
+  auto orch = f.make_orchestrator();
+  CP2_ALLOW_CONFIG_WRITES(f);
+  MeasuresAGo sample{};
+  sample.co2.co2 = 1800;
+  sample.pm_a.pm_25 = 12.5f;
+  A::on_sensor_data(orch, sample);
+  test_spy::reset();
+  test_spy::ble_connected = true;
+  test_spy::ble_pending_config_len = 1;
+  test_spy::ble_config_decode_result.op = BleConfigOp::Set;
+  test_spy::ble_config_decode_result.recognized_config_key_count = 1;
+  test_spy::ble_decode_updates_settings = true;
+  test_spy::ble_decoded_settings = A::settings(orch);
+  test_spy::ble_decoded_settings.back_led_indicator = BackLedIndicator::Co2;
+  Event evt{};
+  evt.type = EventType::BleConfigWrite;
+
+  SECTION("saved selection updates LED and publishes config") {
+    REQUIRE_CALL(f.mock_config, set_int(trompeloeil::_, static_cast<int>(BackLedIndicator::Co2)))
+        .WITH(std::string(_1) == "bli")
+        .RETURN(ConfigStoreResult::OK);
+    A::dispatch(orch, evt);
+    CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Co2);
+    CHECK(A::settings(orch).back_led_brightness == LedBrightness::Mid);
+    CHECK(test_spy::led_back_update_co2_count == 1);
+    CHECK(test_spy::led_last_co2_ppm == 1800);
+    CHECK(test_spy::led_back_update_aqi_count == 0);
+    CHECK(test_spy::ble_notify_config_called);
+    GoSettings ui_settings{};
+    f.ui_manager.apply_to_settings(ui_settings);
+    CHECK(ui_settings.back_led_indicator == BackLedIndicator::Co2);
+  }
+  SECTION("failed persistence retains the selection and output") {
+    REQUIRE_CALL(f.mock_config, commit()).RETURN(ConfigStoreResult::ERROR);
+    A::dispatch(orch, evt);
+    CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Aqi);
+    CHECK(A::settings(orch).back_led_brightness == LedBrightness::Mid);
+    CHECK(test_spy::led_back_update_co2_count == 0);
+    CHECK(test_spy::led_back_update_aqi_count == 0);
+    CHECK_FALSE(test_spy::ble_notify_config_called);
+    CHECK(test_spy::ble_notify_command_result_called);
+    CHECK_FALSE(test_spy::ble_last_command_success);
+    CHECK(std::string(test_spy::ble_last_command_error) == BLE_VAL_ERR_CONFIG_SAVE_FAILED);
+  }
+}
+
+TEST_CASE("cloud LED indicator updates persist and immediately refresh the selected measurement",
+          "[Orchestrator][cloud][led]") {
+  for (auto control : {ConfigurationControl::Cloud, ConfigurationControl::Both}) {
+    for (auto indicator : {BackLedIndicator::Aqi, BackLedIndicator::Co2}) {
+      CAPTURE(control, indicator);
+      TestFixture f;
+      f.settings.configuration_control = control;
+      f.settings.back_led_brightness = LedBrightness::Mid;
+      f.settings.back_led_indicator =
+          indicator == BackLedIndicator::Co2 ? BackLedIndicator::Aqi : BackLedIndicator::Co2;
+      auto orch = f.make_orchestrator();
+      A::set_mode(orch, OperatingMode::Stationary);
+      CP2_ALLOW_CONFIG_WRITES(f);
+      REQUIRE_CALL(f.mock_config, set_int(trompeloeil::_, static_cast<int>(indicator)))
+          .WITH(std::string(_1) == "bli")
+          .RETURN(ConfigStoreResult::OK);
+      MeasuresAGo sample{};
+      sample.co2.co2 = 1800;
+      sample.pm_a.pm_25 = 12.5f;
+      A::on_sensor_data(orch, sample);
+      test_spy::reset();
+      test_spy::ble_connected = true;
+
+      Event evt{};
+      evt.type = EventType::FetchConfigResult;
+      evt.fetch_config.result = static_cast<CloudResultByte>(AgClientResult::Ok);
+      evt.fetch_config.update.update_mask = static_cast<uint32_t>(GoConfigField::BackLedIndicator);
+      evt.fetch_config.update.back_led_indicator = indicator;
+      A::dispatch(orch, evt);
+
+      CHECK(A::settings(orch).back_led_indicator == indicator);
+      CHECK(A::settings(orch).back_led_brightness == LedBrightness::Mid);
+      CHECK(A::settings(orch).configuration_control == control);
+      CHECK(f.local_api.get_config().back_led_indicator ==
+            (indicator == BackLedIndicator::Co2 ? "co2" : "aqi"));
+      CHECK(test_spy::ble_notify_config_called);
+      GoSettings ui_settings{};
+      f.ui_manager.apply_to_settings(ui_settings);
+      CHECK(ui_settings.back_led_indicator == indicator);
+      if (indicator == BackLedIndicator::Co2) {
+        CHECK(test_spy::led_back_update_co2_count == 1);
+        CHECK(test_spy::led_last_co2_ppm == 1800);
+        CHECK(test_spy::led_back_update_aqi_count == 0);
+      } else {
+        CHECK(test_spy::led_back_update_aqi_count == 1);
+        CHECK(test_spy::led_last_aqi_pm25 == 12.5f);
+        CHECK(test_spy::led_back_update_co2_count == 0);
+      }
+
+      test_spy::reset();
+      FORBID_CALL(f.mock_config, commit());
+      A::dispatch(orch, evt);
+      CHECK_FALSE(test_spy::ble_notify_config_called);
+      CHECK(test_spy::led_back_update_co2_count == 0);
+      CHECK(test_spy::led_back_update_aqi_count == 0);
+    }
+  }
+}
+
+TEST_CASE("cloud updates that omit the indicator preserve CO2 selection",
+          "[Orchestrator][cloud][led]") {
+  TestFixture f;
+  f.settings.back_led_indicator = BackLedIndicator::Co2;
+  f.settings.back_led_brightness = LedBrightness::Off;
+  auto orch = f.make_orchestrator();
+  A::set_mode(orch, OperatingMode::Stationary);
+  CP2_ALLOW_CONFIG_WRITES(f);
+  MeasuresAGo sample{};
+  sample.co2.co2 = 1200;
+  A::on_sensor_data(orch, sample);
+  test_spy::reset();
+
+  Event evt{};
+  evt.type = EventType::FetchConfigResult;
+  evt.fetch_config.result = static_cast<CloudResultByte>(AgClientResult::Ok);
+  evt.fetch_config.update.update_mask = static_cast<uint32_t>(GoConfigField::BackLedBrightness);
+  evt.fetch_config.update.back_led_brightness = LedBrightness::Bright;
+  A::dispatch(orch, evt);
+  CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Co2);
+  CHECK(A::settings(orch).back_led_brightness == LedBrightness::Bright);
+  CHECK(f.local_api.get_config().back_led_indicator == "co2");
+  CHECK(test_spy::led_last_back_brightness == LedBrightness::Bright);
+  CHECK(test_spy::led_back_update_aqi_count == 0);
+
+  evt.fetch_config.update = GoConfigUpdate{};
+  FORBID_CALL(f.mock_config, commit());
+  A::dispatch(orch, evt);
+  CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Co2);
+  CHECK(A::settings(orch).back_led_brightness == LedBrightness::Bright);
+}
+
+TEST_CASE("cloud LED indicator retains its current state when the update cannot apply",
+          "[Orchestrator][cloud][led]") {
+  TestFixture f;
+  bool local_control = false;
+  SECTION("Local control rejects in-flight cloud changes") {
+    local_control = true;
+    f.settings.configuration_control = ConfigurationControl::Local;
+  }
+  SECTION("failed persistence rejects the candidate") {}
+  auto orch = f.make_orchestrator();
+  A::set_mode(orch, OperatingMode::Stationary);
+  f.local_api.publish_config_snapshot(A::settings(orch));
+  CP2_ALLOW_CONFIG_WRITES(f);
+  MeasuresAGo sample{};
+  sample.co2.co2 = 1800;
+  sample.pm_a.pm_25 = 12.5f;
+  A::on_sensor_data(orch, sample);
+  test_spy::reset();
+  test_spy::ble_connected = true;
+
+  Event evt{};
+  evt.type = EventType::FetchConfigResult;
+  evt.fetch_config.result = static_cast<CloudResultByte>(AgClientResult::Ok);
+  evt.fetch_config.update.update_mask = static_cast<uint32_t>(GoConfigField::BackLedIndicator);
+  evt.fetch_config.update.back_led_indicator = BackLedIndicator::Co2;
+  if (local_control) {
+    FORBID_CALL(f.mock_config, commit());
+    A::dispatch(orch, evt);
+  } else {
+    REQUIRE_CALL(f.mock_config, commit()).RETURN(ConfigStoreResult::ERROR);
+    A::dispatch(orch, evt);
+  }
+  CHECK(A::settings(orch).back_led_indicator == BackLedIndicator::Aqi);
+  CHECK(f.local_api.get_config().back_led_indicator == "aqi");
+  CHECK(test_spy::led_back_update_co2_count == 0);
+  CHECK(test_spy::led_back_update_aqi_count == 0);
+  CHECK_FALSE(test_spy::ble_notify_config_called);
 }

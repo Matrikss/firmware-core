@@ -292,9 +292,9 @@ variants, it also supports a buzzer.
 
 LED features:
 
-- Back AQI LED brightness setting.
-- Touch feedback LED setting.
-- AQI color display based on PM2.5.
+- LED Indicator selects AQI (from PM2.5) or CO2; default AQI.
+- Independent LED Brightness and touch feedback settings.
+- Invalid readings turn the selected indicator off; see [colors](docs/led_service.md#co2-color-map).
 - Boot and other short animations.
 
 Buzzer and melody features:
@@ -306,9 +306,6 @@ Buzzer and melody features:
 - Play Melody under Settings > Hardware Test.
 - Built-in melody choices such as Chime and Tetris.
 - Synchronized buzzer and LED effects for selected melodies.
-
-Hardware note: LED and buzzer behavior depends on the board variant. Prototype
-hardware may not include every indicator supported by V1 hardware.
 
 ## First-Time Setup
 
@@ -338,8 +335,8 @@ Data, Setup Guide, and the existing About Device page.
 
 Operations groups measurement interval, CO2 calibration, GPS mode, and buzzer.
 Display & Touch starts with Pinned Chart, followed by temperature/altitude units,
-PM display, auto-lock, and AQI LED and Touch LED brightness. Submenus keep Exit and Back;
-opening Tracking selects Status to show session details. Settings
+PM display, auto-lock, LED Indicator, LED Brightness, and Touch LED. Submenus
+keep Exit and Back; opening Tracking selects Status to show session details. Settings
 and its list submenus select their first content item, while value choices
 select the saved value. Back restores the row that opened the child page.
 
@@ -365,7 +362,7 @@ Common configurable settings include:
 - GPS mode: always off, on when tracking, or always on.
 - Operating mode: Portable, Stationary, or Offline.
 - Auto-lock timeout.
-- AQI LED brightness.
+- LED Indicator (AQI or CO2) and LED Brightness.
 - Touch LED brightness.
 - Buzzer enabled or disabled.
 - Static IP and cloud preference for Stationary mode.
@@ -403,9 +400,7 @@ from the device menu or the app.
 
 ## Product Notes For Team Members
 
-- The Go supports both Prototype and V1 board variants with one firmware line.
-- Some hardware features, especially LEDs, buzzer, and fuel gauge behavior,
-  depend on board variant.
+- The firmware supports Go V1 hardware, including LEDs, buzzer, and fuel gauge.
 - CO2 sensor hardware can vary by build; the product behavior is still presented
   to users as CO2 measurement.
 - Temperature and humidity may come from a dedicated sensor or from another
