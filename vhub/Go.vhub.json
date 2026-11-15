@@ -1,11 +1,12 @@
 {
   "schema_version": "1.0",
-  "rev": "2ace4a8",
+  "rev": "960fd68",
   "product": {
     "slug": "airgradient-go",
     "name": "AirGradient Go",
     "variants": [
-      "V1"
+      "V1",
+      "V2"
     ]
   },
   "tests": [
@@ -16,7 +17,8 @@
       "category": "Boot & Onboarding",
       "sub_category": "Boot",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Onboarding has already been completed."
@@ -51,7 +53,8 @@
       "category": "Boot & Onboarding",
       "sub_category": "First Use",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "All routes, charts, settings and bonds on this unit are expendable."
@@ -91,7 +94,8 @@
       "category": "Boot & Onboarding",
       "sub_category": "First Use",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "All routes, charts, settings and bonds on this unit are expendable.",
@@ -131,7 +135,8 @@
       "category": "Boot & Onboarding",
       "sub_category": "First Use",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "All routes, charts, settings and bonds on this unit are expendable.",
@@ -172,7 +177,8 @@
       "category": "Boot & Onboarding",
       "sub_category": "First Use",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "All routes, charts, settings and bonds on this unit are expendable."
@@ -197,38 +203,127 @@
     },
     {
       "id": "go.ui.lock",
-      "title": "Locked Home rejects touch navigation",
-      "objective": "Verify that locked Home ignores touch navigation and unlocking restores access to Main Menu without leftover message text.",
+      "title": "Lock and unlock feedback matches navigation access",
+      "objective": "Verify matching lock icons and messages, blocked navigation while locked, and clean Menu entry after unlocking.",
       "category": "Display & Controls",
       "sub_category": "Navigation",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [],
       "steps": [
         {
-          "action": "Unlock with a short Power press if needed. Select Portable mode, then return Home.",
-          "expected_result": "Home is displayed in Portable mode."
+          "action": "Select Portable mode. Record Settings > Display & Touch > Auto Lock, then set it to Off.",
+          "expected_result": "The original Auto Lock setting is recorded."
         },
         {
-          "action": "If Home is unlocked, short-press Power to lock it.",
-          "expected_result": "Home shows the locked state."
+          "action": "Open Settings > Operations. Short-press Power to lock and watch Home for 10 seconds.",
+          "expected_result": "The first completed Home refresh shows the locked icon and Locked message together. The message clears while the icon stays locked, without leftover menu content."
         },
         {
           "action": "Tap the left, center (Menu), and right touch controls individually. Inspect the screen after each tap.",
-          "expected_result": "Each tap shows Unlock First. Home remains displayed; no menu or chart browsing opens."
+          "expected_result": "Each tap shows Unlock First. Home remains displayed with the locked icon; no menu or chart browsing opens."
         },
         {
-          "action": "Short-press Power to unlock. Immediately tap Menu while Unlocked is visible, then inspect Main Menu after the refresh finishes.",
-          "expected_result": "Main Menu opens without leftover Unlocked text or its message rectangle. If the message disappeared before tapping Menu, this observation is incomplete."
+          "action": "Short-press Power to unlock. As soon as Unlocked appears, tap Menu and inspect the completed refresh.",
+          "expected_result": "The unlocked icon and Unlocked message appear together. Main Menu then opens without leftover message text or its rectangle. If the message disappeared before the Menu tap, the message-removal check is incomplete."
         }
       ],
       "cleanup": [
-        "Return to Home, including after interruption."
+        "Restore the recorded Auto Lock setting, including after interruption.",
+        "Confirm the restored choice and return Home. Record any restoration failure."
       ],
       "references": [
         "products/go/docs/ui_manager.md",
-        "products/go/docs/input_service.md"
+        "products/go/docs/input_service.md",
+        "products/go/docs/display_service.md",
+        "products/go/docs/settings.md"
+      ]
+    },
+    {
+      "id": "go.ui.unlock-during-refresh",
+      "title": "Unlock during a running refresh still shows feedback",
+      "objective": "Verify that an unlock requested while the panel is refreshing produces readable feedback without another Power press.",
+      "category": "Display & Controls",
+      "sub_category": "Navigation",
+      "applicability": [
+        "V1",
+        "V2"
+      ],
+      "setup": [],
+      "steps": [
+        {
+          "action": "Select Portable mode. Record Settings > Display & Touch > Auto Lock, set it to Off, and return Home unlocked.",
+          "expected_result": "The original Auto Lock setting is recorded and Home is unlocked."
+        },
+        {
+          "action": "Short-press Power to lock. As the screen starts refreshing, short-press Power again to unlock.",
+          "expected_result": "The second press occurs during the lock refresh. If that refresh finished before the second press, this scenario was not exercised."
+        },
+        {
+          "action": "Stop pressing buttons and watch the screen for 10 seconds.",
+          "expected_result": "The unlocked icon and a readable Unlocked message appear without another press. The message clears cleanly and the icon stays unlocked.",
+          "evidence": [
+            "If feedback is missing or incorrect, record the failure and capture video if available."
+          ]
+        }
+      ],
+      "cleanup": [
+        "Restore the recorded Auto Lock setting, including after interruption.",
+        "Confirm the restored choice and return Home. Record any restoration failure."
+      ],
+      "references": [
+        "products/go/docs/ui_manager.md",
+        "products/go/docs/input_service.md",
+        "products/go/docs/display_service.md",
+        "products/go/docs/orchestrator.md",
+        "products/go/docs/settings.md"
+      ]
+    },
+    {
+      "id": "go.display.refresh-cooldown",
+      "title": "USB disconnect followed by lock avoids repeated long refreshes",
+      "objective": "Verify that disconnecting USB and locking in quick succession gives clear feedback without repeated long refreshes, and later menu navigation keeps the unlocked icon stable.",
+      "category": "Display & Controls",
+      "sub_category": "Navigation",
+      "applicability": [
+        "V1",
+        "V2"
+      ],
+      "setup": [
+        "USB power and a compatible cable.",
+        "Battery charge is above 5% and at or below 95%."
+      ],
+      "steps": [
+        {
+          "action": "Select Portable mode. Record Settings > Display & Touch > Auto Lock and set it to Off. Connect USB, return Home unlocked and watch for the charging bolt for up to 20 seconds.",
+          "expected_result": "The original Auto Lock setting is recorded. Home is unlocked with the charging bolt visible."
+        },
+        {
+          "action": "Disconnect USB. Watch for the charging bolt to disappear for up to 15 seconds. As soon as it disappears, short-press Power to lock.",
+          "expected_result": "The charging bolt clears, then the locked icon and Locked message appear together. These two changes do not cause two long screen refreshes in succession.",
+          "evidence": [
+            "If the screen repeatedly refreshes slowly or an icon is wrong, record the failure and capture video if available."
+          ]
+        },
+        {
+          "action": "When the lock refresh finishes, short-press Power to unlock, then open Main Menu > Settings > Display & Touch.",
+          "expected_result": "Unlocked appears with the unlocked icon. The menu opens normally and the icon remains unlocked."
+        },
+        {
+          "action": "Tap up then down three times, inspecting the icon after each completed refresh. Return Home using the on-screen Exit option.",
+          "expected_result": "The icon stays unlocked throughout navigation and on Home; it never alternates between locked and unlocked. Text and highlighting remain readable."
+        }
+      ],
+      "cleanup": [
+        "Restore the recorded Auto Lock setting, including after interruption.",
+        "Confirm the restored choice, disconnect USB and return Home. Record any restoration failure."
+      ],
+      "references": [
+        "products/go/docs/display_service.md",
+        "products/go/docs/ui_manager.md",
+        "products/go/docs/settings.md"
       ]
     },
     {
@@ -238,7 +333,8 @@
       "category": "Display & Controls",
       "sub_category": "Navigation",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [],
       "steps": [
@@ -270,7 +366,8 @@
       "category": "Display & Controls",
       "sub_category": "Navigation",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [],
       "steps": [
@@ -299,21 +396,22 @@
     {
       "id": "go.ui.menu-wrap",
       "title": "Menu wraparound keeps rows and highlighting readable",
-      "objective": "Verify that wrapping between the first and last rows of the full Display & Touch menu keeps all rows readable and only the intended row highlighted.",
+      "objective": "Verify that wrapping between the first and last rows of Display & Touch keeps all rows readable and only the intended row highlighted.",
       "category": "Display & Controls",
       "sub_category": "Navigation",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [],
       "steps": [
         {
           "action": "Select Portable mode. Open Main Menu > Settings > Display & Touch and inspect the menu.",
-          "expected_result": "All 10 rows, including Exit and Touch LED, are readable without clipping or overlap."
+          "expected_result": "All rows are readable without clipping or overlap. V1 ends with Touch LED. V2 ends with LED Brightness and has no Touch LED row."
         },
         {
           "action": "Move the highlight to Exit. Tap left (Up) once, inspect the completed refresh, then tap right (Down) once and inspect again.",
-          "expected_result": "The highlight moves to Touch LED, then back to Exit. All rows remain readable, only the intended row is highlighted after each refresh, and no full-screen flash occurs."
+          "expected_result": "The highlight moves to Touch LED on V1 or LED Brightness on V2, then back to Exit. All rows remain readable, only the intended row is highlighted after each refresh, and no full-screen flash occurs."
         }
       ],
       "cleanup": [
@@ -331,7 +429,8 @@
       "category": "Display & Controls",
       "sub_category": "Identity",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "The device's serial-number label.",
@@ -368,7 +467,8 @@
       "category": "Display & Controls",
       "sub_category": "Identity",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Onboarding has already been completed."
@@ -397,7 +497,8 @@
       "category": "Display & Controls",
       "sub_category": "Settings",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "The Portable/Stationary measurement interval is not a custom value."
@@ -439,7 +540,8 @@
       "category": "Display & Controls",
       "sub_category": "Settings",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [],
       "steps": [
@@ -479,7 +581,8 @@
       "category": "Display & Controls",
       "sub_category": "Settings",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [],
       "steps": [
@@ -519,7 +622,8 @@
       "category": "Display & Controls",
       "sub_category": "Auto Lock",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "A stopwatch or a camera capable of timestamped video."
@@ -568,7 +672,8 @@
       "category": "Display & Controls",
       "sub_category": "Indicators",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "A dim room."
@@ -584,7 +689,7 @@
         },
         {
           "action": "Open Settings > Display & Touch > LED Brightness. Select Dim, Mid, and Bright in turn, inspecting the rear LEDs after each selection. Keep the device position and room lighting unchanged. After confirming illumination at all three levels, select Off.",
-          "expected_result": "Dim, Mid, and Bright produce visibly increasing brightness. Selecting Off then turns the rear LEDs off."
+          "expected_result": "All five rear LEDs on V1 or all four on V2 illuminate at each level. Dim, Mid, and Bright produce visibly increasing brightness. Selecting Off turns every rear LED off."
         },
         {
           "action": "Select Mid, or Dim if the original setting was Mid. Note the selected level and observe its brightness.",
@@ -610,7 +715,8 @@
       "category": "Display & Controls",
       "sub_category": "Indicators",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "A dim room."
@@ -630,7 +736,7 @@
         },
         {
           "action": "Return Home and observe the displayed CO2 reading and rear LEDs for 30 seconds. Compare the color after each completed display refresh.",
-          "expected_result": "The rear LEDs show the color for the current CO2 reading: green at 0–800 ppm, yellow at 801–1000, orange at 1001–1500, red at 1501–2000, purple at 2001–3000, or brown at 3001–10000."
+          "expected_result": "All five rear LEDs on V1 or all four on V2 show the same color for the current CO2 reading: green at 0–800 ppm, yellow at 801–1000, orange at 1001–1500, red at 1501–2000, purple at 2001–3000, or brown at 3001–10000."
         },
         {
           "action": "Disconnect USB. Hold Power until Powered off is fully displayed, release, and wait 10 seconds. Press and release Power to start, allowing up to five minutes for Home with a numeric CO2 reading. Inspect the rear LEDs, then reopen LED Indicator and LED Brightness.",
@@ -692,7 +798,8 @@
       "category": "Display & Controls",
       "sub_category": "Audio",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Onboarding has already been completed.",
@@ -731,7 +838,8 @@
       "category": "Display & Controls",
       "sub_category": "Audio",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "A quiet environment.",
@@ -773,7 +881,8 @@
       "category": "Power",
       "sub_category": "USB",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Home shows battery charge above 5% and at most 95%.",
@@ -808,7 +917,8 @@
       "category": "Power",
       "sub_category": "USB",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Home shows battery charge above 5% and at most 95%.",
@@ -843,7 +953,8 @@
       "category": "Power",
       "sub_category": "Charging-Only",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Home shows battery charge above 5% and at most 95%.",
@@ -877,7 +988,8 @@
       "category": "Power",
       "sub_category": "Charging-Only",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Home shows battery charge above 5% and at most 95%.",
@@ -911,7 +1023,8 @@
       "category": "Power",
       "sub_category": "Charging-Only",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Go is powered off with USB connected, and the charging screen shows Battery Full."
@@ -940,20 +1053,21 @@
       "category": "Power",
       "sub_category": "USB",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
-        "Home shows 100% battery charge.",
+        "Go has completed a normal charge cycle from the computer USB connection and remains connected, with no temperature or charger fault.",
         "A USB data cable.",
         "A computer with access to the AirGradient logging tool."
       ],
       "steps": [
         {
-          "action": "Select Portable mode. Connect Go to the computer using USB and open the AirGradient logging tool. Return Home.",
+          "action": "Keep the USB connection in place. Select Portable mode, open the AirGradient logging tool and return Home.",
           "expected_result": "Home and device logs are visible."
         },
         {
-          "action": "Observe for up to 40 seconds. Look for full_chg_paused=1 and charge=NotCharging or charge=Done in the PowerService logs.",
+          "action": "Observe for 30 seconds. Confirm the PowerService logs show external power and charge=NotCharging or charge=Done, and inspect the Home icons.",
           "expected_result": "Home shows a full battery and a plug icon without the charging bolt. The icons are readable and do not overlap."
         }
       ],
@@ -972,7 +1086,8 @@
       "category": "Power",
       "sub_category": "Shutdown",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [],
       "steps": [
@@ -1003,7 +1118,8 @@
       "category": "Power",
       "sub_category": "Shutdown",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "A USB power source."
@@ -1040,7 +1156,8 @@
       "category": "Measurements",
       "sub_category": "Charts",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "The Portable/Stationary measurement interval is not a custom value."
@@ -1075,11 +1192,12 @@
     {
       "id": "go.display.chart-reset-lock",
       "title": "Pinned chart returns after locking and remains selected after a power cycle",
-      "objective": "Verify that locking clears chart-browsing details and restores the pinned chart cleanly.",
+      "objective": "Verify that locking restores the pinned chart cleanly, unlock feedback appears and clears over the chart, and the pinned selection survives a power cycle.",
       "category": "Measurements",
       "sub_category": "Charts",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "The Portable/Stationary measurement interval is not a custom value."
@@ -1098,8 +1216,8 @@
           "expected_result": "The CO2 pinned chart returns. The browsing header, arrows, highlight and Min/Max disappear without leftover content."
         },
         {
-          "action": "Unlock with a short Power press.",
-          "expected_result": "The CO2 pinned chart remains visible without browsing details."
+          "action": "Unlock with a short Power press. Watch the message and chart for 10 seconds without touching the controls.",
+          "expected_result": "Unlocked appears with the unlocked indicator, then clears without leftover text or a message rectangle. The CO2 pinned chart remains readable without browsing details."
         },
         {
           "action": "Disconnect USB. Hold Power until Powered off is fully displayed, release, and wait 10 seconds. Press and release Power to start, allowing up to five minutes for Home. Inspect Home, then reopen Settings > Display & Touch > Pinned Chart.",
@@ -1123,7 +1241,8 @@
       "category": "Measurements",
       "sub_category": "Charts",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [],
       "steps": [
@@ -1155,7 +1274,8 @@
       "category": "Measurements",
       "sub_category": "Charts",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "The Portable/Stationary measurement interval is not a custom value."
@@ -1193,7 +1313,8 @@
       "category": "Measurements",
       "sub_category": "Charts",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "The Portable/Stationary measurement interval is not a custom value."
@@ -1240,7 +1361,8 @@
       "category": "Measurements",
       "sub_category": "Display Recovery",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Go has saved credentials for an available Wi-Fi network.",
@@ -1297,7 +1419,8 @@
       "category": "Measurements",
       "sub_category": "Scheduling",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "A USB data cable.",
@@ -1429,7 +1552,8 @@
       "category": "Diagnostics",
       "sub_category": "Peripheral",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "A quiet environment.",
@@ -1437,37 +1561,37 @@
       ],
       "steps": [
         {
-          "action": "Select Portable mode. Record Buzzer under Settings > Operations, and LED Indicator, LED Brightness and Touch LED under Settings > Display & Touch. Set LED Indicator to CO2 and LED Brightness to Mid.",
-          "expected_result": "All four original settings are recorded. CO2 and Mid are selected."
+          "action": "Select Portable mode. Record Buzzer under Settings > Operations, and LED Indicator and LED Brightness under Settings > Display & Touch. On V1, also record Touch LED. Set LED Indicator to CO2 and LED Brightness to Mid.",
+          "expected_result": "The original settings are recorded: four on V1, three on V2. CO2 and Mid are selected."
         },
         {
           "action": "Return Home and allow up to five minutes for sensor warmup and a numeric CO2 reading. Observe the rear LEDs, then open Settings > Hardware Test > Peripheral Test.",
           "expected_result": "The rear LEDs show steady CO2 indication before the diagnostic. The first actuator prompt appears."
         },
         {
-          "action": "Follow the Back LED, Touch LED and Buzzer prompts. Select Pass only after observing each requested output.",
-          "expected_result": "The rear LEDs cycle red, green and blue; all three touch LEDs illuminate; the buzzer sounds."
+          "action": "Follow the actuator prompts, selecting Pass only after observing each requested output.",
+          "expected_result": "The rear LEDs cycle red, green and blue. V1 then prompts for Touch LED and all three touch LEDs illuminate. V2 goes directly from Back LED to Buzzer with no Touch LED prompt. The buzzer sounds on both boards."
         },
         {
           "action": "Allow up to five minutes for the automatic sensor checks and inspect the summary.",
-          "expected_result": "All actuator and sensor rows show PASS, and the overall result is PASS. The rear LEDs turn green and the completion melody plays. Results remain readable without clipping."
+          "expected_result": "All actuator and sensor rows show PASS, and the overall result is PASS. V1 has nine summary rows, including Touch LED; V2 has eight with no Touch LED row. The rear LEDs turn green and the completion melody plays. Results remain readable without clipping."
         },
         {
-          "action": "Exit the test and return Home. Compare the rear LEDs with the current CO2 reading using the CO2 Color Map in LED Service, then check Buzzer, LED Indicator, LED Brightness and Touch LED.",
-          "expected_result": "CO2 indication resumes at Mid, matching the displayed reading. LED Indicator remains CO2, LED Brightness remains Mid, Buzzer and Touch LED retain their recorded choices, and touch LEDs no longer remain steadily lit."
+          "action": "Exit the test and return Home. Compare the rear LEDs with the current CO2 reading using the CO2 Color Map in LED Service, then check Buzzer, LED Indicator and LED Brightness. On V1, also check Touch LED.",
+          "expected_result": "CO2 indication resumes at Mid, matching the displayed reading. LED Indicator remains CO2, LED Brightness remains Mid and Buzzer retains its recorded choice. On V1, Touch LED retains its recorded choice and the touch LEDs no longer remain steadily lit."
         },
         {
-          "action": "Reopen Settings > Hardware Test > Peripheral Test. Deliberately select Fail for Back LED, even though it works. Verify the Touch LED and Buzzer outputs and select Pass. Allow up to five minutes for the sensor checks.",
+          "action": "Reopen Settings > Hardware Test > Peripheral Test. Deliberately select Fail for Back LED, even though it works. Verify and select Pass for the remaining actuator prompts: Touch LED and Buzzer on V1, Buzzer only on V2. Allow up to five minutes for the sensor checks.",
           "expected_result": "Back LED shows FAIL; all other rows show PASS. The overall result is FAIL, the rear LEDs turn red and the alert melody plays."
         },
         {
-          "action": "Exit the test and return Home. Compare the rear LEDs with the current CO2 reading using the CO2 Color Map in LED Service, then check Buzzer, LED Indicator, LED Brightness and Touch LED.",
-          "expected_result": "CO2 indication resumes at Mid, matching the displayed reading. LED Indicator remains CO2, LED Brightness remains Mid, Buzzer and Touch LED retain their recorded choices, and touch LEDs no longer remain steadily lit."
+          "action": "Exit the test and return Home. Compare the rear LEDs with the current CO2 reading using the CO2 Color Map in LED Service, then check Buzzer, LED Indicator and LED Brightness. On V1, also check Touch LED.",
+          "expected_result": "CO2 indication resumes at Mid, matching the displayed reading. LED Indicator remains CO2, LED Brightness remains Mid and Buzzer retains its recorded choice. On V1, Touch LED retains its recorded choice and the touch LEDs no longer remain steadily lit."
         }
       ],
       "cleanup": [
         "Exit the diagnostic, including after interruption.",
-        "Restore the recorded LED Indicator, LED Brightness, Buzzer and Touch LED choices. Confirm them, return Home and record any restoration failure."
+        "Restore the recorded LED Indicator, LED Brightness and Buzzer choices, plus Touch LED on V1. Confirm them, return Home and record any restoration failure."
       ],
       "references": [
         "products/go/docs/hardware_test.md",
@@ -1481,7 +1605,8 @@
       "category": "Diagnostics",
       "sub_category": "GPS",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "No recording or paused tracking session is active.",
@@ -1520,11 +1645,12 @@
     {
       "id": "go.diagnostics.accelerometer-orientation",
       "title": "Accelerometer readings respond to device orientation",
-      "objective": "Verify that physical rotation changes the displayed axes while stationary readings remain valid.",
+      "objective": "Verify that physical rotation changes the displayed axes, stationary readings remain valid, and live readings resume after closing and reopening the test.",
       "category": "Diagnostics",
       "sub_category": "Motion",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "A flat, stable surface."
@@ -1543,6 +1669,14 @@
           "expected_result": "Axis values and signs respond to orientation. In each stationary position, magnitude returns to 850–1150 mg and Result shows PASS."
         },
         {
+          "action": "Tap to exit the test and return Home.",
+          "expected_result": "The selected indicator resumes at its saved brightness (off if brightness is Off or the selected reading is unavailable)."
+        },
+        {
+          "action": "Reopen Settings > Hardware Test > Accelerometer Test. Place the device flat for five seconds, then upright for five seconds without touching the controls.",
+          "expected_result": "Live axis readings resume and change with orientation. In both stationary positions, WHO_AM_I shows 0x33 OK, magnitude is 850–1150 mg and Result shows PASS. Values and labels remain readable."
+        },
+        {
           "action": "Tap to exit, return Home and check the recorded settings.",
           "expected_result": "Settings remain unchanged and the selected indicator resumes at its saved brightness (off if brightness is Off or the selected reading is unavailable)."
         }
@@ -1552,7 +1686,8 @@
         "Confirm the recorded settings; restore any that changed. Return Home and record any restoration failure."
       ],
       "references": [
-        "products/go/docs/hardware_test.md"
+        "products/go/docs/hardware_test.md",
+        "products/go/docs/accel_service.md"
       ]
     },
     {
@@ -1562,7 +1697,8 @@
       "category": "Portable BLE",
       "sub_category": "Pairing",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "All routes, charts, settings, and bonds on this unit are expendable.",
@@ -1607,7 +1743,8 @@
       "category": "Portable BLE",
       "sub_category": "Pairing",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "All routes, charts, settings, and bonds on this unit are expendable.",
@@ -1652,7 +1789,8 @@
       "category": "Portable BLE",
       "sub_category": "Pairing",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "An Android phone with nRF Connect for Mobile and Bluetooth enabled."
@@ -1699,7 +1837,8 @@
       "category": "Tracking & Storage",
       "sub_category": "Route Lifecycle",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Tracking is idle.",
@@ -1756,7 +1895,8 @@
       "category": "Tracking & Storage",
       "sub_category": "Persistence",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Existing temporary chart history is expendable.",
@@ -1798,7 +1938,8 @@
       "category": "Tracking & Storage",
       "sub_category": "Clear Data",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "All routes and chart history on this unit are expendable.",
@@ -1842,7 +1983,8 @@
       "category": "Tracking & Storage",
       "sub_category": "Tracking Status",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Tracking is idle.",
@@ -1883,7 +2025,8 @@
       "category": "Stationary Network",
       "sub_category": "Provisioning",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "All routes, charts, settings and bonds on this unit are expendable.",
@@ -1907,11 +2050,11 @@
         },
         {
           "action": "Enter the test network’s SSID and password. Leave Static IP disabled and select Connect. Observe Go for up to 30 seconds and record the displayed IP address.",
-          "expected_result": "Connecting is followed by Connected! with an IP address, then Home."
+          "expected_result": "Connecting is followed by Connected! with an IP address, then one automatic restart. Go reconnects using saved credentials and reaches Home without reopening setup."
         },
         {
           "action": "Connect the computer to the test network and inspect the router’s connected-device list and DHCP leases.",
-          "expected_result": "Go is connected and has a DHCP lease matching the displayed IP address."
+          "expected_result": "Go is connected and has a DHCP lease; its IP address may change after the automatic restart."
         },
         {
           "action": "Replace <serial> with the recorded serial. Send GET http://airgradient_<serial>.local/api/v1/measures with No Auth, no body and a five-second timeout.",
@@ -1943,7 +2086,8 @@
       "category": "Stationary Network",
       "sub_category": "Provisioning",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "All routes, charts, settings and bonds on this unit are expendable.",
@@ -1967,7 +2111,7 @@
         },
         {
           "action": "Enter the test network’s SSID and password. Open Advanced options, enable Disable cloud upload and Static IP, then enter the supplied IP address, subnet mask, gateway and DNS address. Select Connect and observe Go for up to 30 seconds.",
-          "expected_result": "Connected! shows the configured static IP, followed by Home."
+          "expected_result": "Connected! shows the configured static IP, followed by one automatic restart. Go reconnects at the same address and reaches Home without reopening setup."
         },
         {
           "action": "Connect the computer to the test network. Send GET http://<static-ip>/api/v1/config with No Auth and no body, replacing <static-ip> with the configured address.",
@@ -1993,7 +2137,8 @@
       "category": "Stationary Network",
       "sub_category": "mDNS",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Go has saved credentials for the test Wi-Fi network.",
@@ -2036,7 +2181,8 @@
       "category": "Stationary Network",
       "sub_category": "Reconnect",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Go has saved credentials for the test Wi-Fi network.",
@@ -2078,7 +2224,8 @@
       "category": "Stationary Network",
       "sub_category": "Reconnect",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Go has saved credentials for the test Wi-Fi network.",
@@ -2114,7 +2261,8 @@
       "category": "Stationary Network",
       "sub_category": "Reconnect",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "All routes, charts, settings and bonds on this unit are expendable.",
@@ -2133,7 +2281,7 @@
         },
         {
           "action": "Connect the computer to the exact airgradient- network shown on Go using password cleanair. Open http://192.168.4.1/. Enter A’s SSID and password, leave Static IP disabled and select Connect. Observe Go for up to 30 seconds.",
-          "expected_result": "Connected! shows an IP address, followed by Home with the connected Wi-Fi icon."
+          "expected_result": "Connected! shows an IP address, followed by one automatic restart. Go reconnects using saved credentials and reaches Home with the connected Wi-Fi icon."
         },
         {
           "action": "Hold Power until Powered off is fully displayed, release and wait 10 seconds. Switch A off and B on. Once B’s Wi-Fi network is available, press and release Power on Go. Observe startup for up to 90 seconds. Do not factory-reset Go.",
@@ -2141,7 +2289,7 @@
         },
         {
           "action": "Select Use portal and confirm Yes. Connect the computer to the exact airgradient- network shown on Go using password cleanair, then open http://192.168.4.1/. Enter B’s SSID and password, leave Static IP disabled and select Connect. Observe Go for up to 30 seconds.",
-          "expected_result": "Connected! shows an IP address, followed by Home with the connected Wi-Fi icon."
+          "expected_result": "Connected! shows an IP address, followed by one automatic restart. Go reconnects using saved credentials and reaches Home with the connected Wi-Fi icon."
         },
         {
           "action": "Select Portable mode. Switch A on and B off. Once A’s Wi-Fi network is available, select Stationary mode and allow up to 30 seconds for connection. Connect the computer to A and inspect router A’s connected-device list.",
@@ -2167,7 +2315,8 @@
       "category": "Stationary Network",
       "sub_category": "Cloud",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Go has saved credentials for the test Wi-Fi network.",
@@ -2218,7 +2367,8 @@
       "category": "Stationary Network",
       "sub_category": "Cloud",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Go has saved credentials for the test Wi-Fi network.",
@@ -2279,13 +2429,15 @@
       "category": "Modes & Sleep",
       "sub_category": "Mode Transitions",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Go has saved credentials for the test Wi-Fi network.",
         "The test computer is connected to that network.",
         "Postman or an equivalent GUI API client supporting .local addresses is available.",
-        "An Android phone with nRF Connect and Bluetooth enabled."
+        "An Android phone with nRF Connect and Bluetooth enabled.",
+        "Tracking is idle."
       ],
       "steps": [
         {
@@ -2297,8 +2449,16 @@
           "expected_result": "The read serial matches Go."
         },
         {
+          "action": "Select Main Menu > Start Tracking. Allow up to 10 seconds for the display refresh.",
+          "expected_result": "Home shows the recording dot."
+        },
+        {
           "action": "Keep the Bluetooth connection open and select Stationary mode. Allow up to 30 seconds for Wi-Fi connection. Record Local Server under Settings > Operations, then select Enable and return Home.",
-          "expected_result": "nRF Connect reports disconnection. Go reaches Home with the connected Wi-Fi icon. Local Server is enabled."
+          "expected_result": "nRF Connect reports disconnection. Go reaches Home with the connected Wi-Fi icon and no recording dot. Local Server is enabled."
+        },
+        {
+          "action": "Open Main Menu. Allow up to 10 seconds for the refresh, then return Home.",
+          "expected_result": "Only Exit Menu, Operating Mode and Settings appear, with no blank rows or leftover text."
         },
         {
           "action": "Replace <serial> with the recorded serial. Send GET http://airgradient_<serial>.local/api/v1/measures with No Auth, no body and a five-second timeout. Clear previous scan results in nRF Connect and scan again for 30 seconds.",
@@ -2307,7 +2467,8 @@
       ],
       "cleanup": [
         "Disconnect nRF Connect and return Go Home, including after interruption. Record any failure.",
-        "Restore the recorded Local Server setting under Settings > Operations, including after interruption; record any restoration failure."
+        "Restore the recorded Local Server setting under Settings > Operations, including after interruption; record any restoration failure.",
+        "Stop this case’s session if still active. Leave saved routes intact."
       ],
       "references": [
         "products/go/docs/orchestrator.md",
@@ -2322,7 +2483,8 @@
       "category": "Modes & Sleep",
       "sub_category": "Mode Transitions",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Go has saved credentials for the test Wi-Fi network.",
@@ -2369,7 +2531,8 @@
       "category": "Modes & Sleep",
       "sub_category": "Mode Transitions",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "An Android phone with nRF Connect and Bluetooth enabled.",
@@ -2423,7 +2586,8 @@
       "category": "Modes & Sleep",
       "sub_category": "Mode Transitions",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "An Android phone with nRF Connect and Bluetooth enabled.",
@@ -2454,18 +2618,18 @@
     },
     {
       "id": "go.modes.stationary-offline",
-      "title": "Switching to Energy Saving ends paused tracking and stops local Wi-Fi access",
-      "objective": "Verify a mode change ends a paused session and disables local Wi-Fi access on battery and USB power.",
+      "title": "Switching to Energy Saving stops local Wi-Fi access",
+      "objective": "Verify a mode change disables local Wi-Fi access on battery and USB power.",
       "category": "Modes & Sleep",
       "sub_category": "Mode Transitions",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Go has saved credentials for the test Wi-Fi network.",
         "The test computer is connected to that network.",
         "Postman or an equivalent GUI API client supporting .local addresses is available.",
-        "Tracking is idle.",
         "A USB power source."
       ],
       "steps": [
@@ -2478,24 +2642,19 @@
           "expected_result": "HTTP 200 is returned with the matching serialNumber."
         },
         {
-          "action": "Select Main Menu > Start Tracking, then Tracking > Pause Tracking.",
-          "expected_result": "Home shows the paused indicator."
-        },
-        {
           "action": "Select Energy Saving mode and watch startup for up to one minute.",
-          "expected_result": "Go restarts into Energy Saving. Home has no Wi-Fi icon, recording dot or paused indicator."
+          "expected_result": "Go restarts into Energy Saving. Home has no Wi-Fi icon."
         },
         {
           "action": "Repeat the GET request using the five-second timeout.",
           "expected_result": "Go’s local API is unreachable; no HTTP response is received."
         },
         {
-          "action": "Connect USB power. Select Stationary mode, allowing up to one minute for Home and Wi-Fi connection, then repeat steps 2–5 with USB connected.",
-          "expected_result": "The tracking-indicator and Wi-Fi outcomes are the same. Go remains usable through the mode changes; a restart is not required with USB."
+          "action": "Connect USB power. Select Stationary mode, allowing up to one minute for Home and Wi-Fi connection, then repeat steps 2–4 with USB connected.",
+          "expected_result": "The Wi-Fi outcome is the same. Go remains usable through the mode changes; a restart is not required with USB."
         }
       ],
       "cleanup": [
-        "Stop this case’s session if still active, including after interruption. Leave saved routes intact; the test sessions’ route data is expendable.",
         "Select Stationary, restore the recorded Local Server setting, then return to Energy Saving. Record any restoration failure, including after interruption.",
         "Disconnect USB, return Home and record any failure."
       ],
@@ -2511,7 +2670,8 @@
       "category": "Modes & Sleep",
       "sub_category": "Mode Transitions",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Go has saved credentials for the test Wi-Fi network.",
@@ -2526,7 +2686,7 @@
         },
         {
           "action": "Select Stationary mode and watch startup for up to one minute. Open Main Menu, then Settings > Operations > Local Server. Record its selection, select Enable and return Home.",
-          "expected_result": "Go restarts into Stationary and reaches Home with the connected Wi-Fi icon. Main Menu offers Start Tracking with readable rows and highlighting. Local Server is enabled."
+          "expected_result": "Go restarts into Stationary and reaches Home with the connected Wi-Fi icon. Main Menu has no Tracking row; labels and highlighting are readable. Local Server is enabled."
         },
         {
           "action": "Replace <serial> with the recorded serial. Send GET http://airgradient_<serial>.local/api/v1/measures with No Auth, no body and a five-second timeout.",
@@ -2549,7 +2709,8 @@
       "category": "Modes & Sleep",
       "sub_category": "Mode Persistence",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "An Android phone with nRF Connect and Bluetooth enabled.",
@@ -2597,7 +2758,8 @@
       "category": "Modes & Sleep",
       "sub_category": "Timer Wake",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "A USB data cable.",
@@ -2641,7 +2803,8 @@
       "category": "Modes & Sleep",
       "sub_category": "Timer Wake",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "A phone with Bluetooth enabled and the AirGradient app supporting Energy Saving broadcasts.",
@@ -2675,7 +2838,8 @@
       "category": "Modes & Sleep",
       "sub_category": "Button Wake",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "The saved Energy Saving measurement interval is not a custom value."
@@ -2720,7 +2884,8 @@
       "category": "Manufacturing",
       "sub_category": "Wi-Fi",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "All routes, charts, settings and bonds on this unit are expendable.",
@@ -2751,7 +2916,8 @@
       "category": "Manufacturing",
       "sub_category": "Wi-Fi",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "All routes, charts, settings and bonds on this unit are expendable.",
@@ -2820,7 +2986,8 @@
       "category": "Calibration",
       "sub_category": "CO2 Calibration",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "A unit whose CO2 calibration may be changed.",
@@ -2866,7 +3033,8 @@
       "category": "Reset & Update",
       "sub_category": "Factory Reset",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "All routes, charts, settings and bonds on this unit are expendable.",
@@ -2910,7 +3078,8 @@
       "category": "Reset & Update",
       "sub_category": "Wi-Fi OTA",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Tracking is idle.",
@@ -2920,7 +3089,7 @@
         "Postman or an equivalent GUI API client supporting .local addresses is available.",
         "Access to the registered Go in AirGradient Dashboard.",
         "The installed Go firmware version is available for assignment in the dashboard.",
-        "An approved newer Go firmware version is available for assignment in the dashboard.",
+        "An approved newer Go firmware version supporting the tested board revision is available for assignment in the dashboard.",
         "A USB power source."
       ],
       "steps": [
@@ -2975,7 +3144,8 @@
       "category": "Reset & Update",
       "sub_category": "Wi-Fi OTA",
       "applicability": [
-        "V1"
+        "V1",
+        "V2"
       ],
       "setup": [
         "Tracking is idle.",
@@ -2985,7 +3155,7 @@
         "Postman or an equivalent GUI API client supporting .local addresses is available.",
         "Access to the registered Go in AirGradient Dashboard.",
         "The installed Go firmware version is available for assignment in the dashboard.",
-        "An approved older Go firmware version compatible with the device and the settings checked by this procedure is available for assignment in the dashboard.",
+        "An approved older Go firmware version supporting the tested board revision and the settings checked by this procedure is available for assignment in the dashboard.",
         "A USB power source."
       ],
       "steps": [

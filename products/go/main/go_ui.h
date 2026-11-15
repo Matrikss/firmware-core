@@ -3,6 +3,7 @@
 
 #include <cstdint>
 
+#include "go_board_capabilities.h"
 #include "go_display.h"
 #include "go_melody.h"
 #include "go_settings.h"
@@ -181,6 +182,7 @@ public:
     /// Captive-portal AP password — must match WifiService::Config::ap_password
     /// so the Wi-Fi QR and instruction line agree.
     const char *ap_password = "cleanair";
+    BoardCapabilities capabilities{};
   };
 
   explicit UIManager(const Config &config);
@@ -227,15 +229,19 @@ public:
   /// running a test is not returned Home mid-flow.
   bool is_hardware_test_screen() const;
 
-  /// Show a snackbar message. Duration is armed on the next
-  /// clear_expired_snackbar() call (3 seconds from that point).
+  /// Show a snackbar message. Duration starts when its frame is submitted.
   /// Persistent messages stay on Home and menus; only persistent=true calls
   /// can replace or clear them (text=nullptr clears).
   void show_snackbar(const char *text, bool persistent = false);
   bool snackbar_persistent() const;
+  bool snackbar_pending() const;
 
-  /// Clear snackbar if expired. Called by orchestrator before build_values.
-  void clear_expired_snackbar(uint32_t now_ms);
+  /// Arm a pending transient message after successful display submission.
+  /// Returns true only when a new deadline was armed.
+  bool mark_snackbar_submitted(uint32_t now_ms);
+
+  /// Clear an expired message; pending submissions do not expire.
+  bool clear_expired_snackbar(uint32_t now_ms);
 
   /// Synchronize internal setting state from persisted GoSettings.
   /// Called by the orchestrator once after loading settings from NVS.
@@ -395,6 +401,8 @@ private:
   // Snackbar
   char _snackbar_text[48] = {};
   uint32_t _snackbar_deadline_ms = 0;
+  bool _snackbar_pending = false;
+  bool _snackbar_persistent = false;
 
   // BLE pairing
   uint32_t _ble_passkey = 0;
@@ -483,6 +491,7 @@ private:
   void move_about(int delta);
   void move_confirm(int delta);
   void move_hardware_test(int delta);
+  uint8_t hardware_test_row_count() const;
   void move_provisioning(int delta);
   void move_provisioning_confirm(int delta);
   void browse_metric(int delta);

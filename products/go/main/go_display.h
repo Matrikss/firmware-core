@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "go_display_geometry.h"
+#include "go_display_refresh.h"
 #include "go_types.h"
 #include "measures_types.h"
 #include "rtos.h"
@@ -269,18 +270,12 @@ struct RtcDisplaySnapshot {
 
 #ifndef TEST_HOST
 
+#include "airgradient_gpio.h"
 #include <driver/spi_master.h>
 
 extern "C" {
 #include "u8g2.h"
 }
-
-/// Display refresh tier — controls how the e-paper controller updates.
-enum class RefreshMode : uint8_t {
-  Full,    ///< Full GC waveform (flash). Resets basemap in both RAM planes.
-  Fast,    ///< Full-screen differential (no flash). Writes full frame to RAM 0x24.
-  Partial, ///< Body-only differential (no flash). Writes body region to RAM 0x24.
-};
 
 class DisplayService {
 public:
@@ -291,6 +286,9 @@ public:
     int pin_dc;
     int pin_rst;
     int pin_busy;
+    // Optional borrowed HAL; the board configures pin_dc before init().
+    // nullptr uses native GPIO, configured by the display driver.
+    const gpio::Hal *dc_gpio = nullptr;
     int clock_hz = 4000000;
 
     // Worker task
@@ -298,7 +296,8 @@ public:
     uint8_t task_priority = 4;
 
     // Refresh limits
-    uint8_t max_partial_ops = 100;
+    uint8_t max_partial_ops = DisplayRefreshPolicy::DEFAULT_MAX_PARTIAL_OPS;
+    uint32_t expensive_refresh_cooldown_ms = DisplayRefreshPolicy::DEFAULT_COOLDOWN_MS;
   };
 
   explicit DisplayService(const Config &config);
@@ -357,9 +356,9 @@ private:
 
   // Refresh state
   DisplayValues _prev_values;
-  uint8_t _diff_count = 0;
+  DisplayRefreshPolicy _refresh_policy;
   RefreshMode _pending_mode = RefreshMode::Full;
-  bool _defer_header_check = false;
+  bool _pending_full_canvas_partial = false;
   bool _menu_exited = false;
 
   // Worker task
@@ -439,6 +438,7 @@ public:
     spy_worker_busy = false;
     spy_last_screen = values.screen;
     spy_last_update_has_snackbar = values.snackbar_text != nullptr;
+    spy_last_update_locked = values.locked;
     return true;
   }
 
@@ -462,6 +462,7 @@ public:
   inline static bool spy_last_init_deferred = false;
   inline static bool spy_last_update_wait = false;
   inline static bool spy_last_update_has_snackbar = false;
+  inline static bool spy_last_update_locked = true;
   inline static bool spy_worker_busy = false;
   inline static void (*spy_on_init)(const DisplayValues &) = nullptr;
 };

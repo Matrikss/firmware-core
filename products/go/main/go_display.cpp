@@ -81,6 +81,8 @@ constexpr int WIDTH_PX = 128;
 constexpr int HEIGHT_PX = 250;
 constexpr int FRAME_BYTES = (WIDTH_PX * HEIGHT_PX) / 8; // 4000
 constexpr size_t TX_BOUNCE_BYTES = 4096;
+constexpr uint8_t RAM_CURRENT = 0x24;
+constexpr uint8_t RAM_PREVIOUS = 0x26;
 
 // Error-propagation macro for driver functions returning esp_err_t.
 // Intentionally unscoped so it works in non-void-returning functions.
@@ -99,7 +101,8 @@ struct DriverState {
   int spi_clock_hz = 4000000;
 
   gpio_num_t pin_cs = GPIO_NUM_NC;
-  gpio_num_t pin_dc = GPIO_NUM_NC;
+  int pin_dc = gpio::INVALID_PIN;
+  const gpio::Hal *dc_gpio = nullptr;
   gpio_num_t pin_rst = GPIO_NUM_NC;
   gpio_num_t pin_busy = GPIO_NUM_NC;
 
@@ -112,7 +115,15 @@ DriverState g_driver;
 // --- Low-level GPIO helpers ---
 
 inline void set_cs(int level) { gpio_set_level(g_driver.pin_cs, level); }
-inline void set_dc(int level) { gpio_set_level(g_driver.pin_dc, level); }
+inline esp_err_t set_dc(int level) {
+  if (g_driver.dc_gpio != nullptr) {
+    if (!g_driver.dc_gpio->set_level(g_driver.pin_dc, level)) {
+      return ESP_FAIL;
+    }
+    return ESP_OK;
+  }
+  return gpio_set_level(static_cast<gpio_num_t>(g_driver.pin_dc), level);
+}
 inline void set_rst(int level) { gpio_set_level(g_driver.pin_rst, level); }
 
 void delay_ms(uint32_t ms) {
@@ -159,24 +170,24 @@ esp_err_t spi_write_bulk(const uint8_t *data, size_t len) {
 // --- SSD1680 command/data protocol ---
 
 esp_err_t write_cmd(uint8_t command) {
+  DISP_RETURN_ON_ERR(set_dc(0));
   set_cs(0);
-  set_dc(0);
   const esp_err_t err = spi_write_byte(command);
   set_cs(1);
   return err;
 }
 
 esp_err_t write_data(uint8_t data) {
+  DISP_RETURN_ON_ERR(set_dc(1));
   set_cs(0);
-  set_dc(1);
   const esp_err_t err = spi_write_byte(data);
   set_cs(1);
   return err;
 }
 
 esp_err_t write_data_bytes(const uint8_t *data, size_t len) {
+  DISP_RETURN_ON_ERR(set_dc(1));
   set_cs(0);
-  set_dc(1);
   const esp_err_t err = spi_write_bulk(data, len);
   set_cs(1);
   return err;
@@ -191,13 +202,17 @@ esp_err_t driver_init(const DisplayService::Config &cfg) {
   g_driver.spi_host = cfg.spi_host;
   g_driver.spi_clock_hz = cfg.clock_hz;
   g_driver.pin_cs = static_cast<gpio_num_t>(cfg.pin_cs);
-  g_driver.pin_dc = static_cast<gpio_num_t>(cfg.pin_dc);
+  g_driver.pin_dc = cfg.pin_dc;
+  g_driver.dc_gpio = cfg.dc_gpio;
   g_driver.pin_rst = static_cast<gpio_num_t>(cfg.pin_rst);
   g_driver.pin_busy = static_cast<gpio_num_t>(cfg.pin_busy);
 
-  // Configure output GPIOs (CS, DC, RST)
+  // Configure native outputs. Expanded D/C is already configured by the board.
   gpio_config_t out_cfg = {};
-  out_cfg.pin_bit_mask = (1ULL << cfg.pin_cs) | (1ULL << cfg.pin_dc) | (1ULL << cfg.pin_rst);
+  out_cfg.pin_bit_mask = (1ULL << cfg.pin_cs) | (1ULL << cfg.pin_rst);
+  if (cfg.dc_gpio == nullptr) {
+    out_cfg.pin_bit_mask |= 1ULL << cfg.pin_dc;
+  }
   out_cfg.mode = GPIO_MODE_OUTPUT;
   out_cfg.pull_up_en = GPIO_PULLUP_DISABLE;
   out_cfg.pull_down_en = GPIO_PULLDOWN_DISABLE;
@@ -214,7 +229,7 @@ esp_err_t driver_init(const DisplayService::Config &cfg) {
   DISP_RETURN_ON_ERR(gpio_config(&in_cfg));
 
   set_cs(1);
-  set_dc(1);
+  DISP_RETURN_ON_ERR(set_dc(1));
   set_rst(1);
 
   // Attach SPI device (CS managed manually, not by ESP-IDF driver)
@@ -361,11 +376,11 @@ esp_err_t driver_part_begin() {
   return ESP_OK;
 }
 
-// Write pixel data to a rectangular region for partial update.
+// Write pixel data to a rectangular region of the selected RAM plane.
 // Coordinates are logical screen coordinates (Y=0 at top).
-esp_err_t driver_part_write_region(unsigned int x_start_px, unsigned int y_start_px,
-                                   const uint8_t *data, unsigned int height_px,
-                                   unsigned int width_px) {
+esp_err_t driver_part_write_region(uint8_t ram_plane, unsigned int x_start_px,
+                                   unsigned int y_start_px, const uint8_t *data,
+                                   unsigned int height_px, unsigned int width_px) {
   const unsigned int x_start = x_start_px / 8;
   const unsigned int x_end = x_start + width_px / 8 - 1;
 
@@ -392,8 +407,7 @@ esp_err_t driver_part_write_region(unsigned int x_start_px, unsigned int y_start
   DISP_RETURN_ON_ERR(write_data(static_cast<uint8_t>(y_start % 256)));
   DISP_RETURN_ON_ERR(write_data(static_cast<uint8_t>(y_start / 256)));
 
-  // Write pixel data (new RAM plane only; partial uses diff against basemap)
-  DISP_RETURN_ON_ERR(write_cmd(0x24));
+  DISP_RETURN_ON_ERR(write_cmd(ram_plane));
   return write_data_bytes(data, static_cast<size_t>(height_px) * width_px / 8);
 }
 
@@ -404,6 +418,19 @@ esp_err_t driver_part_commit() {
   DISP_RETURN_ON_ERR(write_cmd(0x20));
   wait_busy_low();
   return ESP_OK;
+}
+
+esp_err_t driver_part_update(unsigned int x_start_px, unsigned int y_start_px, const uint8_t *data,
+                             unsigned int height_px, unsigned int width_px) {
+  DISP_RETURN_ON_ERR(
+      driver_part_write_region(RAM_CURRENT, x_start_px, y_start_px, data, height_px, width_px));
+  DISP_RETURN_ON_ERR(driver_part_commit());
+
+  // After BUSY clears, synchronize both planes so later body-only updates
+  // cannot bring back a header from before this refresh. No extra waveform.
+  DISP_RETURN_ON_ERR(
+      driver_part_write_region(RAM_PREVIOUS, x_start_px, y_start_px, data, height_px, width_px));
+  return driver_part_write_region(RAM_CURRENT, x_start_px, y_start_px, data, height_px, width_px);
 }
 
 // ---------------------------------------------------------------------------
@@ -673,7 +700,7 @@ bool is_shutdown_screen(Screen screen) {
 bool is_navigable(Screen screen) { return is_home_like(screen) || is_list_screen(screen); }
 
 // A "menu-navigation" screen is any navigable screen except Home.
-// Transitions where either side is menu-navigation always use Partial.
+// Menu transitions use body-only Partial unless a lock change returns Home.
 bool is_menu_navigation_screen(Screen screen) {
   return is_navigable(screen) && screen != Screen::Home;
 }
@@ -1251,9 +1278,8 @@ void draw_list_rows(u8g2_t *u, const DisplayValues &v, bool full_screen) {
 // ===========================================================================
 
 DisplayService::DisplayService(const Config &config)
-    : _config(config), _u8g2{}, _render_buf{}, _prev_values{}, _diff_count(0),
-      _pending_mode(RefreshMode::Full), _task_handle(nullptr), _running(false),
-      _worker_busy(false) {}
+    : _config(config), _u8g2{}, _render_buf{}, _prev_values{}, _pending_mode(RefreshMode::Full),
+      _task_handle(nullptr), _running(false), _worker_busy(false) {}
 
 bool DisplayService::init(const DisplayValues &initial, bool defer_refresh) {
   esp_err_t err = driver_init(_config);
@@ -1289,7 +1315,7 @@ bool DisplayService::init(const DisplayValues &initial, bool defer_refresh) {
       ESP_LOGE(TAG, "initial refresh failed: %s", esp_err_to_name(err));
       return false;
     }
-    _diff_count = 0;
+    _refresh_policy.completed(RefreshMode::Full, static_cast<uint32_t>(RTOS::get_time_ms()));
   } else {
     // Deferred refresh: render is already in _render_buf. Reserve it for the
     // worker, then signal the initial full refresh. Returns in ~10 ms.
@@ -1297,10 +1323,7 @@ bool DisplayService::init(const DisplayValues &initial, bool defer_refresh) {
     // that tries to transmit will block until the worker releases the bus.
     _pending_mode = RefreshMode::Full;
     _worker_busy.store(true); // cleared by worker when refresh completes
-    // The _prev_values header now reflects the snapshot-based initial frame,
-    // which may differ from the live runtime state the orchestrator produces.
-    // Skip the header-change penalty on the first update()
-    _defer_header_check = true;
+    // Completion starts the same cooldown as synchronous initialization.
   }
 
   // Start async worker task.
@@ -1334,8 +1357,7 @@ bool DisplayService::update(const DisplayValues &values, bool wait) {
 
   const bool same_list_screen =
       is_list_screen(_prev_values.screen) && _prev_values.screen == values.screen;
-  const bool header_changed = _is_header_changed(values, _prev_values) && !_defer_header_check;
-  _defer_header_check = false;
+  const bool header_changed = _is_header_changed(values, _prev_values);
   const bool both_navigable = is_navigable(_prev_values.screen) && is_navigable(values.screen);
   const bool can_partial = (both_navigable && !header_changed) || same_list_screen;
 
@@ -1346,6 +1368,7 @@ bool DisplayService::update(const DisplayValues &values, bool wait) {
   const bool prev_in_session = is_session_screen(_prev_values.screen);
   const bool next_in_session = is_session_screen(values.screen);
   const bool crossing_session_boundary = prev_in_session != next_in_session;
+  _pending_full_canvas_partial = next_in_session;
 
   _render_frame(values);
 
@@ -1361,10 +1384,8 @@ bool DisplayService::update(const DisplayValues &values, bool wait) {
     _pending_mode = RefreshMode::Partial;
     _menu_exited = true;
   } else if (crossing_session_boundary) {
-    // Full refresh on the session boundary.  Reset the partial-op counter
-    // so the next session's partials start with a fresh budget.
+    // Mandatory Full on the session boundary, regardless of the cooldown.
     _pending_mode = RefreshMode::Full;
-    _diff_count = 0;
     _menu_exited = false;
   } else if (prev_in_session && next_in_session) {
     // Intra-session transitions (Info text update, Provisioning status
@@ -1373,10 +1394,19 @@ bool DisplayService::update(const DisplayValues &values, bool wait) {
     // consulted inside the session.
     _pending_mode = RefreshMode::Partial;
     _menu_exited = false;
+  } else if (values.screen == Screen::Home &&
+             (_prev_values.screen == Screen::Home || values.locked != _prev_values.locked)) {
+    // Locking from a menu must paint the header and snackbar together.
+    // Apply the Home cooldown before the body-only menu-navigation rule.
+    const auto decision = _refresh_policy.home_update(
+        header_changed, _menu_exited, static_cast<uint32_t>(RTOS::get_time_ms()),
+        _config.max_partial_ops, _config.expensive_refresh_cooldown_ms);
+    _pending_mode = decision.mode;
+    _pending_full_canvas_partial = decision.full_canvas_partial;
   } else if (menu_navigation) {
     _pending_mode = RefreshMode::Partial;
     _menu_exited = true;
-  } else if (_diff_count >= _config.max_partial_ops) {
+  } else if (_refresh_policy.differential_ops() >= _config.max_partial_ops) {
     _pending_mode = RefreshMode::Full;
   } else if (_menu_exited) {
     _pending_mode = RefreshMode::Fast;
@@ -1386,7 +1416,7 @@ bool DisplayService::update(const DisplayValues &values, bool wait) {
     _pending_mode = RefreshMode::Fast;
   }
 
-  // Clear flag after any full-screen refresh (Full or Fast rewrites everything).
+  // Keep menu cleanup due through cooldown partials; only Full/Fast satisfies it.
   if (_pending_mode != RefreshMode::Partial) {
     _menu_exited = false;
   }
@@ -1415,8 +1445,9 @@ void DisplayService::update_sync(const DisplayValues &values) {
 
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "sync update failed: %s", esp_err_to_name(err));
+  } else {
+    _refresh_policy.completed(RefreshMode::Full, static_cast<uint32_t>(RTOS::get_time_ms()));
   }
-  _diff_count = 0;
   _prev_values = values;
   _release_framebuffer();
 }
@@ -1445,8 +1476,9 @@ void DisplayService::clear() {
 
   if (err != ESP_OK) {
     ESP_LOGE(TAG, "clear failed: %s", esp_err_to_name(err));
+  } else {
+    _refresh_policy.completed(RefreshMode::Full, static_cast<uint32_t>(RTOS::get_time_ms()));
   }
-  _diff_count = 0;
   _release_framebuffer();
 }
 
@@ -1668,7 +1700,7 @@ void DisplayService::_draw_status_bar(const DisplayValues &v) {
     u8g2_SetFont(&_u8g2, u8g2_font_siji_t_6x10);
 
     // Show plug icon left of battery when plugged in but not actively
-    // charging (e.g. full-charge pause, charge termination done).
+    // charging (e.g. charge termination or a temperature inhibit).
     if (v.is_plugged_in && !v.is_battery_charging) {
       u8g2_DrawGlyph(&_u8g2, BATTERY_X - 10 - ICON_GAP, STATUS_BASELINE_Y + 1, PLUG_GLYPH);
     }
@@ -2401,7 +2433,6 @@ void DisplayService::_worker_loop() {
       err = driver_hw_init_full();
       if (err == ESP_OK)
         err = driver_set_basemap(_render_buf);
-      _diff_count = 0;
       break;
 
     case RefreshMode::Fast:
@@ -2410,32 +2441,24 @@ void DisplayService::_worker_loop() {
         err = driver_fast_write(_render_buf);
       if (err == ESP_OK)
         err = driver_fast_commit();
-      if (_diff_count < UINT8_MAX) {
-        _diff_count++;
-      }
       break;
 
     case RefreshMode::Partial:
       err = driver_part_begin();
       if (err == ESP_OK) {
-        // Full-canvas session screens own the title region (y=0..17), so a
-        // body-only partial would leave prior pixels there. Everything else
-        // stays body-only.
-        const auto region =
-            go_display_geometry::partial_region(is_session_screen(_prev_values.screen));
-        err = driver_part_write_region(0, region.y, _render_buf + region.byte_offset, region.height,
-                                       SCREEN_W);
-      }
-      if (err == ESP_OK)
-        err = driver_part_commit();
-      if (_diff_count < UINT8_MAX) {
-        _diff_count++;
+        // Session screens and Home header changes during cooldown include
+        // the title region. Ordinary body updates retain the smaller span.
+        const auto region = go_display_geometry::partial_region(_pending_full_canvas_partial);
+        err = driver_part_update(0, region.y, _render_buf + region.byte_offset, region.height,
+                                 SCREEN_W);
       }
       break;
     }
 
     if (err != ESP_OK) {
       ESP_LOGE(TAG, "worker: refresh failed: %s", esp_err_to_name(err));
+    } else {
+      _refresh_policy.completed(_pending_mode, static_cast<uint32_t>(RTOS::get_time_ms()));
     }
 
     driver_bus_release();

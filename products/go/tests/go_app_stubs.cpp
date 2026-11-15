@@ -87,6 +87,9 @@ std::function<void()> on_gps_sleep_request;
 // --- InputService ---
 bool input_started = false;
 bool input_stopped = false;
+InputService::Config input_config{};
+
+UIManager::Config ui_config{};
 
 // --- StorageService ---
 bool cache_measurement_called = false;
@@ -218,6 +221,8 @@ void reset() {
 
   input_started = false;
   input_stopped = false;
+  input_config = {};
+  ui_config = {};
 
   cache_measurement_called = false;
   last_cached_measurement = MeasuresAGo{};
@@ -507,7 +512,9 @@ void GpsService::set_aiding_data(const GpsAidingData & /*data*/) {}
 
 InputService::InputService(CapTouchSensor &touch, const gpio::Hal &gpio,
                            RtosQueueHandle event_queue, const Config &config)
-    : _touch(touch), _gpio(gpio), _event_queue(event_queue), _config(config) {}
+    : _touch(touch), _gpio(gpio), _event_queue(event_queue), _config(config) {
+  test_spy::input_config = config;
+}
 
 InputService::~InputService() = default;
 
@@ -982,7 +989,7 @@ void OtaService::teardown_ble() {}
 
 #include "go_ui.h"
 
-UIManager::UIManager(const Config & /*config*/) {}
+UIManager::UIManager(const Config &config) { test_spy::ui_config = config; }
 
 UIActionResult UIManager::handle_input(InputSource /*source*/, InputType /*type*/) { return {}; }
 
@@ -992,7 +999,7 @@ void UIManager::set_screen(Screen /*screen*/) {}
 Screen UIManager::current_screen() const { return Screen::Home; }
 bool UIManager::is_on_menu_screen() const { return false; }
 void UIManager::show_snackbar(const char * /*text*/, bool /*persistent*/) {}
-void UIManager::clear_expired_snackbar(uint32_t /*now_ms*/) {}
+bool UIManager::clear_expired_snackbar(uint32_t /*now_ms*/) { return false; }
 void UIManager::sync_settings(const GoSettings & /*settings*/) {}
 void UIManager::apply_to_settings(GoSettings & /*settings*/) const {}
 void UIManager::reset_to_home() {}

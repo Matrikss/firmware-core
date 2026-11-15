@@ -123,14 +123,10 @@ static constexpr uint8_t HW_TEST_PERIPHERAL = 2;
 static constexpr uint8_t HW_TEST_GPS = 3;
 static constexpr uint8_t HW_TEST_ACCEL = 4;
 static constexpr uint8_t HW_TEST_FG_LEARNING = 5;
-static constexpr uint8_t HW_TEST_PLAY_MELODY = 6;
 static constexpr uint8_t HW_TEST_TOTAL = 7;
 
 /// Visible content items per page (excluding Exit/Back header rows).
 static constexpr uint8_t PAGE_SIZE = 8;
-
-/// Sentinel deadline: snackbar was just shown, not yet armed.
-static constexpr uint32_t SNACKBAR_PENDING = UINT32_MAX;
 
 // Indexed by the persisted Metric enum, including the no-selection dashboard.
 static const char *const CHART_OPTIONS[] = {"None", "PM2.5", "CO2",      "Temperature", "Humidity",
@@ -523,33 +519,34 @@ void UIManager::show_snackbar(const char *text, bool persistent) {
   }
   if (text == nullptr) {
     _snackbar_text[0] = '\0';
-    _snackbar_deadline_ms = 0;
-    return;
+  } else {
+    (void)snprintf(_snackbar_text, sizeof(_snackbar_text), "%s", text);
   }
-  (void)snprintf(_snackbar_text, sizeof(_snackbar_text), "%s", text);
-  _snackbar_deadline_ms = persistent ? 0 : SNACKBAR_PENDING;
+  _snackbar_deadline_ms = 0;
+  _snackbar_pending = snackbar_active() && !persistent;
+  _snackbar_persistent = snackbar_active() && persistent;
 }
 
-bool UIManager::snackbar_persistent() const {
-  return _snackbar_text[0] != '\0' && _snackbar_deadline_ms == 0;
+bool UIManager::snackbar_persistent() const { return _snackbar_persistent; }
+
+bool UIManager::snackbar_pending() const { return _snackbar_pending; }
+
+bool UIManager::mark_snackbar_submitted(uint32_t now_ms) {
+  if (!_snackbar_pending) {
+    return false;
+  }
+  _snackbar_pending = false;
+  _snackbar_deadline_ms = now_ms + SNACKBAR_DURATION_MS;
+  return true;
 }
 
-void UIManager::clear_expired_snackbar(uint32_t now_ms) {
-  if (_snackbar_text[0] == '\0') {
-    return;
+bool UIManager::clear_expired_snackbar(uint32_t now_ms) {
+  if (snackbar_active() && !_snackbar_pending && !_snackbar_persistent &&
+      static_cast<int32_t>(_snackbar_deadline_ms - now_ms) <= 0) {
+    show_snackbar(nullptr);
+    return true;
   }
-
-  // Arm the deadline on first clear call after show_snackbar.
-  if (_snackbar_deadline_ms == SNACKBAR_PENDING) {
-    _snackbar_deadline_ms = now_ms + SNACKBAR_DURATION_MS;
-    return;
-  }
-
-  // Check expiry (wraparound-safe).
-  if (_snackbar_deadline_ms != 0 && (int32_t)(_snackbar_deadline_ms - now_ms) <= 0) {
-    _snackbar_text[0] = '\0';
-    _snackbar_deadline_ms = 0;
-  }
+  return false;
 }
 
 void UIManager::sync_settings(const GoSettings &s) {
@@ -561,7 +558,7 @@ void UIManager::sync_settings(const GoSettings &s) {
   _setting_measure_interval_seconds = s.measure_interval_seconds;
   _setting_energy_saving_measure_interval_seconds = s.energy_saving_measure_interval_seconds;
   _setting_mode = s.operating_mode;
-  if (_setting_mode == OperatingMode::Offline && _menu_index == MENU_TRACKING) {
+  if (_setting_mode != OperatingMode::Portable && _menu_index == MENU_TRACKING) {
     _menu_index = MENU_MODE;
   }
   if (!display_temp_hum_for_interval(setting_measure_interval_seconds()) &&
@@ -818,7 +815,7 @@ void UIManager::navigate_back() {
     break;
   case Screen::TrackingMenu:
     _screen = Screen::MainMenu;
-    _menu_index = _setting_mode == OperatingMode::Offline ? MENU_MODE : MENU_TRACKING;
+    _menu_index = _setting_mode != OperatingMode::Portable ? MENU_MODE : MENU_TRACKING;
     break;
   case Screen::TrackingStatus:
     _screen = Screen::TrackingMenu;
@@ -962,7 +959,7 @@ void UIManager::move_menu(int delta) {
   // Keep action indices stable while skipping the hidden tracking row.
   do {
     _menu_index = (uint8_t)wrap((int)_menu_index + delta, MAIN_MENU_TOTAL);
-  } while (_setting_mode == OperatingMode::Offline && _menu_index == MENU_TRACKING);
+  } while (_setting_mode != OperatingMode::Portable && _menu_index == MENU_TRACKING);
 }
 
 void UIManager::move_settings(int delta) {
@@ -995,7 +992,15 @@ void UIManager::move_confirm(int delta) {
 
 void UIManager::move_hardware_test(int delta) {
   // Circular navigation across all submenu rows.
-  _hardware_test_index = (uint8_t)wrap((int)_hardware_test_index + delta, HW_TEST_TOTAL);
+  _hardware_test_index =
+      (uint8_t)wrap((int)_hardware_test_index + delta, hardware_test_row_count());
+}
+
+uint8_t UIManager::hardware_test_row_count() const {
+  if (_config.capabilities.supports(BoardFeature::BatteryCalibration)) {
+    return HW_TEST_TOTAL;
+  }
+  return HW_TEST_TOTAL - 1;
 }
 
 void UIManager::browse_metric(int delta) {
@@ -1037,6 +1042,9 @@ const UIManager::SettingId *UIManager::group_items(Screen screen, uint8_t &count
   }
   if (screen == Screen::DisplayTouch) {
     count = sizeof(DISPLAY_TOUCH) / sizeof(DISPLAY_TOUCH[0]);
+    if (!_config.capabilities.supports(BoardFeature::TouchLed)) {
+      --count; // Touch LED is the final item.
+    }
     return DISPLAY_TOUCH;
   }
   count = 0;
@@ -1265,7 +1273,7 @@ UIActionResult UIManager::dispatch_menu(InputSource source, InputType type) {
       go_home();
       break;
     case MENU_TRACKING:
-      if (_setting_mode == OperatingMode::Offline) {
+      if (_setting_mode != OperatingMode::Portable) {
         break;
       }
       if (tracking_session_active(_tracking_state)) {
@@ -1625,10 +1633,11 @@ UIActionResult UIManager::dispatch_hardware_test(InputSource source, InputType t
       // Accel Test → open the live screen (orchestrator polls + classifies).
       open_accel_test();
       result.action = UIAction::OpenAccelTest;
-    } else if (_hardware_test_index == HW_TEST_FG_LEARNING) {
+    } else if (_config.capabilities.supports(BoardFeature::BatteryCalibration) &&
+               _hardware_test_index == HW_TEST_FG_LEARNING) {
       // FG Learning → strong confirm dialog (Back/No return here).
       open_confirm(SettingId::FgLearning);
-    } else if (_hardware_test_index == HW_TEST_PLAY_MELODY) {
+    } else if (_hardware_test_index == hardware_test_row_count() - 1) {
       open_settings_choice(SettingId::PlayMelody);
     }
     break;
@@ -1714,7 +1723,7 @@ void UIManager::sync_tracking_state(TrackingState state) {
       (_screen == Screen::TrackingMenu || _screen == Screen::TrackingStatus)) {
     // A finished session has no Tracking parent menu to return to.
     _screen = Screen::MainMenu;
-    _menu_index = _setting_mode == OperatingMode::Offline ? MENU_MODE : MENU_TRACKING;
+    _menu_index = _setting_mode != OperatingMode::Portable ? MENU_MODE : MENU_TRACKING;
   }
 }
 
@@ -1866,7 +1875,7 @@ void UIManager::populate_tracking_status_rows(DisplayValues &v, const BuildConte
 }
 
 void UIManager::populate_menu_rows(DisplayValues &v) const {
-  const bool hide_tracking = _setting_mode == OperatingMode::Offline;
+  const bool hide_tracking = _setting_mode != OperatingMode::Portable;
   uint8_t row = 0;
   copy_row(v, row++, "Exit Menu", false);
   if (!hide_tracking) {
@@ -2156,9 +2165,11 @@ void UIManager::populate_hardware_test_rows(DisplayValues &v) const {
   copy_row(v, HW_TEST_PERIPHERAL, "Peripheral Test", false);
   copy_row(v, HW_TEST_GPS, "GPS Test", false);
   copy_row(v, HW_TEST_ACCEL, "Accelerometer Test", false);
-  copy_row(v, HW_TEST_FG_LEARNING, "Battery Calibration", false);
-  copy_row(v, HW_TEST_PLAY_MELODY, "Play Melody", false);
-  v.row_count = HW_TEST_TOTAL;
+  if (_config.capabilities.supports(BoardFeature::BatteryCalibration)) {
+    copy_row(v, HW_TEST_FG_LEARNING, "Battery Calibration", false);
+  }
+  v.row_count = hardware_test_row_count();
+  copy_row(v, v.row_count - 1, "Play Melody", false);
   v.selected_row = _hardware_test_index;
 }
 
@@ -2190,15 +2201,18 @@ void UIManager::populate_peripheral_test_rows(DisplayValues &v) const {
       (void)snprintf(buf, sizeof(buf), "%s: %s", name, pass ? "PASS" : "FAIL");
       copy_row(v, i, buf, false);
     };
-    row(1, "Back LED", pv.back_led);
-    row(2, "Touch LED", pv.touch_led);
-    row(3, "Buzzer", pv.buzzer);
-    row(4, "Temp/Hum", pv.temp_hum);
-    row(5, "CO2", pv.co2);
-    row(6, "PM", pv.pm);
-    row(7, "TVOC/NOx", pv.tvoc_nox);
-    row(8, "Pressure", pv.pressure);
-    v.row_count = 9;
+    uint8_t next_row = 1;
+    row(next_row++, "Back LED", pv.back_led);
+    if (_config.capabilities.supports(BoardFeature::TouchLed)) {
+      row(next_row++, "Touch LED", pv.touch_led);
+    }
+    row(next_row++, "Buzzer", pv.buzzer);
+    row(next_row++, "Temp/Hum", pv.temp_hum);
+    row(next_row++, "CO2", pv.co2);
+    row(next_row++, "PM", pv.pm);
+    row(next_row++, "TVOC/NOx", pv.tvoc_nox);
+    row(next_row++, "Pressure", pv.pressure);
+    v.row_count = next_row;
     v.selected_row = 0; // header disabled; any tap exits
     break;
   }

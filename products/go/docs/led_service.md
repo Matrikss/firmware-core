@@ -39,6 +39,8 @@ effects such as blink, breathe, fade, chase, and sequenced animations.
 | `queue_depth` | `uint8_t` | 8 | Command queue capacity |
 | `touch_flash_ms` | `uint32_t` | 120 | Touch flash duration |
 | `frame_interval_ms` | `uint32_t` | 30 | Frame tick interval (~33 fps) |
+| `back_channels` / `back_channel_count` | Array / `uint8_t` | Zero-filled / `0` | Up to five populated RGB groups, in animation order |
+| `touch_channels` / `touch_channel_count` | Array / `uint8_t` | Zero-filled / `0` | Up to three RGB groups in Select/Left/Right order; zero disables output |
 
 ### Lifecycle
 
@@ -51,12 +53,12 @@ effects such as blink, breathe, fade, chase, and sequenced animations.
 
 | Method | Purpose |
 |---|---|
-| `back_solid(color)` | All 5 back LEDs at `color`. Static. |
+| `back_solid(color)` | All configured back LEDs at `color`. Static. |
 | `back_blink(color, period_ms)` | Toggle on/off at `period_ms`. Looping. |
 | `back_breathe(color, period_ms)` | Cosine ramp between 100% and 0%. Looping. |
 | `back_fade_to(color, duration_ms)` | Linear interpolate from current color. One-shot. |
 | `back_chase(color, step_ms)` | Sequential fill, one LED per `step_ms`. One-shot. |
-| `back_off()` | All 5 back LEDs off. Static. |
+| `back_off()` | All configured back LEDs off. Static. |
 | `back_set_brightness(b)` | Scale factor: Off=0, Dim=64, Mid=128, Bright=255. |
 | `back_play(steps, count)` | Play a transient sequence of up to 6 sub-effects with auto-restore. |
 | `back_animate(animation)` | Play a predefined `BackAnimation` (resolves to `back_play`). |
@@ -72,7 +74,22 @@ effects such as blink, breathe, fade, chase, and sequenced animations.
 | `touch_set_all(on)` | Light (or clear) all three pads steadily at the current intensity, with no auto-off. Used by the hardware peripheral test. |
 | `touch_set_intensity(i)` | Off/Dim/Bright. Off suppresses all flashes. |
 
-## LED Groups and Channel Map
+## LED Groups And Channel Map
+
+The board supplies both layouts. Each number is a blue-channel base; green
+and red use the next two LP5036 outputs.
+
+| Board | Back Channels | Touch Channels (Select / Left / Right) |
+|---|---|---|
+| V1 | `6, 12, 15, 18, 24` | `27, 3, 0` |
+| V2 | `0, 3, 6, 9` | None |
+
+V2's four RGB LEDs all belong to the back group. Touch LED commands do not
+enqueue work or write outputs on V2. Chase rendering and duration use the
+configured count (`count × step_ms`). V2 uses LED1–LED4 order; physical animation
+order still requires hardware confirmation.
+
+V1 wiring:
 
 | Logical LED | LP5036 Channel(s) | Group |
 |---|---|---|
@@ -124,8 +141,8 @@ Brightness Off preserves the selection and logical color for later use.
 ### Composite LED Test
 
 The orchestrator provides a blocking diagnostic that exercises every mapped
-LED group. All three touch LEDs remain bright while
-the five back LEDs show red, green, and blue for one second each. After three
+LED group. Back LEDs show red, green, and blue for one second each: five on V1,
+four on V2. V1's three touch LEDs remain bright during the test. After three
 seconds, the orchestrator restores the configured group levels and the latest
 valid selected indicator color, or clears the back LEDs when its reading is invalid.
 
@@ -217,7 +234,7 @@ back_update_aqi(pm25);          // kills sequence immediately, clears saved stat
 | `back_blink(color, 0)` | Treated as `back_solid(color)` |
 | `back_breathe(color, 0)` | Treated as `back_solid(color)` |
 | `back_fade_to(color, 0)` | Immediate snap to target |
-| `back_chase(color, 0)` | All 5 LEDs immediately lit |
+| `back_chase(color, 0)` | All configured back LEDs immediately lit |
 
 ### Touch Flash
 
@@ -232,10 +249,10 @@ back_update_aqi(pm25);          // kills sequence immediately, clears saved stat
 - `touch_set_all(true)` lights all three touch pads white at the current
   intensity with no off-edge; they hold until `touch_set_all(false)`.
 - Independent of the flash path (`_touch_steady` render gate), so it does
-  not interfere with `touch_flash()`. Used by the hardware peripheral test
+  not interfere with `touch_flash()`. Used by the V1 hardware peripheral test
   so an operator can visually confirm the touch LEDs.
 
-### Input Source to Touch Pad Mapping
+### V1 Input Source To Touch Pad Mapping
 
 | `InputSource` | `TouchPad` | Physical LED |
 |---|---|---|
@@ -314,6 +331,7 @@ The LP5036 `.cpp` is not linked into host tests.
 
 ## Edge Cases and Errors
 
+- **Invalid counts**: initialization rejects counts beyond the channel arrays.
 - **Driver errors**: Failed I2C writes are logged (edge-triggered:
   first failure WARN, first recovery INFO) and not retried. The dirty
   flag is cleared unconditionally to avoid busy-looping on a faulty bus.

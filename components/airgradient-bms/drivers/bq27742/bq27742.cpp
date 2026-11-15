@@ -10,6 +10,7 @@
 #include "ag_log.h"
 #include "rtos.h"
 #include "types/bms_types.h"
+#include <cmath>
 #include <cstring>
 #include <limits>
 
@@ -54,10 +55,28 @@ constexpr float MAX_TEMPERATURE_C = 125.0f;
 
 // TI SLUUAX0C sections 5.1, 5.3.5, 5.3.13, and 5.5.1.10.
 constexpr size_t DATA_FLASH_BLOCK_SIZE = 32;
+constexpr uint8_t SUBCLASS_CHARGE = 34;
+constexpr uint8_t SUBCLASS_CHARGE_TERMINATION = 36;
+constexpr uint8_t OFFSET_TAPER_CURRENT = 0;
+constexpr uint8_t OFFSET_MIN_TAPER_CAPACITY = 2;
+constexpr uint8_t OFFSET_TAPER_VOLTAGE = 4;
+constexpr uint8_t OFFSET_TAPER_WINDOW = 6;
+constexpr uint8_t OFFSET_FC_SET_PERCENT = 9;
+constexpr uint16_t MAX_TAPER_CURRENT_MA = 1000;
+constexpr uint16_t MAX_MIN_TAPER_CAPACITY_RAW = 1000;
+constexpr uint16_t MAX_TAPER_VOLTAGE_MV = 1000;
+constexpr uint8_t MAX_TAPER_WINDOW_S = 60;
+constexpr int8_t FC_SET_USE_TAPER = -1;
+constexpr int8_t MAX_FC_SET_PERCENT = 100;
 constexpr uint8_t SUBCLASS_DATA = 48;
+constexpr uint8_t SUBCLASS_REGISTERS = 64;
+constexpr uint8_t OFFSET_PACK_CONFIG_D = 4;
+constexpr uint8_t PACK_CONFIG_D_FCFET = 1u << 6;
 constexpr uint8_t SUBCLASS_POWER = 68;
 constexpr uint8_t SUBCLASS_IT_CFG = 80;
 constexpr uint8_t OFFSET_DESIGN_CAPACITY = 12;
+constexpr uint8_t OFFSET_DESIGN_VOLTAGE = 0;
+constexpr uint8_t OFFSET_CHARGING_VOLTAGE = 0;
 constexpr uint8_t OFFSET_DESIGN_ENERGY = 14;
 constexpr uint8_t OFFSET_ENERGY_SCALE = 23;
 constexpr uint8_t OFFSET_SLEEP_CURRENT = 2;
@@ -71,8 +90,51 @@ constexpr uint16_t MAX_DESIGN_ENERGY_RAW = 32767;
 constexpr uint16_t MIN_TERMINATE_VOLTAGE_MV = 2800;
 constexpr uint16_t MAX_TERMINATE_VOLTAGE_MV = 3700;
 constexpr uint16_t MAX_SLEEP_CURRENT_MA = 100;
+constexpr uint16_t MIN_DESIGN_VOLTAGE_MV = 2000;
+constexpr uint16_t MAX_DESIGN_VOLTAGE_MV = 5000;
+constexpr uint16_t MIN_CHARGING_VOLTAGE_MV = 4000;
+constexpr uint16_t MAX_CHARGING_VOLTAGE_MV = 5000;
 constexpr uint32_t DATA_FLASH_DELAY_MS = 20;
 constexpr uint32_t DATA_FLASH_COMMIT_DELAY_MS = 200;
+
+// TI SLUUAX0C sections 5.8.1, A.8 and A.11: F4 calibration, not IEEE float.
+constexpr uint8_t SUBCLASS_CALIBRATION = 104;
+constexpr uint8_t OFFSET_CC_GAIN = 0;
+constexpr uint8_t OFFSET_CC_DELTA = 4;
+constexpr size_t CC_CALIBRATION_SIZE = 8;
+constexpr double CC_GAIN_NUMERATOR = 4.768;
+constexpr double CC_DELTA_PER_GAIN = 1193046.0;
+constexpr double MIN_CC_GAIN = 0.1;
+constexpr double MAX_CC_GAIN = 40.0;
+constexpr double MIN_CC_DELTA = 29800.0;
+constexpr double MAX_CC_DELTA = 1190000.0;
+constexpr int TI_FLOAT_EXPONENT_BIAS = 128;
+constexpr int TI_FLOAT_MANTISSA_BITS = 24;
+constexpr uint8_t TI_FLOAT_SIGN = 0x80;
+
+bool valid_cc_calibration(double gain, double delta) {
+  return gain >= MIN_CC_GAIN && gain <= MAX_CC_GAIN && delta >= MIN_CC_DELTA &&
+         delta <= MAX_CC_DELTA;
+}
+
+double decode_ti_float(const uint8_t *data) {
+  const uint32_t mantissa = (static_cast<uint32_t>(data[1] | TI_FLOAT_SIGN) << 16) |
+                            (static_cast<uint32_t>(data[2]) << 8) | data[3];
+  const double value = std::ldexp(static_cast<double>(mantissa),
+                                  data[0] - TI_FLOAT_EXPONENT_BIAS - TI_FLOAT_MANTISSA_BITS);
+  return (data[1] & TI_FLOAT_SIGN) ? -value : value;
+}
+
+// Only called for validated, positive calibration values representable as F4.
+void encode_ti_float(double value, uint8_t *data) {
+  int exponent;
+  const float fraction = std::frexp(static_cast<float>(value), &exponent);
+  const uint32_t mantissa = static_cast<uint32_t>(std::ldexp(fraction, TI_FLOAT_MANTISSA_BITS));
+  data[0] = static_cast<uint8_t>(exponent + TI_FLOAT_EXPONENT_BIAS);
+  data[1] = static_cast<uint8_t>(mantissa >> 16) & ~TI_FLOAT_SIGN;
+  data[2] = static_cast<uint8_t>(mantissa >> 8);
+  data[3] = static_cast<uint8_t>(mantissa);
+}
 
 uint16_t unpack_word(const uint8_t *data, size_t offset) {
   return (static_cast<uint16_t>(data[offset]) << 8) | data[offset + 1];
@@ -390,4 +452,123 @@ bool BQ27742::write_cell_config(const FgCellConfig &config) {
     return false;
   }
   return true;
+}
+
+bool BQ27742::read_voltage_config(VoltageConfig &out) {
+  uint8_t data[DATA_FLASH_BLOCK_SIZE];
+  uint8_t charge[DATA_FLASH_BLOCK_SIZE];
+  if (!data_flash_available() || !read_data_flash_block(SUBCLASS_DATA, 0, data) ||
+      !read_data_flash_block(SUBCLASS_CHARGE, 0, charge)) {
+    return false;
+  }
+  out = {unpack_word(data, OFFSET_DESIGN_VOLTAGE), unpack_word(charge, OFFSET_CHARGING_VOLTAGE)};
+  return true;
+}
+
+bool BQ27742::disable_full_charge_cutoff() {
+  uint8_t data[DATA_FLASH_BLOCK_SIZE];
+  if (!data_flash_available() || !read_data_flash_block(SUBCLASS_REGISTERS, 0, data)) {
+    return false;
+  }
+  if (!(data[OFFSET_PACK_CONFIG_D] & PACK_CONFIG_D_FCFET)) {
+    return true;
+  }
+  data[OFFSET_PACK_CONFIG_D] &= ~PACK_CONFIG_D_FCFET;
+  return write_data_flash_block(SUBCLASS_REGISTERS, 0, data);
+}
+
+bool BQ27742::read_cc_sense_mohm(float &gain_mohm, float &delta_mohm) {
+  uint8_t data[DATA_FLASH_BLOCK_SIZE];
+  if (!data_flash_available() || !read_data_flash_block(SUBCLASS_CALIBRATION, 0, data)) {
+    return false;
+  }
+  const double gain = decode_ti_float(&data[OFFSET_CC_GAIN]);
+  const double delta = decode_ti_float(&data[OFFSET_CC_DELTA]);
+  if (gain <= 0.0 || delta <= 0.0) {
+    return false;
+  }
+  gain_mohm = static_cast<float>(CC_GAIN_NUMERATOR / gain);
+  delta_mohm = static_cast<float>(CC_GAIN_NUMERATOR * CC_DELTA_PER_GAIN / delta);
+  return true;
+}
+
+bool BQ27742::write_cc_sense_mohm(float sense_mohm) {
+  if (!std::isfinite(sense_mohm) || sense_mohm <= 0.0f) {
+    return false;
+  }
+  const double gain = CC_GAIN_NUMERATOR / sense_mohm;
+  const double delta = gain * CC_DELTA_PER_GAIN;
+  if (!valid_cc_calibration(gain, delta) || !data_flash_available()) {
+    return false;
+  }
+  uint8_t data[DATA_FLASH_BLOCK_SIZE];
+  if (!read_data_flash_block(SUBCLASS_CALIBRATION, 0, data)) {
+    return false;
+  }
+  uint8_t expected[CC_CALIBRATION_SIZE];
+  encode_ti_float(gain, &expected[OFFSET_CC_GAIN]);
+  encode_ti_float(delta, &expected[OFFSET_CC_DELTA]);
+  if (std::memcmp(data, expected, sizeof(expected)) == 0) {
+    return true;
+  }
+  std::memcpy(data, expected, sizeof(expected));
+  return write_data_flash_block(SUBCLASS_CALIBRATION, 0, data);
+}
+
+bool BQ27742::read_taper_config(TaperConfig &out) {
+  uint8_t data[DATA_FLASH_BLOCK_SIZE];
+  if (!data_flash_available() || !read_data_flash_block(SUBCLASS_CHARGE_TERMINATION, 0, data)) {
+    return false;
+  }
+  out = {unpack_word(data, OFFSET_TAPER_CURRENT), unpack_word(data, OFFSET_MIN_TAPER_CAPACITY),
+         unpack_word(data, OFFSET_TAPER_VOLTAGE), data[OFFSET_TAPER_WINDOW],
+         static_cast<int8_t>(data[OFFSET_FC_SET_PERCENT])};
+  return true;
+}
+
+bool BQ27742::write_taper_config(const TaperConfig &config) {
+  if (config.current_ma == 0 || config.current_ma > MAX_TAPER_CURRENT_MA ||
+      config.min_capacity_raw > MAX_MIN_TAPER_CAPACITY_RAW ||
+      config.voltage_mv > MAX_TAPER_VOLTAGE_MV || config.window_s == 0 ||
+      config.window_s > MAX_TAPER_WINDOW_S || config.fc_set_percent < FC_SET_USE_TAPER ||
+      config.fc_set_percent > MAX_FC_SET_PERCENT || !data_flash_available()) {
+    return false;
+  }
+  uint8_t data[DATA_FLASH_BLOCK_SIZE];
+  if (!read_data_flash_block(SUBCLASS_CHARGE_TERMINATION, 0, data)) {
+    return false;
+  }
+  uint8_t expected[DATA_FLASH_BLOCK_SIZE];
+  std::memcpy(expected, data, sizeof(expected));
+  pack_word(expected, OFFSET_TAPER_CURRENT, config.current_ma);
+  pack_word(expected, OFFSET_MIN_TAPER_CAPACITY, config.min_capacity_raw);
+  pack_word(expected, OFFSET_TAPER_VOLTAGE, config.voltage_mv);
+  expected[OFFSET_TAPER_WINDOW] = config.window_s;
+  expected[OFFSET_FC_SET_PERCENT] = static_cast<uint8_t>(config.fc_set_percent);
+  if (std::memcmp(data, expected, sizeof(expected)) == 0) {
+    return true;
+  }
+  return write_data_flash_block(SUBCLASS_CHARGE_TERMINATION, 0, expected);
+}
+
+bool BQ27742::write_voltage_config(const VoltageConfig &config) {
+  if (config.design_voltage_mv < MIN_DESIGN_VOLTAGE_MV ||
+      config.design_voltage_mv > MAX_DESIGN_VOLTAGE_MV ||
+      config.charging_voltage_mv < MIN_CHARGING_VOLTAGE_MV ||
+      config.charging_voltage_mv > MAX_CHARGING_VOLTAGE_MV || !data_flash_available()) {
+    return false;
+  }
+  uint8_t data[DATA_FLASH_BLOCK_SIZE];
+  uint8_t charge[DATA_FLASH_BLOCK_SIZE];
+  if (!read_data_flash_block(SUBCLASS_DATA, 0, data) ||
+      !read_data_flash_block(SUBCLASS_CHARGE, 0, charge)) {
+    return false;
+  }
+  const bool data_changed = unpack_word(data, OFFSET_DESIGN_VOLTAGE) != config.design_voltage_mv;
+  const bool charge_changed =
+      unpack_word(charge, OFFSET_CHARGING_VOLTAGE) != config.charging_voltage_mv;
+  pack_word(data, OFFSET_DESIGN_VOLTAGE, config.design_voltage_mv);
+  pack_word(charge, OFFSET_CHARGING_VOLTAGE, config.charging_voltage_mv);
+  return (!data_changed || write_data_flash_block(SUBCLASS_DATA, 0, data)) &&
+         (!charge_changed || write_data_flash_block(SUBCLASS_CHARGE, 0, charge));
 }

@@ -30,7 +30,7 @@ sleep cycle.
 | `WifiService` | product (`go_wifi.h`) | Stationary Wi-Fi lifecycle: saved-credentials connect, factory fallback, provisioning, disconnect routing |
 | `GoLocalApiService` | product (`go_local_api.h`) | Cached local HTTP snapshots, request admission, and FIFO config/action handoff |
 | `OtaService` | product (`go_ota.h`) | Blocking BLE/Wi-Fi transfers; cloud owns Wi-Fi availability checks |
-| `GoBoard` | product (`go_board.h`) | Borrowed for `init_wifi_subsystem()` on first Stationary entry |
+| `GoBoard` | product (`go_board.h`) | Provides board capabilities and initializes Wi-Fi on first Stationary entry |
 | `ConfigStore` | `airgradient-config` | Load/save `GoSettings` to NVS |
 | `GoSettings` | product (`go_settings.h`) | Product configuration |
 | `Event`, `EventType` | product (`go_events.h`) | Event queue types |
@@ -248,7 +248,8 @@ the nearest deadline.
 | External watchdog | `EXT_WDT_INTERVAL_MS` (60000 ms) | Always — never suppressed during a setup session |
 | Inactivity | `auto_lock_seconds * 1000` | `auto_lock_allowed()`: unlocked, auto-lock > 0, no setup session, focus screen, Hardware Test screen, or Tracking Status |
 | Tracking Status | `TRACKING_STATUS_REFRESH_INTERVAL_MS` (5000 ms); rejected submissions retry after `TRACKING_STATUS_REFRESH_RETRY_MS` (100 ms) | Status visible, unlocked, and Recording or Paused |
-| Snackbar refresh | `SNACKBAR_DURATION_MS + 200` (one-shot) | Non-persistent snackbar active, sensitive services not paused |
+| Snackbar refresh | `SNACKBAR_DURATION_MS + SNACKBAR_CLEAR_GRACE_MS` (3200 ms, one-shot) | Transient snackbar submitted, sensitive services not paused |
+| Home feedback retry | `DISPLAY_FEEDBACK_RETRY_MS` (100 ms) | Rejected feedback pending on Home, background updates allowed |
 | Wi-Fi initial-connect / fallback | `WifiService::next_deadline_ms()` | While the service has armed a deadline (Stationary bring-up) |
 | Local endpoint activation retry | `LOCAL_API_ACTIVATION_RETRY_MS` (5000 ms) | Stationary + online after local HTTP or mDNS activation fails |
 | BLE OTA poll | `OTA_BLE_POLL_INTERVAL_MS` (2000 ms) | Portable + (authenticated client or latched `is_ble_active()`). See [Firmware Update (OTA)](#firmware-update-ota) |
@@ -343,18 +344,10 @@ Calibration → Yes**. The `ArmFgLearning` UI action saves factory state (`Charg
 cycle 1) and reboots into the dedicated factory path. The orchestrator owns none
 of the learning run; see [`fg_learning.md`](fg_learning.md).
 
-The catch-all render at the tail of `on_input()` uses
-`update_display(/*wait=*/true)` for every input-driven render. Because
-`handle_input()` already advanced the UI model, a dropped paint would
-leave the model ahead of the screen with no repaint until the next
-input (the user sees the touch register but the display stays put). This
-became reachable once the display worker's `BUSY` poll started blocking
-(`vTaskDelay >= 1` tick) instead of busy-spinning: the priority-1 main
-task now runs during the worker's refresh and would otherwise hit the
-`wait=false` drop in `DisplayService::update()` while the worker is
-mid-paint. `wait=true` yields to the worker, then queues the latest
-frame once it is free, so menu navigation and session transitions are
-both drop-free.
+Menu navigation and locking use `update_display(wait=true)` to wait for the
+previous refresh before submitting the new frame. Unlock submits without waiting
+and retains rejected feedback for a Home retry. Neither path waits for its new
+frame to finish painting. See [Display Update](#display-update).
 
 The `UIAction::ConfirmSwitchProvisioningTransport` case is handled
 inside the dispatch switch and returns early, bypassing the catch-all
@@ -379,9 +372,8 @@ single-iteration measurement, and updates the display.
 
 ### Tracking Lifecycle
 
-Manages route lifecycle through `StorageService`. `start_tracking()`
-returns `bool` so the BLE `StartTracking` command-result reports the real
-outcome instead of the pre-spec "was-idle" heuristic.
+Manages route lifecycle through `StorageService`. `start_tracking()` and
+`resume_tracking()` return `false` outside Portable, before storage or GPS work.
 
 `start_tracking()` rejects an existing session, generates a unique five-digit
 ID, and opens its route. Failure leaves Idle and reports a storage error.
@@ -389,9 +381,10 @@ Success sets Recording, starts GPS if required, shows
 `"Tracking start = NNNNN"`, and publishes the new BLE status. Acquisition may
 wait for an existing GPS sleep deadline; route creation does not require a fix.
 
-Energy Saving hides Start Tracking. Entering it ends either Recording or Paused
-sessions, and boot never restores them in that mode. Persisted mode transitions
-request the charger reset described under [change_mode()](#change_mode).
+Stationary and Energy Saving hide Tracking. Entering either mode stops Recording
+or Paused sessions and preserves saved routes. Returning to Portable leaves
+tracking idle. Energy Saving also skips boot restoration and requests the charger
+reset described under [change_mode()](#change_mode) for persisted mode transitions.
 
 `pause_tracking()` changes Recording to Paused, flushes/closes the route with
 `end_route()`, and retains the session ID. It shows `"Tracking paused"` on success
@@ -406,8 +399,8 @@ changing Paused to Recording. Failure leaves the session Paused and shows
 notification. Pause and Resume both return `false` when Idle.
 
 Pause and Resume keep GPS running according to `GpsMode`, including
-`OnWhenTracking`. Live measurements, chart cache, BLE Measures, Stationary cloud
-upload/config polling, and existing History export continue. Paused sessions
+`OnWhenTracking`. Live measurements, chart cache, BLE Measures, and existing
+History export continue. Paused sessions
 remain protected from History deletion until stopped.
 
 `stop_tracking()` accepts Recording or Paused. It calls `end_route()`, sets Idle,
@@ -518,7 +511,7 @@ updates; Pause/Resume preserve the Status view, and Stop returns it to Main Menu
 handling. Status is exempt, but manual locking and safety shutdowns remain
 available. Leaving Status starts a fresh configured timeout once, including
 after remote Stop; repaints and Pause/Resume do not extend it. The saved setting
-is unchanged. Tracking Status is unavailable in Energy Saving.
+is unchanged. Tracking Status is available only in Portable.
 
 Entry, input, and tracking changes repaint immediately. The timer loop observes
 page entry/exit through `sync_tracking_status_lifecycle()`: entry arms a
@@ -728,7 +721,9 @@ stateDiagram-v2
     ProvisioningConfirm --> Provisioning: No
     ProvisioningConfirm --> Provisioning: Yes on row 0 -- switch transport
     ProvisioningConfirm --> Portable: Yes on row 1 -- leave session to Portable
-    Provisioning --> Home: Connected event -- persist + 1.5 s on-page hold + leave to Home
+    Provisioning --> PortalReboot: Connected after portal use -- persist + hold + stop
+    PortalReboot --> EnterStationary: saved-network boot
+    Provisioning --> Home: Connected without restart -- hold + leave to Home
     Provisioning --> Portable: Stopped before online -- leave session to Portable
 ```
 
@@ -748,7 +743,7 @@ through `on_wifi_connected()`; STA failure routes through the disconnect policy.
 |---|---|
 | `begin_session_if_needed()` | Idempotent session preamble. Sets `_setup_session_active`, silently flips `_lock_state = Unlocked` (no `"Unlocked"` snackbar), and clears any pending snackbar so leftover `"Mode changed"` / `"Locked"` / stale `"Wi-Fi connected"` cannot leak onto session screens. Called by `enter_stationary()` and `enter_provisioning_page()`. |
 | `enter_provisioning_page(transport)` | Entry into `Screen::Provisioning`. Calls `begin_session_if_needed()`, clears `_bring_up_pending` (defangs the on-Info success arm), runs `pause_provisioning_sensitive_services()`, opens the page via `UIManager::open_provisioning()`, kicks off the transport, and ends with `update_display(wait=true)`. Used by normal entry without saved networks and normal pre-online STA failure. |
-| `leave_session_to_home()` | Success-path leave. Clears the `Connected!` page state, calls `UIManager::reset_to_home()`, polls the BMS once for a fresh battery icon, resumes paused services, rebases periodic clocks, silently unlocks, clears the session gate, and ends with `update_display(wait=true) + DisplayService::flush()`. Used by both STA-only success (Info) and provisioning-success (Provisioning). |
+| `leave_session_to_home()` | Success-path leave. Clears the `Connected!` page state, calls `UIManager::reset_to_home()`, polls the BMS once for a fresh battery icon, resumes paused services, rebases periodic clocks, silently unlocks, clears the session gate, and ends with `update_display(wait=true) + DisplayService::flush()`. Used by STA-only success and provisioning success that does not reboot. |
 | `leave_session_to_portable()` | Cancel / abort path. Mirrors the success leave but routes through `change_mode(Portable)` (which fires its own `"Mode changed"` snackbar). The session gate stays true through `change_mode()` so any background-render path that fires mid-teardown still no-ops. |
 | `rebase_periodic_clocks()` | Roll `_last_measurement_ms` / `_last_bms_poll_ms` / `_last_bms_status_poll_ms` forward to `now` on resume so paused timers do not fire back-to-back catching up. The external watchdog clock is deliberately not rebased. |
 
@@ -838,15 +833,13 @@ glyph the moment `is_online()` flips (connect repaints via
 `on_provisioning_state_changed(payload)` updates the Provisioning page
 state and handles two terminal events:
 
-- **`Connected`** — persist `disable_cloud` and `static_ip` from the
-  payload, push `set_disable_cloud()` to `CloudService`, render
-  `Connected! a.b.c.d` with `update_display(wait=true) + flush()` so
-  the success frame is painted before any hold, call
-  `WifiService::stop_provisioning(false)` (whose internal
-  `POST_CONNECT_HOLD_MS` provides the ~1.5 s on-page dwell), then
-  activate local HTTP and mDNS, call `leave_session_to_home()`, then
-  `cloud.start()` + `cloud.arm(/*fire_now=*/true)` so the first POST fires
-  immediately.
+- **`Connected`** — persist `disable_cloud` and `static_ip`, paint and flush
+  `Connected! a.b.c.d`, then stop provisioning with its ~1.5 s hold. If Stationary,
+  still online, settings saved, and `payload.portal_used` is true, request HTTP
+  listener shutdown and reboot before local/cloud startup. Otherwise retain any
+  listener, activate local HTTP and mDNS, call `leave_session_to_home()`, and
+  start/arm cloud immediately. See the
+  [restart policy](wifi_service.md#provisioning-completion).
 - **`Stopped`** (without `has_been_online()`) — user abort, inactivity
   timeout, or a transport-switch start failure. Falls back to Portable
   via `leave_session_to_portable()` so the device is never stranded on
@@ -975,8 +968,8 @@ for the component-facing contract and edge cases.
 ### `update_display()`
 
 Builds and submits a UI frame, returning whether the display accepted it.
-Status lifecycle and refresh scheduling belong to the timer handlers, not this
-function. Frame preparation uses a `BuildContext` and `DisplayValues` snapshot:
+Tracking Status lifecycle stays with its timer handlers. Frame preparation uses
+a `BuildContext` and `DisplayValues` snapshot:
 
 1. Clear expired snackbar
 2. `build_context()` — convert cached `MeasuresAGo` to `Measures`, read
@@ -986,10 +979,19 @@ function. Frame preparation uses a `BuildContext` and `DisplayValues` snapshot:
    reflects link state via `wifi_connected = wifi.is_online()`. Temperature,
    altitude, and PM presentation flags come from the active `GoSettings`
 3. `UIManager::build_values(ctx)` — produce `DisplayValues`
-4. `DisplayService::update(values)` — non-blocking render submission
-5. If a non-persistent snackbar is active and no refresh timer is pending,
-   schedule a one-shot `_snackbar_refresh_deadline_ms` to request visual clearing
-   through the background-update path, subject to its screen suppression
+4. `DisplayService::update(values, wait)` — submit, optionally waiting for the
+   previous refresh
+5. On acceptance, clear pending feedback and start any new transient snackbar's
+   lifetime. Cancel obsolete expiry timers when a message is dismissed or replaced
+
+Rejected unlock feedback, new transient messages, and snackbar removal are
+retained for retry every 100 ms on Home when background updates are allowed.
+Retries rebuild current state; any accepted render satisfies them, so newer
+input can replace or dismiss pending feedback without replaying an old frame.
+Snackbar expiry starts after submission succeeds, not after painting completes.
+The expiry handler requests clearing only when a message actually expired and
+the last accepted frame contained one. Menu and special-screen suppression stay
+in effect; see [Snackbar Lifecycle](ui_manager.md#snackbar-lifecycle).
 
 The `BuildContext` requires a `const Measures &` reference. The orchestrator
 maintains a `mutable Measures _display_measures` member that is populated
@@ -999,7 +1001,7 @@ from the cached `MeasuresAGo` each time `build_context()` is called.
 
 Ordinary display-update call sites are split into two categories:
 
-**User-initiated** — call `update_display()` directly (always repaint):
+**Direct** — call `update_display()` without the background-screen gate:
 `on_input()`, `lock()`, `unlock()`, `start_tracking()`, `pause_tracking()`,
 `resume_tracking()`, `stop_tracking()`,
 `change_mode()`, `clear_data()`, `factory_reset()`, `save_tag()`,
@@ -1011,20 +1013,8 @@ Ordinary display-update call sites are split into two categories:
 `on_ble_auth_complete()`, `on_ble_config_write()` (Set branch),
 `on_bms_status_timer()`, snackbar refresh timer in `check_timers()`.
 
-`request_background_display_update()` short-circuits when a setup
-session is active and otherwise delegates to
-`UIManager::is_on_menu_screen()`:
-
-```cpp
-void Orchestrator::request_background_display_update() {
-  if (_setup_session_active) {
-    return; // session screens only re-render on explicit transitions
-  }
-  if (!_svc.ui_manager.is_on_menu_screen()) {
-    update_display();
-  }
-}
-```
+`request_background_display_update()` uses `background_display_update_allowed()`
+to skip active setup sessions, pairing focus, and menu screens.
 
 When the user is on any menu-navigation screen (MainMenu, Settings, Operations,
 DisplayTouch, SettingsChoice, TagList, Confirm, About) or anywhere inside the
@@ -1056,7 +1046,8 @@ helpers), the call is followed by `DisplayService::flush()` which spins
 until `_worker_busy` clears.
 
 The orchestrator does not choose refresh tiers (Full/Fast/Partial).
-That decision belongs entirely to `DisplayService::update()`.
+That decision belongs to `DisplayService::update()`, including the
+[Home cooldown](display_service.md#home-cooldown).
 
 ## Sleep Cycle
 
@@ -1184,9 +1175,10 @@ for the full cycle, edge cases, and method documentation.
 ### Shake-To-Refresh
 
 `AccelService` starts in the application wiring alongside the other workers.
-It detects motion without application policy; the orchestrator handles the
+On V1 it detects motion without application policy; the orchestrator handles the
 timestamped `ShakeDetected` event. See [Accelerometer Service](accel_service.md)
-for the gesture, interrupt capture, and one-second cooldown.
+for the gesture, interrupt capture, and one-second cooldown. V2 keeps the
+worker for Hardware Test commands only and does not generate shake events.
 
 `on_shake_detected()` ignores events older than 500 ms, further shakes while a
 refresh is pending, and shakes during paused provisioning services, committed

@@ -149,7 +149,7 @@ timeout (~15 s).
 | `enter_stationary()` | `set_disable_cloud()` + set first-post latch (no `start()`) |
 | `on_wifi_connected()` | Set both runtime gates, then `start()` + `arm(first_post_pending)` |
 | `on_wifi_disconnected()` | `disarm()` (except `requested_by_user`) |
-| `on_provisioning_connected()` | Set both runtime gates, then `start()` + `arm(true)` after provisioning teardown |
+| `on_provisioning_state_changed(Connected)` | Portal restart path defers cloud to the next boot; otherwise set both runtime gates, then `start()` + `arm(true)` after teardown |
 | `change_mode(→ non-Stationary)` | `disarm()` + `stop()` (before `wifi.shutdown()`) |
 | Any activated settings candidate | Update `disable_cloud` and/or `configuration_control` runtime gates when changed |
 | `on_sensor_data()` | `update_measures_snapshot()` (unconditional, all modes) |
@@ -178,6 +178,9 @@ and queues a value-only `FetchConfigEventPayload`. Supported fields map into
 | `co2CalibrationRequested` | Boolean | One-shot CO2 calibration request; not persisted |
 | `ledTestRequested` | Boolean | One-shot LED diagnostic request; not persisted |
 | `gpsTestRequested` | Boolean | One-shot GPS test screen request; not persisted |
+
+On V2, the orchestrator ignores `touchLedIntensity` when merging the update,
+while applying other supported fields. The cloud parser remains board-independent.
 
 `backLedIndicator` changes the selection independently of brightness. The Cloud
 backend must send this field, and the dashboard needs a control to edit it;
@@ -263,6 +266,10 @@ result byte, the fixed `GoConfigUpdate`, and transient action-request flags. The
 trivially-copyable payload never holds a pointer into the reusable fetch buffer.
 
 ## Heap Constraints (ESP32-C5)
+
+Successful portal sessions normally reboot before cloud startup to recover
+heap headroom for TLS. BLE-only sessions continue without reboot. See the
+[restart conditions](wifi_service.md#provisioning-completion).
 
 The ESP32-C5 has ~183 KB of available heap. The TLS handshake with the
 AirGradient backend's 4096-bit RSA certificate temporarily consumes most

@@ -98,7 +98,7 @@ static BleDiscReason disc_reason_for_shutdown(ShipModeRequest reason) {
 }
 
 static bool merge_config_update(const GoConfigUpdate &update, GoConfigSource source,
-                                GoSettings &candidate) {
+                                GoSettings &candidate, BoardCapabilities capabilities) {
   bool has_update = false;
 
   if (has_go_config_field(update.update_mask, GoConfigField::PmStandard)) {
@@ -133,7 +133,8 @@ static bool merge_config_update(const GoConfigUpdate &update, GoConfigSource sou
     candidate.back_led_indicator = update.back_led_indicator;
     has_update = true;
   }
-  if (has_go_config_field(update.update_mask, GoConfigField::TouchLedIntensity)) {
+  if (capabilities.supports(BoardFeature::TouchLed) &&
+      has_go_config_field(update.update_mask, GoConfigField::TouchLedIntensity)) {
     candidate.touch_led_intensity = update.touch_led_intensity;
     has_update = true;
   }
@@ -187,8 +188,9 @@ static bool merge_config_update(const GoConfigUpdate &update, GoConfigSource sou
 
 Orchestrator::Orchestrator(RtosQueueHandle event_queue, const Services &services,
                            GoSettings settings, ConfigStore &config_store, const char *serial)
-    : _event_queue(event_queue), _svc(services), _settings(std::move(settings)),
-      _config_store(config_store), _serial(serial), _raw_measures(), _corrected_measures() {}
+    : _event_queue(event_queue), _svc(services), _capabilities(services.board.capabilities()),
+      _settings(std::move(settings)), _config_store(config_store), _serial(serial), _raw_measures(),
+      _corrected_measures() {}
 
 // ---------------------------------------------------------------------------
 // Boot initialization
@@ -229,8 +231,9 @@ void Orchestrator::init(WakeCause cause, const BootHandoff &handoff) {
       _last_input_ms = static_cast<uint32_t>(RTOS::get_time_ms());
       _svc.ui_manager.show_snackbar("Unlocked");
       uint32_t now_ms = static_cast<uint32_t>(RTOS::get_time_ms());
-      _svc.ui_manager.clear_expired_snackbar(now_ms);
-      _snackbar_refresh_deadline_ms = now_ms + SNACKBAR_DURATION_MS + 200;
+      _svc.ui_manager.mark_snackbar_submitted(now_ms);
+      _display_has_snackbar = true;
+      _snackbar_refresh_deadline_ms = now_ms + SNACKBAR_DURATION_MS + SNACKBAR_CLEAR_GRACE_MS;
     } else {
       // Display not yet showing unlocked UI — unlock triggers
       // update_display() which will paint the unlocked frame.
@@ -517,6 +520,12 @@ uint32_t Orchestrator::compute_queue_timeout_ms() const {
     next = std::min(next, remaining <= 0 ? 0u : static_cast<uint32_t>(remaining));
   }
 
+  if (_display_feedback_pending && _svc.ui_manager.current_screen() == Screen::Home &&
+      background_display_update_allowed()) {
+    const int32_t remaining = static_cast<int32_t>(_display_feedback_retry_ms - now);
+    next = std::min(next, remaining <= 0 ? 0u : static_cast<uint32_t>(remaining));
+  }
+
   // If any deadline already passed, the unsigned subtraction yields a large
   // number — clamp to 0 so check_timers() fires immediately.
   if (next > MAX_REASONABLE_TIMEOUT_MS) {
@@ -572,7 +581,9 @@ void Orchestrator::check_timers() {
     if (_snackbar_refresh_deadline_ms != 0 &&
         (now - _snackbar_refresh_deadline_ms) < MAX_REASONABLE_TIMEOUT_MS) {
       _snackbar_refresh_deadline_ms = 0;
-      request_background_display_update();
+      if (_svc.ui_manager.clear_expired_snackbar(now) && _display_has_snackbar) {
+        request_background_display_update();
+      }
     }
   }
 
@@ -634,6 +645,13 @@ void Orchestrator::check_timers() {
 
   if (_tracking_status_refresh_armed) {
     refresh_tracking_status();
+  }
+
+  if (_display_feedback_pending && _svc.ui_manager.current_screen() == Screen::Home &&
+      background_display_update_allowed() &&
+      static_cast<int32_t>(static_cast<uint32_t>(RTOS::get_time_ms()) -
+                           _display_feedback_retry_ms) >= 0) {
+    update_display();
   }
 }
 
@@ -1005,7 +1023,7 @@ void Orchestrator::apply_config_update(const GoConfigUpdate &update, GoConfigSou
   }
 
   GoSettings candidate = _settings;
-  if (!merge_config_update(update, source, candidate)) {
+  if (!merge_config_update(update, source, candidate, _capabilities)) {
     return;
   }
   if (!is_go_settings_valid(candidate)) {
@@ -1599,10 +1617,15 @@ void Orchestrator::unlock() {
   _svc.ui_manager.show_snackbar("Unlocked");
   _lock_state = LockState::Unlocked;
   _last_input_ms = static_cast<uint32_t>(RTOS::get_time_ms());
+  // Preserve the lock-icon change even if persistent progress owns the snackbar.
+  _display_feedback_pending = true;
   update_display();
 }
 
 bool Orchestrator::start_tracking() {
+  if (_mode != OperatingMode::Portable) {
+    return false;
+  }
   if (tracking_session_active(_tracking_state)) {
     return false; // caller treats as "already tracking"
   }
@@ -1667,6 +1690,9 @@ bool Orchestrator::pause_tracking() {
 }
 
 bool Orchestrator::resume_tracking() {
+  if (_mode != OperatingMode::Portable) {
+    return false;
+  }
   if (_tracking_state == TrackingState::Recording) {
     return true;
   }
@@ -1838,7 +1864,7 @@ void Orchestrator::peripheral_step_result(bool pass) {
   switch (_periph.step) {
   case Step::BackLed:
     _periph.back_led = pass;
-    _periph.step = Step::TouchLed;
+    _periph.step = _capabilities.supports(BoardFeature::TouchLed) ? Step::TouchLed : Step::Buzzer;
     drive_peripheral_actuator();
     break;
   case Step::TouchLed:
@@ -1888,8 +1914,8 @@ void Orchestrator::on_sensor_test_done(const SensorTestResults &results) {
   _periph.sensors = results;
   _periph.step = PeripheralTestState::Step::Summary;
 
-  const bool overall =
-      _periph.back_led && _periph.touch_led && _periph.buzzer && results.all_pass();
+  const bool touch_led_pass = !_capabilities.supports(BoardFeature::TouchLed) || _periph.touch_led;
+  const bool overall = _periph.back_led && touch_led_pass && _periph.buzzer && results.all_pass();
   AG_LOGI(TAG, "peripheral test: summary overall=%s", overall ? "PASS" : "FAIL");
 
   // Overall pass/fail cue (buzzer + back LED colour).
@@ -2050,7 +2076,7 @@ void Orchestrator::finish_accel_test() {
   // Restore the buzzer enable and the back LED (the cue overrode both).
   _svc.buzzer_service.set_enabled(_settings.buzzer_enabled);
   if (!_svc.accel_service.end_hardware_test()) {
-    AG_LOGW(TAG, "failed to restore accelerometer capture");
+    AG_LOGW(TAG, "failed to finish accelerometer test");
   }
   _svc.led_service.back_set_brightness(_settings.back_led_brightness);
   update_back_led_indicator();
@@ -2197,8 +2223,10 @@ void Orchestrator::apply_settings_runtime_delta(const GoSettings &previous_setti
                                (previous_settings.gps_mode == GpsMode::OnWhenTracking &&
                                 tracking_session_active(_tracking_state)));
 
-  if (mode_changing && _mode == OperatingMode::Offline) {
+  if (mode_changing && _mode != OperatingMode::Portable) {
     stop_tracking();
+  }
+  if (mode_changing && _mode == OperatingMode::Offline) {
     if (_svc.ui_manager.current_screen() == Screen::GpsTest) {
       _svc.ui_manager.reset_to_home();
       finish_gps_test();
@@ -2484,9 +2512,8 @@ void Orchestrator::on_ble_config_write() {
   // paths rely on this call to keep READ returning the config snapshot.
   _svc.ble_service.update_config(_settings);
 
-  // Reject before adopting any value, in precedence order (first match wins):
-  // 1. unknown config key, 2. more than one config field per write (NOTIFY
-  // deltas are bounded to a single field per event).
+  // Reject before adopting any value: unknown key, invalid value, multiple
+  // fields (NOTIFY deltas allow one field), then unsupported board hardware.
   if (result.op == BleConfigOp::Set && result.has_unknown_keys) {
     AG_LOGW(TAG, "BLE config set rejected: unknown config key");
     _svc.ble_service.notify_command_result(BleCommand::Set, false, BLE_VAL_ERR_UNKNOWN_CONFIG_KEY);
@@ -2506,6 +2533,11 @@ void Orchestrator::on_ble_config_write() {
 
   switch (result.op) {
   case BleConfigOp::Set: {
+    if (has_go_config_field(result.requested_fields, GoConfigField::TouchLedIntensity) &&
+        !_capabilities.supports(BoardFeature::TouchLed)) {
+      _svc.ble_service.notify_command_result(BleCommand::Set, false, BLE_VAL_ERR_UNSUPPORTED);
+      return;
+    }
     AG_LOGI(TAG, "BLE config set");
     if (temp.operating_mode != _settings.operating_mode) {
       temp.onboarding_done = true;
@@ -2786,6 +2818,7 @@ void Orchestrator::begin_session_if_needed() {
   // screens or fire when the device eventually returns to Home.
   _svc.ui_manager.show_snackbar(nullptr);
   _snackbar_refresh_deadline_ms = 0;
+  _display_feedback_pending = false;
 }
 
 void Orchestrator::enter_provisioning_page(ProvisioningTransport transport) {
@@ -3057,10 +3090,10 @@ void Orchestrator::on_provisioning_state_changed(const ProvisioningEventPayload 
     if (payload.disable_cloud && _settings.configuration_control == ConfigurationControl::Cloud) {
       candidate.configuration_control = ConfigurationControl::Local;
     }
-    if (!activate_settings_candidate(candidate)) {
+    const bool settings_saved = activate_settings_candidate(candidate);
+    if (!settings_saved) {
       AG_LOGW(TAG, "stationary provisioning metadata save failed");
     }
-  }
 
     // Render "Connected! a.b.c.d" on the Provisioning page first.  The
     // wait=true + flush() pair guarantees the success frame is painted
@@ -3075,7 +3108,14 @@ void Orchestrator::on_provisioning_state_changed(const ProvisioningEventPayload 
     // blocks for POST_CONNECT_HOLD_MS (~1.5 s) when called after
     // Connected, which doubles as the on-page hold now that the success
     // page is actually visible.  No snackbar — the page already shows it.
-    _svc.wifi.stop_provisioning(/*stop_http_server=*/false);
+    const bool restart_after_portal = _mode == OperatingMode::Stationary && payload.portal_used &&
+                                      settings_saved && _svc.wifi.is_online();
+    _svc.wifi.stop_provisioning(/*stop_http_server=*/restart_after_portal);
+    if (restart_after_portal) {
+      AG_LOGI(TAG, "Portal provisioning complete; restarting to recover heap");
+      reboot();
+      break;
+    }
     (void)activate_local_endpoint();
 
     leave_session_to_home();
@@ -3090,6 +3130,7 @@ void Orchestrator::on_provisioning_state_changed(const ProvisioningEventPayload 
     }
     _svc.cloud.arm(/*fire_now=*/true);
     break;
+  }
 
   case ProvisioningEvent::Stopped:
     // User abort, timeout, or transport-switch start failure. With no
@@ -3347,37 +3388,54 @@ bool Orchestrator::update_display(bool wait) {
   _svc.ui_manager.clear_expired_snackbar(now_ms);
   BuildContext ctx = build_context();
   DisplayValues values = _svc.ui_manager.build_values(ctx);
-  const bool accepted = _svc.display_service.update(values, wait);
-
-  // Schedule a follow-up refresh to visually clear the snackbar after it
-  // expires.  Only arm once per snackbar — intermediate update_display()
-  // calls (from sensor data, input, etc.) that happen before the deadline
-  // naturally clear it and the timer fires as a harmless no-op.
-  if (values.snackbar_text != nullptr && !_svc.ui_manager.snackbar_persistent() &&
-      _snackbar_refresh_deadline_ms == 0) {
-    _snackbar_refresh_deadline_ms = now_ms + SNACKBAR_DURATION_MS + 200;
+  const bool has_snackbar = values.snackbar_text != nullptr;
+  const bool snackbar_pending = _svc.ui_manager.snackbar_pending();
+  if (!has_snackbar || snackbar_pending || _svc.ui_manager.snackbar_persistent()) {
+    // A replaced or dismissed message must not inherit the old expiry refresh.
+    _snackbar_refresh_deadline_ms = 0;
   }
-
-  AG_LOGI(TAG, "display update done");
+  const bool accepted = _svc.display_service.update(values, wait);
+  const uint32_t submitted_ms = static_cast<uint32_t>(RTOS::get_time_ms());
+  if (accepted) {
+    _display_feedback_pending = false;
+    _display_has_snackbar = has_snackbar;
+    if (has_snackbar && _svc.ui_manager.mark_snackbar_submitted(submitted_ms)) {
+      _snackbar_refresh_deadline_ms = submitted_ms + SNACKBAR_DURATION_MS + SNACKBAR_CLEAR_GRACE_MS;
+      if (_snackbar_refresh_deadline_ms == 0) {
+        _snackbar_refresh_deadline_ms = 1; // Zero is reserved for inactive.
+      }
+    }
+    AG_LOGI(TAG, "display update done");
+  } else if (_display_feedback_pending || (has_snackbar && snackbar_pending) ||
+             has_snackbar != _display_has_snackbar) {
+    // Retry current state, never a saved frame or snackbar pointer. An accepted
+    // input/background render also satisfies this request without another paint.
+    _display_feedback_pending = true;
+    _display_feedback_retry_ms = submitted_ms + DISPLAY_FEEDBACK_RETRY_MS;
+  }
   return accepted;
 }
 
-void Orchestrator::request_background_display_update(bool wait) {
+bool Orchestrator::background_display_update_allowed() const {
   if (_setup_session_active) {
     // Session screens (Info / Provisioning / ProvisioningConfirm) only
     // re-render on explicit setup state transitions.  Suppressing the
     // background path here prevents sensor / BMS / BLE-status events from
     // racing the orchestrator's deliberate wait=true renders.
-    return;
+    return false;
   }
   if (_svc.ui_manager.is_focus_screen()) {
     // Focus screens (PairingPasskey) render constant content while the
     // user is acting on it.  Sensor / BMS events would cause Fast
     // refreshes of an identical frame and eventually trigger the
     // anti-ghost Full refresh.
-    return;
+    return false;
   }
-  if (!_svc.ui_manager.is_on_menu_screen()) {
+  return !_svc.ui_manager.is_on_menu_screen();
+}
+
+void Orchestrator::request_background_display_update(bool wait) {
+  if (background_display_update_allowed()) {
     update_display(wait);
   }
 }
@@ -3493,6 +3551,7 @@ void Orchestrator::prepare_for_sleep(uint32_t sleep_duration_ms) {
   // The e-paper retains this frame throughout sleep, when expiry cannot run.
   _svc.ui_manager.show_snackbar(nullptr, /*persistent=*/true);
   _snackbar_refresh_deadline_ms = 0;
+  _display_feedback_pending = false;
   BuildContext ctx = build_context();
   DisplayValues values = _svc.ui_manager.build_values(ctx);
   _svc.display_service.update(values, true); // wait = true

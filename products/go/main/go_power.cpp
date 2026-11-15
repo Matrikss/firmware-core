@@ -283,44 +283,11 @@ PowerSnapshot PowerService::poll_bms(bool pm_invalid_hint) {
       }
     } else if (charge_recovery_allowed && _thermal_charge_disabled) {
       AG_LOGI(TAG, "battery temperature recovered to %d°C", batt_temp);
-      if (_full_charge_paused || (_bms != nullptr && _bms->set_charge_enable(true))) {
+      if (_manual_charge_disabled || (_bms != nullptr && _bms->set_charge_enable(true))) {
         _thermal_charge_disabled = false;
       }
     }
   }
-
-  // -------------------------------------------------------------------------
-  // Full-charge pause — disable charging when battery is full + plugged
-  // -------------------------------------------------------------------------
-  const bool plugged = status_ok && bms_power_source_has_external_input(bms_status.power_source);
-
-  // FC flag (FG path) or ChargeTerminationDone + 100 % (no attached fuel gauge).
-  const bool fg_full = (_fg != nullptr && _fg->ready() && (status.fg_flags & FgFlags::FC));
-  const bool bms_full =
-      (_fg == nullptr && status.charging_status == BmsChargingState::ChargeTerminationDone &&
-       status.battery_percentage >= 100.0f);
-  const bool full = fg_full || bms_full;
-
-  if (plugged && full && !_full_charge_paused) {
-    _full_charge_paused = true;
-    if (!_thermal_charge_disabled) {
-      if (_bms != nullptr) {
-        _bms->set_charge_enable(false);
-      }
-    }
-    AG_LOGI(TAG, "full-charge pause: battery full while plugged, charging disabled");
-  } else if (_full_charge_paused && status.battery_percentage >= 0.0f &&
-             status.battery_percentage <= static_cast<float>(FULL_CHARGE_RESUME_SOC)) {
-    _full_charge_paused = false;
-    if (!_thermal_charge_disabled) {
-      if (_bms != nullptr) {
-        _bms->set_charge_enable(true);
-      }
-    }
-    AG_LOGI(TAG, "full-charge resume: SOC dropped to %.0f%%", status.battery_percentage);
-  }
-
-  status.full_charge_paused = _full_charge_paused;
 
   return status;
 }
@@ -403,8 +370,9 @@ bool PowerService::set_charge_current_ma(uint16_t current_ma) {
 }
 
 void PowerService::set_manual_charge_disabled(bool disabled) {
+  _manual_charge_disabled = disabled;
   if (_bms != nullptr) {
-    _bms->set_charge_enable(!disabled);
+    _bms->set_charge_enable(!disabled && !_thermal_charge_disabled);
   }
 }
 
@@ -419,12 +387,12 @@ bool PowerService::set_update_status_learning(bool enable) {
 void PowerService::_log_poll_snapshot(const PowerSnapshot &snap) {
   AG_LOGI(TAG,
           "poll_bms: perc=%.1f%% src=%s vbat=%.1fV vbus=%.1fV critical=%d | "
-          "charge=%s pwr=%s full_chg_paused=%d | "
+          "charge=%s pwr=%s | "
           "treg=%d vsys=%d iindpm=%d vindpm=%d safety_tmr=%d wd=%d",
           snap.battery_percentage, bms_battery_percent_source_str(snap.battery_percent_source),
           snap.battery_voltage, snap.charging_voltage, snap.critical,
           bms_charging_state_str(snap.charger_status.charging_state),
-          bms_power_source_str(snap.charger_status.power_source), snap.full_charge_paused,
+          bms_power_source_str(snap.charger_status.power_source),
           snap.charger_status.thermal_regulation, snap.charger_status.vsys_regulation,
           snap.charger_status.input_current_regulation,
           snap.charger_status.input_voltage_regulation, snap.charger_status.safety_timer_expired,
@@ -705,7 +673,17 @@ void PowerService::set_pm_power(bool on) {
   if (_config.pin_pm_power < 0) {
     return;
   }
-  _gpio.set_level(_config.pin_pm_power, on ? PM_POWER_ON_LEVEL : PM_POWER_OFF_LEVEL);
+  const int level = on ? PM_POWER_ON_LEVEL : PM_POWER_OFF_LEVEL;
+  bool success;
+  if (_config.pm_gpio != nullptr) {
+    success = _config.pm_gpio->set_level(_config.pin_pm_power, level);
+  } else {
+    success = _gpio.set_level(_config.pin_pm_power, level);
+  }
+  if (!success) {
+    AG_LOGW(TAG, "set_pm_power: GPIO write failed");
+    return;
+  }
   AG_LOGI(TAG, "set_pm_power: %s", on ? "ON" : "OFF");
 }
 
@@ -722,7 +700,8 @@ void PowerService::enter_sleep(uint32_t sleep_duration_ms) {
 #ifndef TEST_HOST
   // Hold PM sensor power GPIO during short sleeps so the sensor stays warm
   // and the next fast-path boot can skip the 10 s warmup.
-  if (should_hold_pm_sensor(sleep_duration_ms)) {
+  // Expander outputs retain their level without ESP32 GPIO holds.
+  if (_config.pm_gpio == nullptr && should_hold_pm_sensor(sleep_duration_ms)) {
     auto pin = static_cast<gpio_num_t>(_config.pin_pm_power);
     gpio_hold_en(pin);
     AG_LOGI(TAG, "enter_sleep: holding PM power GPIO %d for warm wake", _config.pin_pm_power);

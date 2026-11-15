@@ -1,11 +1,18 @@
 #pragma once
 
 #include "airgradient_gpio.h"
+#include "go_board_capabilities.h"
 #include "go_types.h"
 #include "types/bms_types.h"
 
 #include <cstdint>
 #include <string>
+
+/// Blank, unknown, or unreadable eFuse IDs retain legacy V1 behavior.
+inline BoardVariant board_variant_from_efuse(uint8_t id, bool read_ok) {
+  return read_ok && id == static_cast<uint8_t>(BoardVariant::V2) ? BoardVariant::V2
+                                                                 : BoardVariant::V1;
+}
 
 // ---------------------------------------------------------------------------
 // PM bus isolation — active-low EN_PM on V1.
@@ -64,6 +71,7 @@ class StorageService;
 class WifiHal;
 class WifiManager;
 struct GoSettings;
+struct GoInputConfig;
 
 /// Abstract factory / BSP interface for the AGo board.
 ///
@@ -152,16 +160,22 @@ struct GoBoard {
 
   virtual GpsDriver *new_gps_driver() = 0;
   virtual CapTouchSensor *new_touch_sensor() = 0;
+  virtual GoInputConfig input_config() = 0;
 
   /// Create the accelerometer on the shared I2C bus and init() it. Returns
   /// nullptr if the part is absent / init fails (WHO_AM_I mismatch); callers
   /// must null-check. WHO_AM_I detects absence.
   virtual AccelSensor *new_accel_sensor() = 0;
+  /// Native shake interrupt pin; INVALID_PIN keeps only accelerometer diagnostics.
+  virtual int accel_interrupt_pin() = 0;
 
   // -----------------------------------------------------------------
   // Platform info
   // -----------------------------------------------------------------
 
+  /// Read board identity on first access, before any peripheral initialization.
+  virtual BoardVariant variant() = 0;
+  BoardCapabilities capabilities() { return board_capabilities(variant()); }
   virtual std::string serial_number() = 0;
   virtual const char *firmware_version() = 0;
   virtual const gpio::Hal &gpio_hal() = 0;

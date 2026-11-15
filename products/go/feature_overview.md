@@ -73,13 +73,13 @@ Tracking supports:
 
 Pause stops new sensor/GPS route points while retaining the session. Resume
 continues the same route without filling in the paused interval. Live readings,
-charts, GPS, and existing data export continue; Stationary cloud upload and
-configuration polling also continue. The display replaces the recording dot
-with a pause icon. A paused route must be stopped before it can be deleted.
+charts, GPS, and existing data export continue. The display replaces the recording
+dot with a pause icon. A paused route must be stopped before it can be deleted.
 
-Tracking is available in Portable and Stationary. Starting a route can wait for
-GPS to wake while sensor points are already recorded. Always Off keeps GPS asleep.
-Entering Energy Saving ends Recording or Paused sessions. Entering or leaving
+Tracking is available only in Portable. Entering Stationary or Energy Saving ends
+Recording or Paused sessions and preserves saved routes. Returning to Portable
+leaves tracking idle. Starting a route can wait for GPS to wake while sensor
+points are already recorded; Always Off keeps GPS asleep. Entering or leaving
 Energy Saving restarts the system on battery; USB may prevent that power cycle.
 
 The device also keeps a short temporary measurement history for on-device charts.
@@ -120,7 +120,7 @@ shows “Pin a chart here” for None or “Not available” for a hidden therma
 
 ### Shake-To-Refresh
 
-While Go is awake, shake it side to side using a natural forearm swing, roughly
+On V1, while Go is awake, shake it side to side using a natural forearm swing, roughly
 three left/right pairs in about one second. An accepted shake gives a short
 beep when the buzzer is enabled and requests fresh readings. If a regular
 measurement is already requested, its result satisfies the refresh.
@@ -133,7 +133,8 @@ is pending do not queue more measurements or beep again.
 Manual refresh updates current readings without adding chart-history samples
 or route points, changing the regular measurement timer, or triggering an extra
 cloud upload. PM warmup can delay the result. Shake-to-wake from deep sleep is
-not implemented.
+not implemented. V2 has no shake feature; its accelerometer is used only by
+the Accelerometer Test.
 
 ## Lock And Power Button Behavior
 
@@ -328,14 +329,14 @@ reset or refurbished unit.
 ## Configurable Settings
 
 The main menu offers Exit Menu, Start Tracking / Tracking, Operating Mode, and
-Settings. Energy Saving hides the tracking row. During a session, Tracking opens
+Settings. Stationary and Energy Saving hide the tracking row. During a session, Tracking opens
 Exit, Back, Status, Pause Tracking / Resume Tracking, and Stop Tracking. Operating Mode lists Portable, Stationary, and
 Energy Saving. Settings contains Operations, Display & Touch, Hardware Test, Clear
 Data, Setup Guide, and the existing About Device page.
 
 Operations groups measurement interval, CO2 calibration, GPS mode, and buzzer.
 Display & Touch starts with Pinned Chart, followed by temperature/altitude units,
-PM display, auto-lock, LED Indicator, LED Brightness, and Touch LED. Submenus
+PM display, auto-lock, LED Indicator, LED Brightness, and Touch LED (V1 only). Submenus
 keep Exit and Back; opening Tracking selects Status to show session details. Settings
 and its list submenus select their first content item, while value choices
 select the saved value. Back restores the row that opened the child page.
@@ -363,7 +364,7 @@ Common configurable settings include:
 - Operating mode: Portable, Stationary, or Offline.
 - Auto-lock timeout.
 - LED Indicator (AQI or CO2) and LED Brightness.
-- Touch LED brightness.
+- Touch LED brightness (V1 only).
 - Buzzer enabled or disabled.
 - Static IP and cloud preference for Stationary mode.
 
@@ -400,7 +401,11 @@ from the device menu or the app.
 
 ## Product Notes For Team Members
 
-- The firmware supports Go V1 hardware, including LEDs, buzzer, and fuel gauge.
+- The firmware supports Go V1 and V2, selected by the eFuse board ID.
+- V2 has four back LEDs and no touch LEDs. It hides the Touch LED setting and
+  skips that Peripheral Test step and result. BLE and local-server touch LED
+  writes are rejected; cloud updates ignore the field.
+- V2 keeps the Accelerometer Test but has no shake-to-refresh.
 - CO2 sensor hardware can vary by build; the product behavior is still presented
   to users as CO2 measurement.
 - Temperature and humidity may come from a dedicated sensor or from another

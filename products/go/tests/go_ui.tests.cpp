@@ -26,6 +26,7 @@
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include <string>
 #include <initializer_list>
@@ -40,6 +41,7 @@
 static constexpr UIManager::Config DEFAULT_UI_CONFIG = {
     .firmware_version = "0.1.0",
     .serial_number = "AABBCCDDEEFF",
+    .capabilities = board_capabilities(BoardVariant::V1),
 };
 
 /// Build a minimal BuildContext with default invalid sensor data.
@@ -160,6 +162,37 @@ TEST_CASE("UIManager: agreed menu hierarchy", "[UIManager][nav][redesign]") {
   open_row(ui, "Hardware Test");
   check_rows(ui, {"Exit", "Back", "Peripheral Test", "GPS Test", "Accelerometer Test",
                   "Battery Calibration", "Play Melody"});
+}
+
+TEST_CASE("UIManager: V2 hides Touch LED without breaking Display & Touch navigation",
+          "[UIManager][settings][v2]") {
+  auto config = DEFAULT_UI_CONFIG;
+  config.capabilities = board_capabilities(BoardVariant::V2);
+  UIManager ui(config);
+  go_to_group(ui, "Display & Touch");
+
+  check_rows(ui, {"Exit", "Back", "Pinned Chart", "Temperature Unit: C", "Altitude Unit: m",
+                  "PM Display: ug/m3", "Auto Lock: Off", "LED Indicator: AQI", "LED Brightness"});
+
+  select_row(ui, "LED Brightness");
+  press(ui, InputSource::TouchDown);
+  auto values = ui.build_values(make_default_ctx());
+  CHECK(std::string(values.rows[values.selected_row].text) == "Exit");
+  press(ui, InputSource::TouchUp);
+  values = ui.build_values(make_default_ctx());
+  CHECK(std::string(values.rows[values.selected_row].text) == "LED Brightness");
+
+  press(ui, InputSource::TouchEnter);
+  REQUIRE(ui.current_screen() == Screen::SettingsChoice);
+  CHECK(open_row(ui, "Dim").action == UIAction::SettingsChanged);
+  REQUIRE(ui.current_screen() == Screen::DisplayTouch);
+  values = ui.build_values(make_default_ctx());
+  CHECK(std::string(values.rows[values.selected_row].text) == "LED Brightness");
+
+  GoSettings settings{};
+  ui.apply_to_settings(settings);
+  CHECK(settings.back_led_brightness == LedBrightness::Dim);
+  CHECK(settings.touch_led_intensity == TouchLedIntensity::Off);
 }
 
 TEST_CASE("UIManager: mode choices preserve identities across every transition",
@@ -626,11 +659,13 @@ TEST_CASE("UIManager: tracking start/stop", "[UIManager][tracking]") {
   }
 }
 
-TEST_CASE("UIManager: Energy Saving hides tracking and keeps menu actions aligned",
+TEST_CASE("UIManager: Stationary and Energy Saving hide tracking and keep menu actions aligned",
           "[UIManager][tracking][nav]") {
+  const auto mode = GENERATE(OperatingMode::Stationary, OperatingMode::Offline);
+  CAPTURE(mode);
   UIManager ui(DEFAULT_UI_CONFIG);
   GoSettings settings{};
-  settings.operating_mode = OperatingMode::Offline;
+  settings.operating_mode = mode;
   ui.sync_settings(settings);
   press(ui, InputSource::TouchEnter);
   check_rows(ui, {"Exit Menu", "Operating Mode", "Settings"});
@@ -663,21 +698,18 @@ TEST_CASE("UIManager: Energy Saving hides tracking and keeps menu actions aligne
     settings.operating_mode = OperatingMode::Portable;
     ui.sync_settings(settings);
     select_row(ui, "Start Tracking");
-    settings.operating_mode = OperatingMode::Offline;
+    settings.operating_mode = mode;
     ui.sync_settings(settings);
     CHECK(ui.build_values(make_default_ctx()).selected_row == 1);
     press(ui, InputSource::TouchEnter);
     CHECK(ui.current_screen() == Screen::SettingsChoice);
   }
 
-  SECTION("leaving Energy Saving restores tracking in either mode") {
-    for (auto mode : {OperatingMode::Portable, OperatingMode::Stationary}) {
-      settings.operating_mode = mode;
-      ui.sync_settings(settings);
-      check_rows(ui, {"Exit Menu", "Start Tracking", "Operating Mode", "Settings"});
-      CHECK(open_row(ui, "Start Tracking").action == UIAction::StartTracking);
-      press(ui, InputSource::TouchEnter);
-    }
+  SECTION("returning to Portable restores tracking") {
+    settings.operating_mode = OperatingMode::Portable;
+    ui.sync_settings(settings);
+    check_rows(ui, {"Exit Menu", "Start Tracking", "Operating Mode", "Settings"});
+    CHECK(open_row(ui, "Start Tracking").action == UIAction::StartTracking);
   }
 }
 
@@ -1456,8 +1488,8 @@ TEST_CASE("UIManager: snackbar lifecycle", "[UIManager][snackbar]") {
   SECTION("show_snackbar sets text, cleared after duration") {
     ui.show_snackbar("Hello");
 
-    // First clear call arms the deadline.
-    ui.clear_expired_snackbar(1000);
+    // Only successful submission arms the deadline.
+    ui.mark_snackbar_submitted(1000);
 
     auto ctx = make_default_ctx();
     ctx.now_ms = 1000;
@@ -1482,10 +1514,36 @@ TEST_CASE("UIManager: snackbar lifecycle", "[UIManager][snackbar]") {
     CHECK(v.snackbar_text == nullptr);
   }
 
+  SECTION("pending messages survive time passing until first successful submission") {
+    ui.show_snackbar("Unlocked");
+    CHECK(ui.snackbar_pending());
+    CHECK_FALSE(ui.clear_expired_snackbar(10000));
+    REQUIRE(ui.build_values(make_default_ctx()).snackbar_text != nullptr);
+    CHECK(ui.mark_snackbar_submitted(10000));
+    CHECK_FALSE(ui.snackbar_pending());
+    CHECK_FALSE(ui.mark_snackbar_submitted(11000)); // Redraw does not extend visibility.
+    CHECK_FALSE(ui.clear_expired_snackbar(10000 + SNACKBAR_DURATION_MS - 1));
+    CHECK(ui.clear_expired_snackbar(10000 + SNACKBAR_DURATION_MS));
+    CHECK(ui.build_values(make_default_ctx()).snackbar_text == nullptr);
+  }
+
+  SECTION("expiry supports deadlines at zero and UINT32_MAX") {
+    for (const uint32_t deadline : {0u, UINT32_MAX}) {
+      CAPTURE(deadline);
+      ui.show_snackbar("Unlocked");
+      REQUIRE(ui.mark_snackbar_submitted(deadline - SNACKBAR_DURATION_MS));
+      CHECK_FALSE(ui.snackbar_pending());
+      CHECK_FALSE(ui.snackbar_persistent());
+      CHECK_FALSE(ui.clear_expired_snackbar(deadline - 1));
+      CHECK(ui.clear_expired_snackbar(deadline));
+      CHECK(ui.build_values(make_default_ctx()).snackbar_text == nullptr);
+    }
+  }
+
   SECTION("opening Main Menu dismisses Unlocked before expiry") {
     const auto ctx = make_default_ctx();
     ui.show_snackbar("Unlocked");
-    ui.clear_expired_snackbar(ctx.now_ms);
+    ui.mark_snackbar_submitted(ctx.now_ms);
     REQUIRE(ui.build_values(ctx).snackbar_text != nullptr);
 
     press(ui, InputSource::TouchEnter);
@@ -1500,7 +1558,7 @@ TEST_CASE("UIManager: snackbar lifecycle", "[UIManager][snackbar]") {
     const auto ctx = make_default_ctx();
     ui.show_snackbar("Unlocked");
     ui.show_snackbar("Tag saved");
-    ui.clear_expired_snackbar(ctx.now_ms);
+    ui.mark_snackbar_submitted(ctx.now_ms);
 
     press(ui, InputSource::TouchEnter);
     REQUIRE(ui.current_screen() == Screen::MainMenu);
@@ -1922,6 +1980,76 @@ TEST_CASE("UIManager: Hardware Test submenu navigation", "[UIManager][hwtest]") 
     navigate_to_hardware_test();
     double_press(ui);
     CHECK(ui.current_screen() == Screen::Settings);
+  }
+}
+
+TEST_CASE("UIManager: V2 hides Battery Calibration without breaking Hardware Test navigation",
+          "[UIManager][hwtest][v2]") {
+  auto config = DEFAULT_UI_CONFIG;
+  config.capabilities = board_capabilities(BoardVariant::V2);
+  UIManager ui(config);
+  go_to_group(ui, "Hardware Test");
+
+  check_rows(ui,
+             {"Exit", "Back", "Peripheral Test", "GPS Test", "Accelerometer Test", "Play Melody"});
+
+  SECTION("navigation wraps between Play Melody and Exit") {
+    select_row(ui, "Play Melody");
+    press(ui, InputSource::TouchDown);
+    auto values = ui.build_values(make_default_ctx());
+    CHECK(std::string(values.rows[values.selected_row].text) == "Exit");
+    press(ui, InputSource::TouchUp);
+    values = ui.build_values(make_default_ctx());
+    CHECK(std::string(values.rows[values.selected_row].text) == "Play Melody");
+  }
+
+  SECTION("the former calibration row opens Play Melody and returns to its selection") {
+    select_row(ui, "Accelerometer Test");
+    press(ui, InputSource::TouchDown);
+    CHECK(press(ui, InputSource::TouchEnter).action == UIAction::None);
+    REQUIRE(ui.current_screen() == Screen::SettingsChoice);
+    check_rows(ui, {"Exit", "Back", "Chime", "Tetris"});
+    CHECK(open_row(ui, "Chime").action == UIAction::PlayMelody);
+    REQUIRE(ui.current_screen() == Screen::HardwareTest);
+    const auto values = ui.build_values(make_default_ctx());
+    CHECK(std::string(values.rows[values.selected_row].text) == "Play Melody");
+  }
+}
+
+TEST_CASE("UIManager: hardware menu items follow independent board capabilities",
+          "[UIManager][capabilities]") {
+  struct Case {
+    BoardCapabilities capabilities;
+    bool touch_led;
+    bool battery_calibration;
+  };
+  const Case cases[] = {
+      {{}, false, false},
+      {{BoardFeature::TouchLed}, true, false},
+      {{BoardFeature::BatteryCalibration}, false, true},
+      {{BoardFeature::TouchLed, BoardFeature::BatteryCalibration}, true, true},
+  };
+  for (const auto &test : cases) {
+    CAPTURE(test.touch_led, test.battery_calibration);
+    auto config = DEFAULT_UI_CONFIG;
+    config.capabilities = test.capabilities;
+    for (const auto *group : {"Display & Touch", "Hardware Test"}) {
+      UIManager ui(config);
+      go_to_group(ui, group);
+      const auto values = ui.build_values(make_default_ctx());
+      bool touch_led_found = false;
+      bool battery_calibration_found = false;
+      for (uint8_t row = 0; row < values.row_count; ++row) {
+        const std::string text = values.rows[row].text;
+        touch_led_found |= text.rfind("Touch LED:", 0) == 0;
+        battery_calibration_found |= text == "Battery Calibration";
+      }
+      if (ui.current_screen() == Screen::DisplayTouch) {
+        CHECK(touch_led_found == test.touch_led);
+      } else {
+        CHECK(battery_calibration_found == test.battery_calibration);
+      }
+    }
   }
 }
 
@@ -2379,7 +2507,7 @@ TEST_CASE("UIManager: snackbar is suppressed on all session screens",
   // Home — snackbar visible.
   auto ctx = make_default_ctx();
   ctx.now_ms = 100;
-  ui.clear_expired_snackbar(ctx.now_ms);
+  ui.mark_snackbar_submitted(ctx.now_ms);
   REQUIRE(ui.build_values(ctx).snackbar_text != nullptr);
 
   ui.show_info("Preparing stationary mode...");

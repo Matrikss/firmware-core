@@ -97,6 +97,10 @@ constexpr uint32_t I2C_SCL_WAIT_US = 20000;
 
 // Register bit masks
 namespace BIT_MASK {
+// CHARGE_CONTROL (0x14)
+constexpr uint8_t EN_TERM = (1 << 2);
+constexpr uint8_t VRECHG = (1 << 0); // 0: recharge 100 mV below VREG
+
 // CHARGER_CONTROL_0 (0x16)
 constexpr uint8_t EN_AUTO_IBATDIS = (1 << 7);
 constexpr uint8_t EN_CHG = (1 << 5);
@@ -156,6 +160,7 @@ BQ25629::~BQ25629() { deinit(); }
 
 esp_err_t BQ25629::init(const BQ25629_Config &config) {
   esp_err_t ret;
+  ntc_config_ = config.ntc;
 
   // Create I2C device
   i2c_device_config_t dev_cfg = {
@@ -270,8 +275,8 @@ esp_err_t BQ25629::init(const BQ25629_Config &config) {
     return ret;
   }
 
-  // Configure termination current
-  uint16_t iterm_value = (config.term_current_ma - 5) / 5;
+  // Configure termination current: ITERM_mA = code * 5.
+  uint16_t iterm_value = config.term_current_ma / 5;
   iterm_value = iterm_value > 0x3E ? 0x3E : iterm_value;
   if (iterm_value < 1)
     iterm_value = 1;
@@ -279,6 +284,44 @@ esp_err_t BQ25629::init(const BQ25629_Config &config) {
   if (ret != ESP_OK) {
     ESP_LOGE(TAG, "Failed to set termination current");
     return ret;
+  }
+
+  // Own normal charge completion and recharge, even after an earlier host
+  // disabled termination. Preserve other charge-control settings.
+  ret = modify_register(BQ25629_REG::CHARGE_CONTROL, BIT_MASK::EN_TERM | BIT_MASK::VRECHG,
+                        BIT_MASK::EN_TERM);
+  if (ret != ESP_OK) {
+    return ret;
+  }
+  uint8_t charge_control = 0;
+  uint16_t termination = 0;
+  uint16_t charge_voltage = 0;
+  ret = read_register(BQ25629_REG::CHARGE_CONTROL, charge_control);
+  if (ret != ESP_OK) {
+    return ret;
+  }
+  ret = read_register_16(BQ25629_REG::TERMINATION_CONTROL, termination);
+  if (ret != ESP_OK) {
+    return ret;
+  }
+  ret = read_register_16(BQ25629_REG::CHARGE_VOLTAGE_LIMIT, charge_voltage);
+  if (ret != ESP_OK) {
+    return ret;
+  }
+  constexpr uint16_t TERMINATION_MASK = 0x00fc;
+  constexpr uint16_t CHARGE_VOLTAGE_MASK = 0x0ff8;
+  constexpr uint16_t CHARGE_VOLTAGE_STEP_MV = 10;
+  constexpr uint8_t CHARGE_VOLTAGE_SHIFT = 3;
+  constexpr uint16_t MIN_CHARGE_VOLTAGE_MV = 3500;
+  constexpr uint16_t MAX_CHARGE_VOLTAGE_MV = 4800;
+  const uint16_t expected_voltage =
+      (clamp_u16(config.charge_voltage_mv, MIN_CHARGE_VOLTAGE_MV, MAX_CHARGE_VOLTAGE_MV) /
+       CHARGE_VOLTAGE_STEP_MV) << CHARGE_VOLTAGE_SHIFT;
+  if ((charge_control & (BIT_MASK::EN_TERM | BIT_MASK::VRECHG)) != BIT_MASK::EN_TERM ||
+      (termination & TERMINATION_MASK) != (iterm_value << 2) ||
+      (charge_voltage & CHARGE_VOLTAGE_MASK) != expected_voltage) {
+    ESP_LOGE(TAG, "Charge termination configuration readback failed");
+    return ESP_ERR_INVALID_RESPONSE;
   }
 
   // Enable/disable charging
@@ -1063,7 +1106,7 @@ esp_err_t BQ25629::read_ntc_temperature(BQ25629_NTC_Data &data) {
 
   // Calculate NTC resistance using voltage divider equation
   // V_TS = V_BIAS * (RT2 || R_NTC) / (RT1 + (RT2 || R_NTC))
-  // Where RT1 = 4.12kΩ (pull-up), RT2 = 17.33kΩ (pull-down)
+  // Where RT1 is the pull-up and RT2 is the pull-down resistance
   //
   // ADC reads: TS% = V_TS / V_BIAS * 100
   // Let ratio = TS% / 100 = V_TS / V_BIAS
@@ -1076,10 +1119,10 @@ esp_err_t BQ25629::read_ntc_temperature(BQ25629_NTC_Data &data) {
   //   R_parallel = (R_NTC * RT2) / (R_NTC + RT2)
   //   R_NTC = (R_parallel * RT2) / (RT2 - R_parallel)
 
-  const float RT1 = 4120.0f;  // 4.12kΩ
-  const float RT2 = 17330.0f; // 17.33kΩ
-  const float R25 = 10000.0f; // 10kΩ @ 25°C
-  const float B = 3950.0f;    // B constant (3950K)
+  const float RT1 = ntc_config_.pullup_ohm;
+  const float RT2 = ntc_config_.pulldown_ohm;
+  const float R25 = ntc_config_.r25_ohm;
+  const float B = ntc_config_.beta_k;
 
   float adc_ratio = data.ts_percent / 100.0f;
 
@@ -1107,8 +1150,8 @@ esp_err_t BQ25629::read_ntc_temperature(BQ25629_NTC_Data &data) {
   // Calculate R_NTC from parallel resistance
   data.resistance_ohm = (r_parallel * RT2) / (RT2 - r_parallel);
 
-  // Steinhart-Hart equation: 1/T = 1/T0 + (1/B) * ln(R/R0)
-  // Where T0 = 298.15K (25°C), R0 = R25 = 10kΩ
+  // Beta equation: 1/T = 1/T0 + (1/B) * ln(R/R0)
+  // Where T0 = 298.15K (25°C), R0 = R25
   float t_kelvin = 1.0f / ((1.0f / 298.15f) + (logf(data.resistance_ohm / R25) / B));
   data.temperature_c = t_kelvin - 273.15f;
 

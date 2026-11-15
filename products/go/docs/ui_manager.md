@@ -31,21 +31,10 @@ The UI Manager is a **pure state machine** with zero hardware or RTOS
 dependencies. It never touches the event queue or the Display Service
 directly. The orchestrator drives it:
 
-```text
-Orchestrator:
-  after boot tracking restore/reopen:
-      ui_manager.sync_tracking_state(tracking_state)
-
-  on InputPress (unlocked):
-      action = ui_manager.handle_input(source, type)
-      if action: post event
-
-  on display update:
-      ui_manager.sync_tracking_state(tracking_state)
-      ui_manager.clear_expired_snackbar(now_ms)
-      values = ui_manager.build_values(ctx)
-      display_service.update(values)
-```
+The orchestrator synchronizes tracking state after boot and before rendering,
+passes unlocked input to `handle_input()`, and executes the returned action.
+For rendering, it clears expired messages, builds values, and submits the frame.
+An accepted frame containing a pending snackbar starts that message's timer.
 
 `BuildContext` passes all external state (sensors, battery, status flags,
 settings-derived flags, measurement cache). The UI Manager reads from it
@@ -61,6 +50,15 @@ and its context must match the synchronized state.
 `WifiService::Config::ap_password` so the Wi-Fi QR descriptor and the
 on-screen password line agree.
 
+| Field | Default | Purpose |
+|---|---|---|
+| `capabilities` | Empty set | Board features supplied by application wiring; controls Touch LED and Battery Calibration visibility |
+
+Without calibration, Play Melody follows Accelerometer Test directly; navigation
+and selection use the shorter menu. Without touch LEDs, Display & Touch ends
+at LED Brightness and the Peripheral Test summary omits Touch LED. See
+[board capabilities](hardware_init.md#board-variants).
+
 ## Public API
 
 | Method | Purpose |
@@ -69,12 +67,14 @@ on-screen password line agree.
 | `build_values(ctx)` | Render a snapshot without changing tracking state or navigation. |
 | `set_screen(screen)` | Assign the screen without initializing its view or cursor. |
 | `open_tracking_status()` | Open Session with Back selected; requires an active session. |
-| `sync_tracking_state(state)` | Update tracking state; on Idle, dismiss tracking menus to MainMenu; select Operating Mode in Energy Saving, otherwise Tracking. |
+| `sync_tracking_state(state)` | Update tracking state; on Idle, dismiss tracking menus to MainMenu; select Tracking in Portable, otherwise Operating Mode. |
 | `current_screen()` | Read current screen. |
 | `is_on_menu_screen()` | Identify screens that suppress background renders: menus, diagnostics, and GettingStarted. |
 | `show_snackbar(text, persistent = false)` | Show a 3-second message, or persistent text until explicitly cleared. A persistent message ignores ordinary replacement and clear calls. |
-| `snackbar_persistent()` | True when the buffer contains text with no expiry deadline. |
-| `clear_expired_snackbar(now_ms)` | Expire stale snackbar. Call before `build_values`. |
+| `snackbar_persistent()` | True for an explicitly persistent message. |
+| `snackbar_pending()` | True for a transient message awaiting successful submission. |
+| `mark_snackbar_submitted(now_ms)` | Start a pending message’s deadline once; return whether it was armed. |
+| `clear_expired_snackbar(now_ms)` | Clear an expired message and return whether it expired; pending messages stay active. |
 | `sync_settings(settings)` | Synchronise internal state from persisted `GoSettings`, retaining exact measurement-interval seconds. Called by the orchestrator on boot and after settings activation. |
 | `apply_to_settings(settings)` | Convert internal state back to `GoSettings` field values without normalizing a custom measurement interval. Reverse of `sync_settings`. |
 | `reset_to_home()` | Reset to Home with no metric. Used on auto-lock and by the session-leave helpers. |
@@ -96,7 +96,7 @@ orchestrator what happened:
 
 | UIAction | Trigger | Notes |
 |---|---|---|
-| `StartTracking` | Main Menu: "Start Tracking" | Shown when Idle in Portable/Stationary |
+| `StartTracking` | Main Menu: "Start Tracking" | Shown when Idle in Portable |
 | `PauseTracking` | Tracking: "Pause Tracking" | Retains the session |
 | `ResumeTracking` | Tracking: "Resume Tracking" | Continues the retained session |
 | `StopTracking` | Tracking: "Stop Tracking" | Ends a Recording or Paused session |
@@ -155,10 +155,11 @@ flowchart TD
     GettingStarted -- Back --> Settings
 ```
 
-Energy Saving shows only Exit Menu, Operating Mode, and Settings. Navigation
-skips the hidden tracking row; GPS Test remains visible but has no action.
+Stationary and Energy Saving show only Exit Menu, Operating Mode, and Settings.
+Navigation skips the hidden tracking row. GPS Test remains available in Stationary;
+in Energy Saving it is visible but has no action.
 
-In Portable/Stationary, MainMenu rows are Exit Menu (0), Start Tracking /
+In Portable, MainMenu rows are Exit Menu (0), Start Tracking /
 Tracking (1), Operating Mode (2), and Settings (3). When Idle, Start Tracking starts a session and returns
 Home. When Recording or Paused, Tracking opens `Screen::TrackingMenu` with Exit,
 Back, Status, Pause Tracking / Resume Tracking, and Stop Tracking. Status is
@@ -167,8 +168,8 @@ the action rows return Home.
 
 `sync_tracking_state()` keeps the menu aligned with BLE and other state changes.
 If a remote Stop ends the session while TrackingMenu or TrackingStatus is open,
-it returns directly to MainMenu with Start Tracking selected (Operating Mode in
-Energy Saving). The paused state uses a two-bar icon in the recording dot's
+it returns directly to MainMenu with Start Tracking selected (Operating Mode outside
+Portable). The paused state uses a two-bar icon in the recording dot's
 position.
 
 Operating Mode lists Portable, Stationary, and Energy Saving in
@@ -187,8 +188,8 @@ rows follow this order:
 | Tracking | Status, Pause Tracking or Resume Tracking, Stop Tracking |
 | Settings | Operations, Display & Touch, Hardware Test, Clear Data, Setup Guide, About Device |
 | Operations | Measurement Interval, CO2 Calibration, GPS Mode, Buzzer, Local Server (Stationary only) |
-| Display & Touch | Pinned Chart, Temperature Unit, Altitude Unit, PM Display, Auto Lock, LED Indicator, LED Brightness, Touch LED |
-| Hardware Test | Peripheral Test, GPS Test, Accelerometer Test, Battery Calibration, Play Melody |
+| Display & Touch | Pinned Chart, Temperature Unit, Altitude Unit, PM Display, Auto Lock, LED Indicator, LED Brightness, Touch LED (V1 only) |
+| Hardware Test | Peripheral Test, GPS Test, Accelerometer Test, Battery Calibration (V1 only), Play Melody |
 
 Settings and its groups fit on one page. Opening Settings selects Operations;
 Operations selects Measurement Interval, Display & Touch selects Pinned Chart,
@@ -342,7 +343,7 @@ pairs so display ordering cannot change persisted mode identities.
 | Auto Lock | `Auto Lock: Off / 10s / 30s / 60s` | Off, 10 Seconds, 30 Seconds, 60 Seconds |
 | Back LED Indicator | `LED Indicator: AQI / CO2` | AQI, CO2 |
 | Back LED Brightness | `LED Brightness` | Off, Dim, Mid, Bright |
-| Touch LED | `Touch LED: ...` | Off, Dim, Bright |
+| Touch LED (V1 only) | `Touch LED: ...` | Off, Dim, Bright |
 | CO2 Calibration | Action row | Opens confirm dialog |
 | Clear Data | Action row | Opens confirm dialog |
 | Buzzer | `Buzzer: Off / On` | Off, On |
@@ -372,13 +373,14 @@ an unrelated UI setting therefore preserves an active custom interval.
 
 ## Snackbar Lifecycle
 
-1. `show_snackbar(text)` copies text, marks deadline as pending
-2. `clear_expired_snackbar(now_ms)` arms the 3-second deadline on first
-   call, then clears when expired
-3. `build_values()` sets `v.snackbar_text` if the snackbar is active
+`show_snackbar(text)` copies the message and marks it pending. After the display
+accepts a frame containing it, `mark_snackbar_submitted()` starts its three-second
+lifetime. This measures from submission, not physical refresh completion.
+Repeated renders do not extend it; `clear_expired_snackbar()` removes it when due.
 
-Opening Main Menu from Home clears the transient `Unlocked` snackbar before
-rendering the menu. Other snackbars retain their existing lifecycle.
+Opening Main Menu dismisses `Unlocked`. The orchestrator cancels obsolete expiry
+timers and retries rejected Home feedback, including snackbar removal. See
+[Display Update](orchestrator.md#display-update).
 
 `show_snackbar(text, true)` creates a persistent message with no expiry.
 While it is active, ordinary `show_snackbar(text)` calls, including

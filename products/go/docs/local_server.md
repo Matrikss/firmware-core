@@ -159,13 +159,19 @@ objects from the same subset. Device behavior fields are:
 | `gpsMode` | `off`, `tracking`, `always` | Disable GPS, run it only while tracking, or keep it active |
 | `backLedIndicator` | `aqi`, `co2` | Select the back LED indicator; default `aqi` |
 | `backLedBrightness` | Integer 0 .. 3 | Set back LED brightness: off, dim, mid, or bright |
-| `touchLedIntensity` | Integer 0 .. 2 | Set touch LED intensity: off, dim, or bright |
+| `touchLedIntensity` | Integer 0 .. 2 | V1 only: set touch LED intensity to off, dim, or bright |
 | `buzzerEnabled` | Boolean | Enable or disable buzzer playback |
 
 PUT `{"backLedIndicator":"co2"}` changes the indicator without changing brightness.
 Invalid names or types return `400 invalid_value` with field `backLedIndicator`.
 The selection appears in GET after successful persistence; existing
 `configurationControl` rules apply. See [LED behavior](led_service.md#selected-indicator).
+
+V2 retains `touchLedIntensity` in GET (default `0`). PUT containing this field
+returns `404 not_found` with `field: "touchLedIntensity"`, including writes of
+`0`. The whole request is rejected before queuing, so other supplied fields
+remain unchanged. Availability comes from `Config::capabilities`; access and
+source-policy checks still run first.
 
 For example, PUT `{"pinnedChart":"co2"}` selects CO2. The choice is persisted
 and shared with the UI and BLE. Names are case-sensitive strings; invalid names
@@ -296,13 +302,12 @@ seconds. Ordinary Wi-Fi events use non-blocking central-queue sends and are not
 retained, so queue saturation can skip this transition.
 
 Provisioning exclusively owns its transport routes and the shared listener
-while active. On a successful Stationary provisioning connection, the product
-preserves the provisioning success response hold, stops provisioning without
-stopping the HTTP listener, removes provisioning ownership, then registers the
-local routes and starts local mDNS. BLE-only provisioning may not have started
-the listener, so the same idempotent local activation path starts it when
-needed. If Local Server is disabled, the handoff stops any retained listener
-and leaves local routes and discovery inactive.
+while active. Successful portal sessions normally reboot before local API
+activation; the next saved-network connection starts the endpoint. See the
+[restart policy](wifi_service.md#provisioning-completion). Without a restart,
+provisioning releases its routes after the success hold and retains any listener
+for local activation. With Local Server disabled, the handoff stops any retained
+listener and leaves routes and discovery inactive.
 
 With Local Server enabled, a transient disconnect after the first connection
 does not return to provisioning. It omits `wifiRssi`, retains local routes and
