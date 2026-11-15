@@ -25,7 +25,7 @@ dependencies:
     source:
       registry_url: https://components.espressif.com/
       type: service
-    version: 1.11.1
+    version: 1.14.0
   idf:
     source:
       type: idf

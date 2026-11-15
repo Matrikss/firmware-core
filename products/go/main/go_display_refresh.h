@@ -17,7 +17,7 @@ struct DisplayRefreshDecision {
 // before releasing it; the next submitter then sees the completed refresh state.
 class DisplayRefreshPolicy {
 public:
-  static constexpr uint8_t DEFAULT_MAX_PARTIAL_OPS = 20;
+  static constexpr uint8_t DEFAULT_MAX_PARTIAL_OPS = 100;
   static constexpr uint32_t DEFAULT_COOLDOWN_MS = 5000;
 
   uint8_t differential_ops() const { return _differential_ops; }
